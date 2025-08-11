@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Buddy Sprite Creator</title>
+</head>
+<body>
+    <h1>Creating Buddy Sprites</h1>
+    <div id="canvases"></div>
+    
+    <script>
+        function createBuddySprites() {
+            const sprites = [
+                { name: 'buddy_standing_still', legOffset: 0 },
+                { name: 'buddy_run1', legOffset: -2 },
+                { name: 'buddy_run2', legOffset: 2 },
+                { name: 'buddy_standing_still_eye_closed', legOffset: 0, eyesClosed: true }
+            ];
+            
+            sprites.forEach(sprite => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 88;
+                canvas.height = 94;
+                canvas.id = sprite.name;
+                document.getElementById('canvases').appendChild(canvas);
+                
+                const ctx = canvas.getContext('2d');
+                
+                // Colors
+                const colors = {
+                    black: '#000000',
+                    cream: '#F5EBDC',
+                    pink: '#FFB6C1',
+                    orange: '#FF8C69',
+                    white: '#FFFFFF',
+                    lightBlue: '#ADD8E6'
+                };
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, 88, 94);
+                
+                // Draw ears
+                ctx.fillStyle = colors.black;
+                ctx.fillRect(25, 10, 5, 25);
+                ctx.fillRect(35, 10, 5, 25);
+                
+                ctx.fillStyle = colors.cream;
+                ctx.fillRect(26, 12, 3, 21);
+                ctx.fillRect(36, 12, 3, 21);
+                
+                ctx.fillStyle = colors.pink;
+                ctx.fillRect(27, 15, 1, 15);
+                ctx.fillRect(37, 15, 1, 15);
+                
+                // Draw head
+                ctx.fillStyle = colors.black;
+                ctx.fillRect(20, 25, 25, 29);
+                
+                ctx.fillStyle = colors.cream;
+                ctx.fillRect(21, 26, 23, 27);
+                
+                // Draw eyes
+                if (sprite.eyesClosed) {
+                    ctx.fillStyle = colors.black;
+                    ctx.fillRect(28, 35, 3, 1);
+                    ctx.fillRect(34, 35, 3, 1);
+                } else {
+                    ctx.fillStyle = colors.black;
+                    ctx.fillRect(28, 34, 2, 2);
+                    ctx.fillRect(35, 34, 2, 2);
+                    
+                    ctx.fillStyle = colors.white;
+                    ctx.fillRect(28, 33, 1, 1);
+                    ctx.fillRect(35, 33, 1, 1);
+                }
+                
+                // Draw nose
+                ctx.fillStyle = colors.orange;
+                ctx.fillRect(32, 42, 1, 1);
+                
+                // Draw cheeks
+                ctx.fillStyle = colors.pink;
+                ctx.fillRect(25, 40, 1, 1);
+                ctx.fillRect(39, 40, 1, 1);
+                
+                // Draw body
+                ctx.fillStyle = colors.black;
+                ctx.fillRect(22, 55, 21, 29);
+                
+                ctx.fillStyle = colors.lightBlue;
+                ctx.fillRect(23, 56, 19, 27);
+                
+                // Draw arms
+                ctx.fillStyle = colors.black;
+                ctx.fillRect(18, 60, 4, 15);
+                ctx.fillRect(43, 60, 4, 15);
+                
+                ctx.fillStyle = colors.cream;
+                ctx.fillRect(19, 61, 2, 13);
+                ctx.fillRect(44, 61, 2, 13);
+                
+                // Draw legs with offset for animation
+                const leftLegX = 26 + (sprite.legOffset < 0 ? sprite.legOffset : 0);
+                const rightLegX = 33 + (sprite.legOffset > 0 ? sprite.legOffset : 0);
+                
+                ctx.fillStyle = colors.black;
+                ctx.fillRect(leftLegX, 85, 6, 9);
+                ctx.fillRect(rightLegX, 85, 6, 9);
+                
+                ctx.fillStyle = colors.cream;
+                ctx.fillRect(leftLegX + 1, 86, 4, 7);
+                ctx.fillRect(rightLegX + 1, 86, 4, 7);
+                
+                // Add download link
+                const link = document.createElement('a');
+                link.download = sprite.name + '.png';
+                link.href = canvas.toDataURL();
+                link.textContent = `Download ${sprite.name}.png`;
+                link.style.display = 'block';
+                link.style.margin = '10px 0';
+                document.body.appendChild(link);
+            });
+        }
+        
+        // Create sprites when page loads
+        window.onload = createBuddySprites;
+    </script>
+</body>
+</html>
