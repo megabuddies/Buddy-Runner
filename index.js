@@ -20,9 +20,9 @@ const GROUND_HEIGHT = 24;
 const GROUND_AND_CACTUS_SPEED = 0.5;
 
 const CACTI_CONFIG = [
-  { width: 48 / 1.5, height: 100 / 1.5, image: "images/cactus_1.png" },
-  { width: 98 / 1.5, height: 100 / 1.5, image: "images/cactus_2.png" },
-  { width: 68 / 1.5, height: 70 / 1.5, image: "images/cactus_3.png" },
+  { width: 48 / 1.5, height: 100 / 1.5, image: "images/bunny_carrot_1.png" },
+  { width: 98 / 1.5, height: 100 / 1.5, image: "images/bunny_carrot_2.png" },
+  { width: 68 / 1.5, height: 70 / 1.5, image: "images/bunny_carrot_3.png" },
 ];
 
 //Game Objects
@@ -162,7 +162,7 @@ function updateGameSpeed(frameTimeDelta) {
 }
 
 function clearScreen() {
-  ctx.fillStyle = "white";
+  ctx.fillStyle = "#e6f3ff";  // Light blue sky color for bunny theme
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
