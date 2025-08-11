@@ -1,4 +1,4 @@
-export default class Cactus {
+export default class Carrot {
   constructor(ctx, x, y, width, height, image) {
     this.ctx = ctx;
     this.x = x;

@@ -1,6 +1,6 @@
 import Player from "./Player.js";
 import Ground from "./Ground.js";
-import CactiController from "./CactiController.js";
+import CarrotController from "./CarrotController.js";
 import Score from "./Score.js";
 
 const canvas = document.getElementById("game");
@@ -17,9 +17,9 @@ const MAX_JUMP_HEIGHT = GAME_HEIGHT;
 const MIN_JUMP_HEIGHT = 150;
 const GROUND_WIDTH = 2400;
 const GROUND_HEIGHT = 24;
-const GROUND_AND_CACTUS_SPEED = 0.5;
+const GROUND_AND_CARROT_SPEED = 0.5;
 
-const CACTI_CONFIG = [
+const CARROT_CONFIG = [
   { width: 48 / 1.5, height: 100 / 1.5, image: "images/carrot_1.png" },
   { width: 98 / 1.5, height: 100 / 1.5, image: "images/carrot_2.png" },
   { width: 68 / 1.5, height: 70 / 1.5, image: "images/carrot_3.png" },
@@ -28,7 +28,7 @@ const CACTI_CONFIG = [
 //Game Objects
 let player = null;
 let ground = null;
-let cactiController = null;
+let carrotController = null;
 let score = null;
 
 let scaleRatio = null;
@@ -60,25 +60,25 @@ function createSprites() {
     ctx,
     groundWidthInGame,
     groundHeightInGame,
-    GROUND_AND_CACTUS_SPEED,
+    GROUND_AND_CARROT_SPEED,
     scaleRatio
   );
 
-  const cactiImages = CACTI_CONFIG.map((cactus) => {
+  const carrotImages = CARROT_CONFIG.map((carrot) => {
     const image = new Image();
-    image.src = cactus.image;
+    image.src = carrot.image;
     return {
       image: image,
-      width: cactus.width * scaleRatio,
-      height: cactus.height * scaleRatio,
+      width: carrot.width * scaleRatio,
+      height: carrot.height * scaleRatio,
     };
   });
 
-  cactiController = new CactiController(
+  carrotController = new CarrotController(
     ctx,
-    cactiImages,
+    carrotImages,
     scaleRatio,
-    GROUND_AND_CACTUS_SPEED
+    GROUND_AND_CARROT_SPEED
   );
 
   score = new Score(ctx, scaleRatio);
@@ -121,10 +121,10 @@ function getScaleRatio() {
 function showGameOver() {
   const fontSize = 70 * scaleRatio;
   ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "grey";
+  ctx.fillStyle = "#FF7F7F";
   const x = canvas.width / 4.5;
   const y = canvas.height / 2;
-  ctx.fillText("GAME OVER", x, y);
+  ctx.fillText("OH NO!", x, y);
 }
 
 function setupGameReset() {
@@ -143,7 +143,7 @@ function reset() {
   gameOver = false;
   waitingToStart = false;
   ground.reset();
-  cactiController.reset();
+  carrotController.reset();
   score.reset();
   gameSpeed = GAME_SPEED_START;
 }
@@ -151,10 +151,10 @@ function reset() {
 function showStartGameText() {
   const fontSize = 40 * scaleRatio;
   ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "grey";
+  ctx.fillStyle = "#8FBC8F";
   const x = canvas.width / 14;
   const y = canvas.height / 2;
-  ctx.fillText("Tap Screen or Press Space To Start", x, y);
+  ctx.fillText("Help Buddy Jump Over Carrots!", x, y);
 }
 
 function updateGameSpeed(frameTimeDelta) {
@@ -162,7 +162,7 @@ function updateGameSpeed(frameTimeDelta) {
 }
 
 function clearScreen() {
-  ctx.fillStyle = "white";
+  ctx.fillStyle = "#f8fdf8";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
@@ -180,13 +180,13 @@ function gameLoop(currentTime) {
   if (!gameOver && !waitingToStart) {
     //Update game objects
     ground.update(gameSpeed, frameTimeDelta);
-    cactiController.update(gameSpeed, frameTimeDelta);
+    carrotController.update(gameSpeed, frameTimeDelta);
     player.update(gameSpeed, frameTimeDelta);
     score.update(frameTimeDelta);
     updateGameSpeed(frameTimeDelta);
   }
 
-  if (!gameOver && cactiController.collideWith(player)) {
+  if (!gameOver && carrotController.collideWith(player)) {
     gameOver = true;
     setupGameReset();
     score.setHighScore();
@@ -194,7 +194,7 @@ function gameLoop(currentTime) {
 
   //Draw game objects
   ground.draw();
-  cactiController.draw();
+  carrotController.draw();
   player.draw();
   score.draw();
 

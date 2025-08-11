@@ -1,7 +1,7 @@
 export default class Player {
   WALK_ANIMATION_TIMER = 200;
   walkAnimationTimer = this.WALK_ANIMATION_TIMER;
-  dinoRunImages = [];
+  buddyRunImages = [];
 
   jumpPressed = false;
   jumpInProgress = false;
@@ -26,14 +26,17 @@ export default class Player {
     this.standingStillImage.src = "images/buddy_standing_still.png";
     this.image = this.standingStillImage;
 
+    this.jumpingImage = new Image();
+    this.jumpingImage.src = "images/buddy_standing_still_eye_closed.png";
+
     const buddyRunImage1 = new Image();
     buddyRunImage1.src = "images/buddy_run1.png";
 
     const buddyRunImage2 = new Image();
     buddyRunImage2.src = "images/buddy_run2.png";
 
-    this.dinoRunImages.push(buddyRunImage1);
-    this.dinoRunImages.push(buddyRunImage2);
+    this.buddyRunImages.push(buddyRunImage1);
+    this.buddyRunImages.push(buddyRunImage2);
 
     //keyboard
     window.removeEventListener("keydown", this.keydown);
@@ -74,7 +77,7 @@ export default class Player {
     this.run(gameSpeed, frameTimeDelta);
 
     if (this.jumpInProgress) {
-      this.image = this.standingStillImage;
+      this.image = this.jumpingImage;
     }
 
     this.jump(frameTimeDelta);
@@ -109,10 +112,10 @@ export default class Player {
 
   run(gameSpeed, frameTimeDelta) {
     if (this.walkAnimationTimer <= 0) {
-      if (this.image === this.dinoRunImages[0]) {
-        this.image = this.dinoRunImages[1];
+      if (this.image === this.buddyRunImages[0]) {
+        this.image = this.buddyRunImages[1];
       } else {
-        this.image = this.dinoRunImages[0];
+        this.image = this.buddyRunImages[0];
       }
       this.walkAnimationTimer = this.WALK_ANIMATION_TIMER;
     }
