@@ -1,13 +1,17 @@
 export default class Player {
-  WALK_ANIMATION_TIMER = 200;
+  WALK_ANIMATION_TIMER = 180;
   walkAnimationTimer = this.WALK_ANIMATION_TIMER;
   buddyRunImages = [];
 
   jumpPressed = false;
   jumpInProgress = false;
   falling = false;
-  JUMP_SPEED = 0.6;
-  GRAVITY = 0.4;
+  JUMP_SPEED = 0.65;
+  GRAVITY = 0.38;
+  
+  dustParticles = [];
+  showDust = false;
+  dustTimer = 0;
 
   constructor(ctx, width, height, minJumpHeight, maxJumpHeight, scaleRatio) {
     this.ctx = ctx;
@@ -81,6 +85,7 @@ export default class Player {
     }
 
     this.jump(frameTimeDelta);
+    this.updateDust(frameTimeDelta);
   }
 
   jump(frameTimeDelta) {
@@ -102,10 +107,26 @@ export default class Player {
         this.y += this.GRAVITY * frameTimeDelta * this.scaleRatio;
         if (this.y + this.height > this.canvas.height) {
           this.y = this.yStandingPosition;
+          // Create dust effect when landing
+          this.createDustEffect();
         }
       } else {
         this.falling = false;
         this.jumpInProgress = false;
+      }
+    }
+  }
+
+  createDustEffect() {
+    this.showDust = true;
+    this.dustTimer = 300; // Show dust for 300ms
+  }
+
+  updateDust(frameTimeDelta) {
+    if (this.showDust) {
+      this.dustTimer -= frameTimeDelta;
+      if (this.dustTimer <= 0) {
+        this.showDust = false;
       }
     }
   }
@@ -124,5 +145,18 @@ export default class Player {
 
   draw() {
     this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    
+    // Draw dust effect when landing
+    if (this.showDust) {
+      this.ctx.fillStyle = "rgba(139, 69, 19, 0.6)";
+      const dustY = this.yStandingPosition + this.height;
+      for (let i = 0; i < 5; i++) {
+        const dustX = this.x + this.width * 0.2 + i * 8 * this.scaleRatio;
+        const dustSize = (3 - i * 0.5) * this.scaleRatio;
+        this.ctx.beginPath();
+        this.ctx.arc(dustX, dustY - dustSize, dustSize, 0, Math.PI * 2);
+        this.ctx.fill();
+      }
+    }
   }
 }
