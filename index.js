@@ -17,12 +17,12 @@ const MAX_JUMP_HEIGHT = GAME_HEIGHT;
 const MIN_JUMP_HEIGHT = 150;
 const GROUND_WIDTH = 2400;
 const GROUND_HEIGHT = 24;
-const GROUND_AND_CACTUS_SPEED = 0.5;
+const GROUND_AND_CARROT_SPEED = 0.5;
 
-const CACTI_CONFIG = [
-  { width: 48 / 1.5, height: 100 / 1.5, image: "images/cactus_1.png" },
-  { width: 98 / 1.5, height: 100 / 1.5, image: "images/cactus_2.png" },
-  { width: 68 / 1.5, height: 70 / 1.5, image: "images/cactus_3.png" },
+const CARROT_CONFIG = [
+  { width: 48 / 1.5, height: 100 / 1.5, image: "images/carrot_1.png" },
+  { width: 98 / 1.5, height: 100 / 1.5, image: "images/carrot_2.png" },
+  { width: 68 / 1.5, height: 70 / 1.5, image: "images/carrot_3.png" },
 ];
 
 //Game Objects
@@ -60,25 +60,25 @@ function createSprites() {
     ctx,
     groundWidthInGame,
     groundHeightInGame,
-    GROUND_AND_CACTUS_SPEED,
+    GROUND_AND_CARROT_SPEED,
     scaleRatio
   );
 
-  const cactiImages = CACTI_CONFIG.map((cactus) => {
+  const carrotImages = CARROT_CONFIG.map((carrot) => {
     const image = new Image();
-    image.src = cactus.image;
+    image.src = carrot.image;
     return {
       image: image,
-      width: cactus.width * scaleRatio,
-      height: cactus.height * scaleRatio,
+      width: carrot.width * scaleRatio,
+      height: carrot.height * scaleRatio,
     };
   });
 
   cactiController = new CactiController(
     ctx,
-    cactiImages,
+    carrotImages,
     scaleRatio,
-    GROUND_AND_CACTUS_SPEED
+    GROUND_AND_CARROT_SPEED
   );
 
   score = new Score(ctx, scaleRatio);
@@ -121,7 +121,7 @@ function getScaleRatio() {
 function showGameOver() {
   const fontSize = 70 * scaleRatio;
   ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "grey";
+  ctx.fillStyle = "#4a4a4a";
   const x = canvas.width / 4.5;
   const y = canvas.height / 2;
   ctx.fillText("GAME OVER", x, y);
@@ -151,7 +151,7 @@ function reset() {
 function showStartGameText() {
   const fontSize = 40 * scaleRatio;
   ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "grey";
+  ctx.fillStyle = "#4a4a4a";
   const x = canvas.width / 14;
   const y = canvas.height / 2;
   ctx.fillText("Tap Screen or Press Space To Start", x, y);
@@ -162,7 +162,7 @@ function updateGameSpeed(frameTimeDelta) {
 }
 
 function clearScreen() {
-  ctx.fillStyle = "white";
+  ctx.fillStyle = "#e8f5e8";  // светло-зеленый фон для кроличьей тематики
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 
