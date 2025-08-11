@@ -1,6 +1,6 @@
 export default class Score {
   score = 0;
-  HIGH_SCORE_KEY = "highScore";
+  HIGH_SCORE_KEY = "buddyHighScore";
 
   constructor(ctx, scaleRatio) {
     this.ctx = ctx;
@@ -25,18 +25,34 @@ export default class Score {
 
   draw() {
     const highScore = Number(localStorage.getItem(this.HIGH_SCORE_KEY));
-    const y = 20 * this.scaleRatio;
+    const y = 25 * this.scaleRatio;
 
-    const fontSize = 20 * this.scaleRatio;
-    this.ctx.font = `${fontSize}px serif`;
-    this.ctx.fillStyle = "#525250";
-    const scoreX = this.canvas.width - 75 * this.scaleRatio;
-    const highScoreX = scoreX - 125 * this.scaleRatio;
+    const fontSize = 22 * this.scaleRatio;
+    this.ctx.font = `bold ${fontSize}px Arial`;
+    this.ctx.fillStyle = "#6B8E6B";
+    
+    // Add subtle shadow for score text
+    this.ctx.shadowColor = "rgba(255, 255, 255, 0.8)";
+    this.ctx.shadowOffsetX = 1;
+    this.ctx.shadowOffsetY = 1;
+    this.ctx.shadowBlur = 2;
+    
+    const scoreX = this.canvas.width - 85 * this.scaleRatio;
+    const highScoreX = scoreX - 140 * this.scaleRatio;
 
     const scorePadded = Math.floor(this.score).toString().padStart(6, 0);
     const highScorePadded = highScore.toString().padStart(6, 0);
 
-    this.ctx.fillText(scorePadded, scoreX, y);
-    this.ctx.fillText(`HI ${highScorePadded}`, highScoreX, y);
+    // Draw current score with carrot emoji
+    this.ctx.fillText(`🥕 ${scorePadded}`, scoreX, y);
+    
+    // Draw high score with trophy emoji
+    this.ctx.fillText(`🏆 ${highScorePadded}`, highScoreX, y);
+    
+    // Reset shadow effects
+    this.ctx.shadowColor = "transparent";
+    this.ctx.shadowOffsetX = 0;
+    this.ctx.shadowOffsetY = 0;
+    this.ctx.shadowBlur = 0;
   }
 }

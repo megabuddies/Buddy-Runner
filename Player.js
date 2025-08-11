@@ -1,5 +1,5 @@
 export default class Player {
-  WALK_ANIMATION_TIMER = 200;
+  WALK_ANIMATION_TIMER = 180; // Slightly faster for more energetic bunny movement
   walkAnimationTimer = this.WALK_ANIMATION_TIMER;
   buddyRunImages = [];
 
@@ -123,6 +123,26 @@ export default class Player {
   }
 
   draw() {
+    // Draw shadow for Buddy
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
+    this.ctx.fillRect(
+      this.x + this.width * 0.1, 
+      this.yStandingPosition + this.height - 2 * this.scaleRatio, 
+      this.width * 0.8, 
+      4 * this.scaleRatio
+    );
+
+    // Add a subtle bunny magic glow when jumping
+    if (this.jumpInProgress) {
+      this.ctx.shadowColor = "rgba(143, 188, 143, 0.4)";
+      this.ctx.shadowBlur = 3;
+    }
+
+    // Draw Buddy
     this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    
+    // Reset shadow effects
+    this.ctx.shadowColor = "transparent";
+    this.ctx.shadowBlur = 0;
   }
 }

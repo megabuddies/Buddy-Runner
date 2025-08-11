@@ -124,7 +124,7 @@ function showGameOver() {
   ctx.fillStyle = "#FF7F7F";
   const x = canvas.width / 4.5;
   const y = canvas.height / 2;
-  ctx.fillText("OH NO!", x, y);
+  ctx.fillText("OOPS!", x, y);
 }
 
 function setupGameReset() {
@@ -154,7 +154,7 @@ function showStartGameText() {
   ctx.fillStyle = "#8FBC8F";
   const x = canvas.width / 14;
   const y = canvas.height / 2;
-  ctx.fillText("Help Buddy Jump Over Carrots!", x, y);
+  ctx.fillText("🐰 Buddy's Garden Adventure! 🥕", x, y);
 }
 
 function updateGameSpeed(frameTimeDelta) {
@@ -162,7 +162,7 @@ function updateGameSpeed(frameTimeDelta) {
 }
 
 function clearScreen() {
-  ctx.fillStyle = "#f8fdf8";
+  ctx.fillStyle = "#f5fdf5";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
 

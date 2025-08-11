@@ -13,7 +13,26 @@ export default class Carrot {
   }
 
   draw() {
+    // Draw shadow for depth
+    this.ctx.fillStyle = "rgba(0, 0, 0, 0.15)";
+    this.ctx.fillRect(
+      this.x + 3, 
+      this.y + this.height - 2, 
+      this.width - 6, 
+      4
+    );
+
+    // Draw the carrot image
     this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+
+    // Add a subtle glow effect for garden magic
+    this.ctx.shadowColor = "rgba(255, 140, 0, 0.3)";
+    this.ctx.shadowBlur = 2;
+    this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    
+    // Reset shadow
+    this.ctx.shadowColor = "transparent";
+    this.ctx.shadowBlur = 0;
   }
 
   collideWith(sprite) {
