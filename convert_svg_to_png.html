@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SVG to PNG Converter</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #f0f0f0; 
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .sprite-row {
+            display: flex;
+            align-items: center;
+            margin: 20px 0;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .sprite-preview {
+            width: 100px;
+            height: 100px;
+            border: 2px solid #333;
+            margin-right: 20px;
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .sprite-preview img {
+            max-width: 90px;
+            max-height: 90px;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        .sprite-info {
+            flex: 1;
+        }
+        .sprite-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        canvas {
+            display: none;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f5e8;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐰 SVG to PNG Sprite Converter</h1>
+        
+        <div class="controls">
+            <p>Convert SVG rabbit sprites to PNG format for use in the game</p>
+            <button onclick="convertAllSprites()">Convert All SVG to PNG</button>
+            <div id="status" class="status" style="display:none;"></div>
+        </div>
+
+        <div id="sprites-list">
+            <div class="sprite-row">
+                <div class="sprite-preview">
+                    <img id="preview-standing" src="images/buddy_standing_still.svg" alt="Standing">
+                </div>
+                <div class="sprite-info">
+                    <div class="sprite-name">Standing Still</div>
+                    <button onclick="convertSprite('buddy_standing_still.svg', 'buddy_standing_still.png')">Convert to PNG</button>
+                </div>
+            </div>
+
+            <div class="sprite-row">
+                <div class="sprite-preview">
+                    <img id="preview-closed" src="images/buddy_standing_still_eye_closed.svg" alt="Eyes Closed">
+                </div>
+                <div class="sprite-info">
+                    <div class="sprite-name">Standing (Eyes Closed)</div>
+                    <button onclick="convertSprite('buddy_standing_still_eye_closed.svg', 'buddy_standing_still_eye_closed.png')">Convert to PNG</button>
+                </div>
+            </div>
+
+            <div class="sprite-row">
+                <div class="sprite-preview">
+                    <img id="preview-run1" src="images/buddy_run1.svg" alt="Running 1">
+                </div>
+                <div class="sprite-info">
+                    <div class="sprite-name">Running Frame 1</div>
+                    <button onclick="convertSprite('buddy_run1.svg', 'buddy_run1.png')">Convert to PNG</button>
+                </div>
+            </div>
+
+            <div class="sprite-row">
+                <div class="sprite-preview">
+                    <img id="preview-run2" src="images/buddy_run2.svg" alt="Running 2">
+                </div>
+                <div class="sprite-info">
+                    <div class="sprite-name">Running Frame 2</div>
+                    <button onclick="convertSprite('buddy_run2.svg', 'buddy_run2.png')">Convert to PNG</button>
+                </div>
+            </div>
+        </div>
+
+        <canvas id="conversion-canvas"></canvas>
+    </div>
+
+    <script>
+        function showStatus(message) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        function convertSprite(svgFile, pngFile) {
+            const canvas = document.getElementById('conversion-canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Load SVG image
+            const img = new Image();
+            img.onload = function() {
+                // Set canvas size to match image
+                canvas.width = this.naturalWidth;
+                canvas.height = this.naturalHeight;
+                
+                // Draw SVG to canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(this, 0, 0);
+                
+                // Convert to PNG and download
+                canvas.toBlob(function(blob) {
+                    const link = document.createElement('a');
+                    link.download = pngFile;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                    URL.revokeObjectURL(link.href);
+                    
+                    showStatus(`✅ Converted ${svgFile} to ${pngFile}`);
+                }, 'image/png');
+            };
+            
+            img.onerror = function() {
+                showStatus(`❌ Error loading ${svgFile}`);
+            };
+            
+            img.src = `images/${svgFile}`;
+        }
+
+        function convertAllSprites() {
+            const sprites = [
+                ['buddy_standing_still.svg', 'buddy_standing_still.png'],
+                ['buddy_standing_still_eye_closed.svg', 'buddy_standing_still_eye_closed.png'],
+                ['buddy_run1.svg', 'buddy_run1.png'],
+                ['buddy_run2.svg', 'buddy_run2.png']
+            ];
+            
+            let converted = 0;
+            
+            sprites.forEach(([svgFile, pngFile], index) => {
+                setTimeout(() => {
+                    convertSprite(svgFile, pngFile);
+                    converted++;
+                    
+                    if (converted === sprites.length) {
+                        setTimeout(() => {
+                            showStatus('🎉 All sprites converted to PNG format!');
+                        }, 500);
+                    }
+                }, index * 200);
+            });
+        }
+
+        // Handle SVG loading errors - try to show placeholder
+        document.querySelectorAll('img').forEach(img => {
+            img.onerror = function() {
+                this.style.display = 'none';
+                this.parentElement.innerHTML += '<div style="color: #999; font-size: 12px;">SVG Preview</div>';
+            };
+        });
+    </script>
+</body>
+</html>

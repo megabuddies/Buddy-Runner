@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pixel Rabbit PNG Generator</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            padding: 20px; 
+            background: #f0f0f0; 
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .sprite-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .sprite-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        canvas { 
+            border: 2px solid #333; 
+            margin: 10px auto;
+            display: block;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+            background: transparent;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        h2 {
+            color: #6B8E6B;
+            margin-bottom: 15px;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            background: #e8f5e8;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🐰 Pixel Rabbit PNG Generator</h1>
+        
+        <div class="controls">
+            <p>Generate pixel art rabbit sprites as PNG files for the game</p>
+            <button onclick="generateAllSprites()">Generate All Sprites</button>
+            <button onclick="downloadAllSprites()">Download All PNG Files</button>
+            <div id="status" class="status" style="display:none;"></div>
+        </div>
+
+        <div class="sprite-grid">
+            <div class="sprite-container">
+                <h2>Standing Still</h2>
+                <canvas id="rabbit-standing" width="132" height="141"></canvas>
+                <button onclick="downloadSprite('rabbit-standing', 'buddy_standing_still.png')">Download PNG</button>
+            </div>
+
+            <div class="sprite-container">
+                <h2>Standing (Eyes Closed)</h2>
+                <canvas id="rabbit-standing-closed" width="132" height="141"></canvas>
+                <button onclick="downloadSprite('rabbit-standing-closed', 'buddy_standing_still_eye_closed.png')">Download PNG</button>
+            </div>
+
+            <div class="sprite-container">
+                <h2>Running Frame 1</h2>
+                <canvas id="rabbit-run1" width="132" height="141"></canvas>
+                <button onclick="downloadSprite('rabbit-run1', 'buddy_run1.png')">Download PNG</button>
+            </div>
+
+            <div class="sprite-container">
+                <h2>Running Frame 2</h2>
+                <canvas id="rabbit-run2" width="132" height="141"></canvas>
+                <button onclick="downloadSprite('rabbit-run2', 'buddy_run2.png')">Download PNG</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showStatus(message) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 3000);
+        }
+
+        function drawPixelRabbitStanding(ctx, eyesClosed = false) {
+            const scale = 3;
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            
+            // Colors based on your reference image
+            const WHITE = '#F5F2EB';
+            const BLACK = '#000000';
+            const ORANGE = '#F85A4A';
+            const PINK = '#FFB8B8';
+            const GRAY = '#9BB8C9';
+
+            function pixel(x, y, color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x * scale, y * scale, scale, scale);
+            }
+
+            // Head outline
+            for(let x = 15; x <= 29; x++) {
+                pixel(x, 8, BLACK);
+                pixel(x, 32, BLACK);
+            }
+            for(let y = 9; y <= 31; y++) {
+                pixel(14, y, BLACK);
+                pixel(30, y, BLACK);
+            }
+
+            // Ears outline
+            for(let y = 2; y <= 7; y++) {
+                pixel(17, y, BLACK);
+                pixel(21, y, BLACK);
+                pixel(23, y, BLACK);
+                pixel(27, y, BLACK);
+            }
+            for(let x = 18; x <= 20; x++) {
+                pixel(x, 1, BLACK);
+                pixel(x, 8, BLACK);
+            }
+            for(let x = 24; x <= 26; x++) {
+                pixel(x, 1, BLACK);
+                pixel(x, 8, BLACK);
+            }
+
+            // Body outline
+            for(let x = 10; x <= 34; x++) {
+                pixel(x, 33, BLACK);
+                pixel(x, 46, BLACK);
+            }
+            for(let y = 34; y <= 45; y++) {
+                pixel(9, y, BLACK);
+                pixel(35, y, BLACK);
+            }
+
+            // Arms
+            for(let y = 36; y <= 40; y++) {
+                pixel(6, y, BLACK);
+                pixel(11, y, BLACK);
+                pixel(33, y, BLACK);
+                pixel(38, y, BLACK);
+            }
+            for(let x = 7; x <= 10; x++) {
+                pixel(x, 35, BLACK);
+                pixel(x, 41, BLACK);
+            }
+            for(let x = 34; x <= 37; x++) {
+                pixel(x, 35, BLACK);
+                pixel(x, 41, BLACK);
+            }
+
+            // Fill head
+            for(let y = 9; y <= 31; y++) {
+                for(let x = 15; x <= 29; x++) {
+                    pixel(x, y, WHITE);
+                }
+            }
+
+            // Fill ears
+            for(let y = 2; y <= 7; y++) {
+                for(let x = 18; x <= 20; x++) {
+                    pixel(x, y, WHITE);
+                }
+                for(let x = 24; x <= 26; x++) {
+                    pixel(x, y, WHITE);
+                }
+            }
+
+            // Ear insides
+            for(let y = 3; y <= 6; y++) {
+                pixel(19, y, GRAY);
+                pixel(25, y, GRAY);
+            }
+
+            // Fill body
+            for(let y = 34; y <= 45; y++) {
+                for(let x = 10; x <= 34; x++) {
+                    pixel(x, y, WHITE);
+                }
+            }
+
+            // Fill arms
+            for(let y = 36; y <= 40; y++) {
+                for(let x = 7; x <= 10; x++) {
+                    pixel(x, y, WHITE);
+                }
+                for(let x = 34; x <= 37; x++) {
+                    pixel(x, y, WHITE);
+                }
+            }
+
+            // Eyes
+            if (eyesClosed) {
+                for(let x = 18; x <= 20; x++) {
+                    pixel(x, 16, BLACK);
+                }
+                for(let x = 24; x <= 26; x++) {
+                    pixel(x, 16, BLACK);
+                }
+            } else {
+                pixel(19, 15, BLACK);
+                pixel(19, 16, BLACK);
+                pixel(25, 15, BLACK);
+                pixel(25, 16, BLACK);
+                pixel(19, 15, WHITE);
+                pixel(25, 15, WHITE);
+            }
+
+            // Nose
+            pixel(22, 20, ORANGE);
+
+            // Cheeks
+            pixel(16, 22, PINK);
+            pixel(28, 22, PINK);
+
+            // Mouth
+            pixel(21, 24, BLACK);
+            pixel(22, 25, BLACK);
+            pixel(23, 24, BLACK);
+        }
+
+        function drawPixelRabbitRunning(ctx, frame) {
+            const scale = 3;
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            
+            const WHITE = '#F5F2EB';
+            const BLACK = '#000000';
+            const ORANGE = '#F85A4A';
+            const PINK = '#FFB8B8';
+            const GRAY = '#9BB8C9';
+
+            function pixel(x, y, color) {
+                ctx.fillStyle = color;
+                ctx.fillRect(x * scale, y * scale, scale, scale);
+            }
+
+            const tilt = frame === 1 ? 0 : 1;
+
+            // Head outline (slightly tilted)
+            for(let x = 15; x <= 29; x++) {
+                pixel(x, 8 + tilt, BLACK);
+                pixel(x, 32 + tilt, BLACK);
+            }
+            for(let y = 9; y <= 31; y++) {
+                pixel(14, y + tilt, BLACK);
+                pixel(30, y + tilt, BLACK);
+            }
+
+            // Ears (different positions for animation)
+            if (frame === 1) {
+                for(let y = 2; y <= 7; y++) {
+                    pixel(17, y, BLACK);
+                    pixel(21, y, BLACK);
+                    pixel(23, y, BLACK);
+                    pixel(27, y, BLACK);
+                }
+                for(let x = 18; x <= 20; x++) {
+                    pixel(x, 1, BLACK);
+                    pixel(x, 8, BLACK);
+                }
+                for(let x = 24; x <= 26; x++) {
+                    pixel(x, 1, BLACK);
+                    pixel(x, 8, BLACK);
+                }
+                // Fill ears
+                for(let y = 2; y <= 7; y++) {
+                    for(let x = 18; x <= 20; x++) {
+                        pixel(x, y, WHITE);
+                    }
+                    for(let x = 24; x <= 26; x++) {
+                        pixel(x, y, WHITE);
+                    }
+                }
+                pixel(19, 4, GRAY);
+                pixel(25, 4, GRAY);
+            } else {
+                for(let y = 3; y <= 8; y++) {
+                    pixel(16, y, BLACK);
+                    pixel(20, y, BLACK);
+                    pixel(24, y, BLACK);
+                    pixel(28, y, BLACK);
+                }
+                for(let x = 17; x <= 19; x++) {
+                    pixel(x, 2, BLACK);
+                    pixel(x, 9, BLACK);
+                }
+                for(let x = 25; x <= 27; x++) {
+                    pixel(x, 2, BLACK);
+                    pixel(x, 9, BLACK);
+                }
+                // Fill ears
+                for(let y = 3; y <= 8; y++) {
+                    for(let x = 17; x <= 19; x++) {
+                        pixel(x, y, WHITE);
+                    }
+                    for(let x = 25; x <= 27; x++) {
+                        pixel(x, y, WHITE);
+                    }
+                }
+                pixel(18, 5, GRAY);
+                pixel(26, 5, GRAY);
+            }
+
+            // Body outline
+            for(let x = 10; x <= 34; x++) {
+                pixel(x, 33 + tilt, BLACK);
+                if (46 + tilt < 47) pixel(x, 46 + tilt, BLACK);
+            }
+            for(let y = 34; y <= 45; y++) {
+                if (y + tilt < 47) {
+                    pixel(9, y + tilt, BLACK);
+                    pixel(35, y + tilt, BLACK);
+                }
+            }
+
+            // Arms in different positions
+            if (frame === 1) {
+                for(let y = 36; y <= 40; y++) {
+                    if (y + tilt < 47) {
+                        pixel(5, y + tilt, BLACK);
+                        pixel(10, y + tilt, BLACK);
+                        pixel(34, y + tilt, BLACK);
+                        pixel(39, y + tilt, BLACK);
+                    }
+                }
+                for(let y = 36; y <= 40; y++) {
+                    if (y + tilt < 47) {
+                        for(let x = 6; x <= 9; x++) {
+                            pixel(x, y + tilt, WHITE);
+                        }
+                        for(let x = 35; x <= 38; x++) {
+                            pixel(x, y + tilt, WHITE);
+                        }
+                    }
+                }
+            } else {
+                for(let y = 37; y <= 41; y++) {
+                    if (y + tilt < 47) {
+                        pixel(7, y + tilt, BLACK);
+                        pixel(12, y + tilt, BLACK);
+                        pixel(32, y + tilt, BLACK);
+                        pixel(37, y + tilt, BLACK);
+                    }
+                }
+                for(let y = 37; y <= 41; y++) {
+                    if (y + tilt < 47) {
+                        for(let x = 8; x <= 11; x++) {
+                            pixel(x, y + tilt, WHITE);
+                        }
+                        for(let x = 33; x <= 36; x++) {
+                            pixel(x, y + tilt, WHITE);
+                        }
+                    }
+                }
+            }
+
+            // Fill head
+            for(let y = 9; y <= 31; y++) {
+                if (y + tilt < 47) {
+                    for(let x = 15; x <= 29; x++) {
+                        pixel(x, y + tilt, WHITE);
+                    }
+                }
+            }
+
+            // Fill body
+            for(let y = 34; y <= 45; y++) {
+                if (y + tilt < 47) {
+                    for(let x = 10; x <= 34; x++) {
+                        pixel(x, y + tilt, WHITE);
+                    }
+                }
+            }
+
+            // Eyes (always open for running)
+            if (15 + tilt < 47) {
+                pixel(19, 15 + tilt, BLACK);
+                pixel(25, 15 + tilt, BLACK);
+                pixel(19, 15 + tilt, WHITE);
+                pixel(25, 15 + tilt, WHITE);
+            }
+            if (16 + tilt < 47) {
+                pixel(19, 16 + tilt, BLACK);
+                pixel(25, 16 + tilt, BLACK);
+            }
+
+            // Nose
+            if (20 + tilt < 47) pixel(22, 20 + tilt, ORANGE);
+
+            // Cheeks
+            if (22 + tilt < 47) {
+                pixel(16, 22 + tilt, PINK);
+                pixel(28, 22 + tilt, PINK);
+            }
+
+            // Mouth
+            if (24 + tilt < 47) {
+                pixel(21, 24 + tilt, BLACK);
+                pixel(23, 24 + tilt, BLACK);
+            }
+            if (25 + tilt < 47) {
+                pixel(22, 25 + tilt, BLACK);
+            }
+        }
+
+        function generateAllSprites() {
+            const standingCtx = document.getElementById('rabbit-standing').getContext('2d');
+            const standingClosedCtx = document.getElementById('rabbit-standing-closed').getContext('2d');
+            const run1Ctx = document.getElementById('rabbit-run1').getContext('2d');
+            const run2Ctx = document.getElementById('rabbit-run2').getContext('2d');
+
+            drawPixelRabbitStanding(standingCtx, false);
+            drawPixelRabbitStanding(standingClosedCtx, true);
+            drawPixelRabbitRunning(run1Ctx, 1);
+            drawPixelRabbitRunning(run2Ctx, 2);
+
+            showStatus('✅ All sprites generated successfully!');
+        }
+
+        function downloadSprite(canvasId, filename) {
+            const canvas = document.getElementById(canvasId);
+            const link = document.createElement('a');
+            link.download = filename;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }
+
+        function downloadAllSprites() {
+            const sprites = [
+                ['rabbit-standing', 'buddy_standing_still.png'],
+                ['rabbit-standing-closed', 'buddy_standing_still_eye_closed.png'],
+                ['rabbit-run1', 'buddy_run1.png'],
+                ['rabbit-run2', 'buddy_run2.png']
+            ];
+
+            sprites.forEach(([canvasId, filename], index) => {
+                setTimeout(() => {
+                    downloadSprite(canvasId, filename);
+                }, index * 200);
+            });
+
+            showStatus('🎉 All PNG files downloaded! Place them in the images/ folder.');
+        }
+
+        // Generate sprites on page load
+        window.onload = function() {
+            generateAllSprites();
+        };
+    </script>
+</body>
+</html>
