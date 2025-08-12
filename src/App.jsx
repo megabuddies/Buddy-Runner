@@ -8,7 +8,7 @@ import './App.css';
 
 const App = () => {
   const appId = 'cme84q0og02aalc0bh9blzwa9';
-  const [gameState, setGameState] = useState('wallet-connection'); // 'wallet-connection' | 'network-selection' | 'game'
+  const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
 
   const privyConfig = {
@@ -132,16 +132,16 @@ const App = () => {
     ],
   };
 
-  const handleWalletConnected = () => {
-    setGameState('network-selection');
-  };
-
   const handleNetworkSelect = (network) => {
     setSelectedNetwork(network);
   };
 
   const handleStartGame = (network) => {
     setSelectedNetwork(network);
+    setGameState('wallet-connection');
+  };
+
+  const handleWalletConnected = () => {
     setGameState('game');
   };
 
@@ -152,7 +152,6 @@ const App = () => {
 
   const handleBackToWalletConnection = () => {
     setGameState('wallet-connection');
-    setSelectedNetwork(null);
   };
 
   return (
@@ -161,22 +160,22 @@ const App = () => {
       config={privyConfig}
     >
       <div className="app">
-        {gameState === 'wallet-connection' ? (
-          <WalletConnection onWalletConnected={handleWalletConnected} />
-        ) : gameState === 'network-selection' ? (
+        {gameState === 'network-selection' ? (
+          <NetworkSelection 
+            onNetworkSelect={handleNetworkSelect}
+            onStartGame={handleStartGame}
+          />
+        ) : gameState === 'wallet-connection' ? (
           <div>
             <div className="back-to-wallet">
               <button 
                 className="back-button-small"
-                onClick={handleBackToWalletConnection}
+                onClick={handleBackToNetworkSelection}
               >
-                ← Back to Wallet
+                ← Back to Network Selection
               </button>
             </div>
-            <NetworkSelection 
-              onNetworkSelect={handleNetworkSelect}
-              onStartGame={handleStartGame}
-            />
+            <WalletConnection onWalletConnected={handleWalletConnected} />
           </div>
         ) : (
           <>
