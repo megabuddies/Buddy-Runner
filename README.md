@@ -28,10 +28,17 @@ This game is based on the classic Chrome Dino game but has been completely redes
 
 ## 🚀 Getting Started
 
+### Local Development
 1. Open `index.html` in your web browser
 2. Or start a local server: `python3 -m http.server 8000`
 3. Navigate to `http://localhost:8000`
 4. Help Buddy jump over carrots and have fun!
+
+### Deploy to Vercel
+1. Connect your repository to Vercel
+2. Vercel will automatically detect the project as a static site
+3. Deploy with default settings - the game will be available instantly!
+4. The `vercel.json` configuration ensures proper static file serving
 
 ## 🎵 Game Mechanics
 
