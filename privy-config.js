@@ -1,13 +1,32 @@
-// Official Privy Configuration and Wallet Integration
+// Privy-Style Wallet Manager для Web3 интеграции
+// App ID: cme84q0og02aalc0bh9blzwa9
+
 class PrivyWalletManager {
   constructor() {
     this.appId = 'cme84q0og02aalc0bh9blzwa9';
     this.isConnected = false;
     this.currentUser = null;
     this.walletAddress = null;
-    this.privy = null;
+    this.walletType = null;
+    this.chainId = null;
     
-    // Initialize after DOM is loaded
+    // Privy-like configuration
+    this.config = {
+      loginMethods: ['wallet'],
+      appearance: {
+        theme: 'light',
+        accentColor: '#7FBC7F',
+        logo: null
+      },
+      supportedChains: [
+        { id: 1, name: 'Ethereum Mainnet' },
+        { id: 5, name: 'Goerli Testnet' },
+        { id: 137, name: 'Polygon' },
+        { id: 80001, name: 'Mumbai Testnet' }
+      ]
+    };
+    
+    // Initialize after DOM loads
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => this.init());
     } else {
@@ -17,16 +36,25 @@ class PrivyWalletManager {
 
   async init() {
     try {
-      // Wait for DOM elements to be available
+      console.log(`🔗 Инициализация Privy Wallet Manager (App ID: ${this.appId})`);
+      
+      // Wait for UI elements
       await this.waitForElements();
       
-      // Initialize without external SDK, use direct wallet connection
-      this.initializeDirectWalletConnection();
+      // Setup UI
+      this.setupUI();
       
-      console.log('Privy-style Wallet Manager initialized');
+      // Check for existing connections
+      await this.checkExistingConnection();
+      
+      // Setup wallet event listeners
+      this.setupWalletListeners();
+      
+      console.log('✅ Privy Wallet Manager успешно инициализирован');
+      
     } catch (error) {
-      console.error('Error initializing Privy Wallet Manager:', error);
-      this.showError('Failed to initialize wallet connection. Please refresh the page.');
+      console.error('❌ Ошибка инициализации Privy Wallet Manager:', error);
+      this.showError('Не удалось инициализировать подключение кошелька. Обновите страницу.');
     }
   }
 
@@ -40,50 +68,58 @@ class PrivyWalletManager {
     }
     
     if (!document.getElementById('walletButton')) {
-      throw new Error('Wallet button not found');
+      throw new Error('Элементы интерфейса кошелька не найдены');
     }
   }
 
-  initializeDirectWalletConnection() {
-    // Initialize UI elements
+  setupUI() {
+    // Get UI elements
     this.walletButton = document.getElementById('walletButton');
     this.walletInfo = document.getElementById('walletInfo');
     this.walletStatus = document.getElementById('walletStatus');
     this.walletAddressElement = document.getElementById('walletAddress');
 
     if (!this.walletButton) {
-      console.error('Wallet button not found');
+      console.error('Кнопка кошелька не найдена');
       return;
     }
 
-    // Bind event listeners
+    // Bind event handlers
     this.walletButton.addEventListener('click', () => this.handleWalletClick());
-
-    // Check for existing connection
-    this.checkExistingConnection();
     
-    // Listen for provider changes
-    this.setupProviderListeners();
+    console.log('🎨 UI элементы настроены');
   }
 
-  checkExistingConnection() {
-    // Check if already connected to any wallet
+  async checkExistingConnection() {
     if (window.ethereum) {
-      window.ethereum.request({ method: 'eth_accounts' })
-        .then(accounts => {
-          if (accounts.length > 0) {
-            this.walletAddress = accounts[0];
-            this.isConnected = true;
-            this.updateUI();
-          }
-        })
-        .catch(error => {
-          console.log('No existing connection found');
-        });
+      try {
+        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
+        if (accounts.length > 0) {
+          this.walletAddress = accounts[0];
+          this.chainId = await window.ethereum.request({ method: 'eth_chainId' });
+          this.isConnected = true;
+          this.walletType = this.detectWalletType();
+          
+          this.currentUser = {
+            id: this.generateUserId(),
+            wallet: {
+              address: this.walletAddress,
+              chainId: this.chainId,
+              walletClientType: this.walletType
+            },
+            createdAt: new Date().toISOString()
+          };
+          
+          this.updateUI();
+          console.log('🔄 Найдено существующее подключение:', this.walletAddress);
+        }
+      } catch (error) {
+        console.log('ℹ️ Нет существующего подключения');
+      }
     }
   }
 
-  setupProviderListeners() {
+  setupWalletListeners() {
     if (window.ethereum) {
       // Listen for account changes
       window.ethereum.on('accountsChanged', (accounts) => {
@@ -91,15 +127,64 @@ class PrivyWalletManager {
           this.disconnect();
         } else {
           this.walletAddress = accounts[0];
-          this.isConnected = true;
+          this.updateUserData();
           this.updateUI();
+          console.log('🔄 Аккаунт изменен:', this.walletAddress);
         }
       });
 
       // Listen for chain changes
-      window.ethereum.on('chainChanged', () => {
-        window.location.reload();
+      window.ethereum.on('chainChanged', (chainId) => {
+        this.chainId = chainId;
+        this.updateUserData();
+        this.updateUI();
+        console.log('🔗 Сеть изменена:', chainId);
       });
+
+      // Listen for connection events
+      window.ethereum.on('connect', (connectInfo) => {
+        console.log('🔗 Подключено к сети:', connectInfo.chainId);
+      });
+
+      window.ethereum.on('disconnect', (error) => {
+        console.log('❌ Отключено от сети:', error);
+        this.disconnect();
+      });
+    }
+  }
+
+  detectWalletType() {
+    if (window.ethereum) {
+      if (window.ethereum.isMetaMask) return 'metamask';
+      if (window.ethereum.isRabby) return 'rabby';
+      if (window.ethereum.isCoinbaseWallet) return 'coinbase_wallet';
+      if (window.ethereum.isWalletConnect) return 'wallet_connect';
+      return 'injected';
+    }
+    return 'unknown';
+  }
+
+  generateUserId() {
+    // Generate Privy-like user ID based on wallet address and app ID
+    const combined = this.walletAddress + this.appId;
+    return 'did:privy:' + this.hashString(combined).substring(0, 32);
+  }
+
+  hashString(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash; // Convert to 32-bit integer
+    }
+    return Math.abs(hash).toString(16);
+  }
+
+  updateUserData() {
+    if (this.currentUser) {
+      this.currentUser.wallet.address = this.walletAddress;
+      this.currentUser.wallet.chainId = this.chainId;
+      this.currentUser.wallet.walletClientType = this.detectWalletType();
     }
   }
 
@@ -107,28 +192,35 @@ class PrivyWalletManager {
     if (this.isConnected) {
       await this.disconnect();
     } else {
-      await this.connect();
+      await this.login();
     }
   }
 
-  async connect() {
+  async login() {
     try {
       this.setLoading(true);
       
-      // Show wallet selection modal
-      await this.showWalletSelectionModal();
+      if (!window.ethereum) {
+        this.showWalletInstallModal();
+        return;
+      }
+
+      // Show Privy-style wallet selection modal
+      await this.showPrivyStyleModal();
       
     } catch (error) {
-      console.error('Connection error:', error);
-      this.showError('Failed to connect wallet. Please try again.');
+      console.error('❌ Ошибка подключения:', error);
+      if (error.message !== 'Подключение отменено пользователем') {
+        this.showError('Не удалось подключить кошелек. Попробуйте снова.');
+      }
     } finally {
       this.setLoading(false);
     }
   }
 
-  async showWalletSelectionModal() {
+  async showPrivyStyleModal() {
     return new Promise((resolve, reject) => {
-      // Create modal overlay
+      // Create Privy-style modal
       const overlay = document.createElement('div');
       overlay.style.cssText = `
         position: fixed;
@@ -141,109 +233,153 @@ class PrivyWalletManager {
         justify-content: center;
         align-items: center;
         z-index: 10000;
-        backdrop-filter: blur(5px);
+        backdrop-filter: blur(8px);
+        animation: fadeIn 0.2s ease-out;
       `;
 
-      // Create modal content
       const modal = document.createElement('div');
       modal.style.cssText = `
         background: white;
-        border-radius: 20px;
-        padding: 30px;
-        max-width: 400px;
+        border-radius: 16px;
+        padding: 32px;
+        max-width: 420px;
         width: 90%;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        text-align: center;
-        animation: modalAppear 0.3s ease-out;
+        box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+        animation: slideUp 0.3s ease-out;
       `;
 
-      // Add animation keyframes
-      if (!document.getElementById('modal-styles')) {
+      // Add animations
+      if (!document.getElementById('privy-styles')) {
         const style = document.createElement('style');
-        style.id = 'modal-styles';
+        style.id = 'privy-styles';
         style.textContent = `
-          @keyframes modalAppear {
-            from { transform: scale(0.8); opacity: 0; }
-            to { transform: scale(1); opacity: 1; }
+          @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
           }
-          .wallet-option {
+          @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+          .privy-wallet-option {
             display: flex;
             align-items: center;
-            padding: 15px 20px;
-            margin: 10px 0;
-            border: 2px solid #e0e0e0;
+            padding: 16px 20px;
+            margin: 12px 0;
+            border: 1px solid #e0e0e0;
             border-radius: 12px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            background: #f9f9f9;
+            transition: all 0.2s ease;
+            background: #fafafa;
           }
-          .wallet-option:hover {
+          .privy-wallet-option:hover {
             border-color: #7FBC7F;
             background: #f0f8f0;
             transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(127, 188, 127, 0.2);
           }
-          .wallet-option img {
+          .privy-wallet-option:active {
+            transform: translateY(0);
+          }
+          .privy-wallet-icon {
             width: 32px;
             height: 32px;
-            margin-right: 15px;
+            margin-right: 16px;
+            border-radius: 8px;
           }
-          .wallet-option .wallet-name {
-            font-weight: bold;
-            color: #333;
+          .privy-wallet-info {
             flex: 1;
-            text-align: left;
           }
-          .wallet-option .wallet-status {
-            font-size: 12px;
+          .privy-wallet-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 16px;
+            margin-bottom: 2px;
+          }
+          .privy-wallet-status {
+            font-size: 13px;
             color: #666;
-            margin-left: 10px;
+          }
+          .privy-close-btn {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: #f0f0f0;
+            border-radius: 8px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease;
+          }
+          .privy-close-btn:hover {
+            background: #e0e0e0;
           }
         `;
         document.head.appendChild(style);
       }
 
       modal.innerHTML = `
-        <h2 style="margin-bottom: 20px; color: #333; font-size: 1.5em;">Select Wallet</h2>
-        <p style="margin-bottom: 25px; color: #666;">Choose your preferred wallet to connect</p>
+        <button class="privy-close-btn" onclick="this.closest('.modal-overlay').remove(); arguments[1] && arguments[1]()">×</button>
         
-        <div class="wallet-option" data-wallet="metamask">
-          <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iI0Y2ODUxQiIvPgo8cGF0aCBkPSJNMjQuMjQgNC44TDE2LjcyIDEwLjI0TDE4LjI0IDYuOTZMMjQuMjQgNC44WiIgZmlsbD0iI0U5NTY0NyIvPgo8cGF0aCBkPSJNNy43NiA0LjhMMTUuMTI2IDEwLjMwNEwxMy43NiA2Ljk2TDcuNzYgNC44WiIgZmlsbD0iI0U5NTY0NyIvPgo8L3N2Zz4K" alt="MetaMask">
-          <span class="wallet-name">MetaMask</span>
-          <span class="wallet-status" id="metamask-status">Checking...</span>
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h2 style="font-size: 24px; font-weight: 600; color: #333; margin-bottom: 8px;">
+            Подключить кошелек
+          </h2>
+          <p style="color: #666; font-size: 14px;">
+            Powered by Privy • App ID: ${this.appId.substring(0, 8)}...
+          </p>
         </div>
         
-        <div class="wallet-option" data-wallet="rabby">
-          <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzdGMjhGRiIvPgo8cGF0aCBkPSJNMTYgOEMyMC40MTgzIDggMjQgMTEuNTgxNyAyNCAxNkMyNCAyMC40MTgzIDIwLjQxODMgMjQgMTYgMjRDMTEuNTgxNyAyNCA4IDIwLjQxODMgOCAxNkM4IDExLjU4MTcgMTEuNTgxNyA4IDE2IDhaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" alt="Rabby">
-          <span class="wallet-name">Rabby Wallet</span>
-          <span class="wallet-status" id="rabby-status">Checking...</span>
+        <div class="privy-wallet-option" data-wallet="metamask">
+          <img class="privy-wallet-icon" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iI0Y2ODUxQiIvPgo8cGF0aCBkPSJNMjQuMjQgNC44TDE2LjcyIDEwLjI0TDE4LjI0IDYuOTZMMjQuMjQgNC44WiIgZmlsbD0iI0U5NTY0NyIvPgo8cGF0aCBkPSJNNy43NiA0LjhMMTUuMTI2IDEwLjMwNEwxMy43NiA2Ljk2TDcuNzYgNC44WiIgZmlsbD0iI0U5NTY0NyIvPgo8L3N2Zz4K" alt="MetaMask">
+          <div class="privy-wallet-info">
+            <div class="privy-wallet-name">MetaMask</div>
+            <div class="privy-wallet-status" id="metamask-status">Проверка...</div>
+          </div>
         </div>
         
-        <button style="
-          margin-top: 20px;
-          padding: 10px 20px;
-          background: #e0e0e0;
-          border: none;
-          border-radius: 8px;
-          cursor: pointer;
-          color: #666;
-          font-weight: bold;
-        " onclick="this.parentElement.parentElement.remove()">Cancel</button>
+        <div class="privy-wallet-option" data-wallet="rabby">
+          <img class="privy-wallet-icon" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzdGMjhGRiIvPgo8cGF0aCBkPSJNMTYgOEMyMC40MTgzIDggMjQgMTEuNTgxNyAyNCAxNkMyNCAyMC40MTgzIDIwLjQxODMgMjQgMTYgMjRDMTEuNTgxNyAyNCA4IDIwLjQxODMgOCAxNkM4IDExLjU4MTcgMTEuNTgxNyA4IDE2IDhaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" alt="Rabby">
+          <div class="privy-wallet-info">
+            <div class="privy-wallet-name">Rabby Wallet</div>
+            <div class="privy-wallet-status" id="rabby-status">Проверка...</div>
+          </div>
+        </div>
+        
+        <div class="privy-wallet-option" data-wallet="coinbase">
+          <img class="privy-wallet-icon" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iOCIgZmlsbD0iIzAwNTNGRiIvPgo8cGF0aCBkPSJNMTYgOEMxOS4zMTM3IDggMjIgMTAuNjg2MyAyMiAxNEMyMiAxNy4zMTM3IDE5LjMxMzcgMjAgMTYgMjBDMTIuNjg2MyAyMCAxMCAxNy4zMTM3IDEwIDE0QzEwIDEwLjY4NjMgMTIuNjg2MyA4IDE2IDhaIiBmaWxsPSJ3aGl0ZSIvPgo8L3N2Zz4K" alt="Coinbase">
+          <div class="privy-wallet-info">
+            <div class="privy-wallet-name">Coinbase Wallet</div>
+            <div class="privy-wallet-status" id="coinbase-status">Проверка...</div>
+          </div>
+        </div>
+        
+        <div style="margin-top: 24px; padding-top: 20px; border-top: 1px solid #e0e0e0; text-align: center;">
+          <p style="font-size: 12px; color: #999;">
+            Нет кошелька? <a href="#" id="get-wallet-link" style="color: #7FBC7F; text-decoration: none;">Установить кошелек</a>
+          </p>
+        </div>
       `;
 
       overlay.appendChild(modal);
+      overlay.classList.add('modal-overlay');
       document.body.appendChild(overlay);
 
       // Check wallet availability
       this.checkWalletAvailability();
 
       // Handle wallet selection
-      const walletOptions = modal.querySelectorAll('.wallet-option');
+      const walletOptions = modal.querySelectorAll('.privy-wallet-option');
       walletOptions.forEach(option => {
         option.addEventListener('click', async () => {
           const walletType = option.dataset.wallet;
           overlay.remove();
           try {
-            await this.connectToWallet(walletType);
+            await this.connectWallet(walletType);
             resolve();
           } catch (error) {
             reject(error);
@@ -251,48 +387,67 @@ class PrivyWalletManager {
         });
       });
 
-      // Handle overlay click (close modal)
+      // Handle get wallet link
+      const getWalletLink = modal.querySelector('#get-wallet-link');
+      getWalletLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        overlay.remove();
+        this.showWalletInstallModal();
+        reject(new Error('Перенаправление на установку кошелька'));
+      });
+
+      // Handle close button and overlay click
+      const closeBtn = modal.querySelector('.privy-close-btn');
+      closeBtn.addEventListener('click', () => {
+        overlay.remove();
+        reject(new Error('Подключение отменено пользователем'));
+      });
+
       overlay.addEventListener('click', (e) => {
         if (e.target === overlay) {
           overlay.remove();
-          reject(new Error('Connection cancelled'));
+          reject(new Error('Подключение отменено пользователем'));
         }
       });
     });
   }
 
   checkWalletAvailability() {
-    const metamaskStatus = document.getElementById('metamask-status');
-    const rabbyStatus = document.getElementById('rabby-status');
+    const statuses = {
+      metamask: document.getElementById('metamask-status'),
+      rabby: document.getElementById('rabby-status'),
+      coinbase: document.getElementById('coinbase-status')
+    };
 
     // Check MetaMask
     if (window.ethereum && window.ethereum.isMetaMask) {
-      metamaskStatus.textContent = 'Installed';
-      metamaskStatus.style.color = '#28a745';
+      statuses.metamask.textContent = 'Установлен';
+      statuses.metamask.style.color = '#28a745';
     } else {
-      metamaskStatus.textContent = 'Not installed';
-      metamaskStatus.style.color = '#dc3545';
+      statuses.metamask.textContent = 'Не установлен';
+      statuses.metamask.style.color = '#dc3545';
     }
 
-    // Check Rabby (Rabby также устанавливает window.ethereum)
+    // Check Rabby
     if (window.ethereum && window.ethereum.isRabby) {
-      rabbyStatus.textContent = 'Installed';
-      rabbyStatus.style.color = '#28a745';
-    } else if (window.ethereum && !window.ethereum.isMetaMask) {
-      // Возможно, это Rabby или другой кошелек
-      rabbyStatus.textContent = 'Detected';
-      rabbyStatus.style.color = '#ffc107';
+      statuses.rabby.textContent = 'Установлен';
+      statuses.rabby.style.color = '#28a745';
     } else {
-      rabbyStatus.textContent = 'Not installed';
-      rabbyStatus.style.color = '#dc3545';
+      statuses.rabby.textContent = 'Не установлен';
+      statuses.rabby.style.color = '#dc3545';
+    }
+
+    // Check Coinbase
+    if (window.ethereum && window.ethereum.isCoinbaseWallet) {
+      statuses.coinbase.textContent = 'Установлен';
+      statuses.coinbase.style.color = '#28a745';
+    } else {
+      statuses.coinbase.textContent = 'Не установлен';
+      statuses.coinbase.style.color = '#dc3545';
     }
   }
 
-  async connectToWallet(walletType) {
-    if (!window.ethereum) {
-      throw new Error('No wallet extension found. Please install MetaMask or Rabby.');
-    }
-
+  async connectWallet(walletType) {
     try {
       // Request account access
       const accounts = await window.ethereum.request({
@@ -301,20 +456,135 @@ class PrivyWalletManager {
 
       if (accounts.length > 0) {
         this.walletAddress = accounts[0];
+        this.chainId = await window.ethereum.request({ method: 'eth_chainId' });
         this.isConnected = true;
+        this.walletType = walletType;
+
+        // Create Privy-like user object
         this.currentUser = {
+          id: this.generateUserId(),
           wallet: {
             address: this.walletAddress,
+            chainId: this.chainId,
             walletClientType: walletType
-          }
+          },
+          createdAt: new Date().toISOString()
         };
 
         this.updateUI();
-        this.showSuccess(`${walletType === 'metamask' ? 'MetaMask' : 'Rabby'} connected successfully!`);
+        this.showSuccess(`${this.getWalletDisplayName(walletType)} подключен!`);
+        
+        console.log('✅ Кошелек подключен:', {
+          address: this.walletAddress,
+          chainId: this.chainId,
+          type: walletType
+        });
       }
     } catch (error) {
-      throw new Error(`Failed to connect to ${walletType}: ${error.message}`);
+      throw new Error(`Ошибка подключения к ${walletType}: ${error.message}`);
     }
+  }
+
+  getWalletDisplayName(walletType) {
+    const names = {
+      metamask: 'MetaMask',
+      rabby: 'Rabby Wallet',
+      coinbase: 'Coinbase Wallet',
+      injected: 'Кошелек браузера'
+    };
+    return names[walletType] || 'Кошелек';
+  }
+
+  showWalletInstallModal() {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      z-index: 10000;
+      backdrop-filter: blur(8px);
+    `;
+
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      max-width: 450px;
+      width: 90%;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.2);
+      text-align: center;
+    `;
+
+    modal.innerHTML = `
+      <h2 style="margin-bottom: 16px; color: #333; font-size: 24px; font-weight: 600;">
+        Установите Web3 кошелек
+      </h2>
+      <p style="margin-bottom: 32px; color: #666; font-size: 16px;">
+        Для использования игры нужен кошелек Web3
+      </p>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+        <a href="https://metamask.io/download/" target="_blank" style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 20px;
+          border: 2px solid #e0e0e0;
+          border-radius: 12px;
+          text-decoration: none;
+          color: #333;
+          transition: all 0.2s ease;
+        " onmouseover="this.style.borderColor='#7FBC7F'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='#e0e0e0'; this.style.transform='translateY(0)'">
+          <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTIiIGZpbGw9IiNGNjg1MUIiLz4KPC9zdmc+Cg==" alt="MetaMask" style="width: 48px; height: 48px; margin-bottom: 12px;">
+          <span style="font-weight: 600; font-size: 14px;">MetaMask</span>
+          <span style="font-size: 12px; color: #666; margin-top: 4px;">Популярный выбор</span>
+        </a>
+        
+        <a href="https://rabby.io/" target="_blank" style="
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          padding: 20px;
+          border: 2px solid #e0e0e0;
+          border-radius: 12px;
+          text-decoration: none;
+          color: #333;
+          transition: all 0.2s ease;
+        " onmouseover="this.style.borderColor='#7FBC7F'; this.style.transform='translateY(-2px)'" onmouseout="this.style.borderColor='#e0e0e0'; this.style.transform='translateY(0)'">
+          <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiByeD0iMTIiIGZpbGw9IiM3RjI4RkYiLz4KPC9zdmc+Cg==" alt="Rabby" style="width: 48px; height: 48px; margin-bottom: 12px;">
+          <span style="font-weight: 600; font-size: 14px;">Rabby</span>
+          <span style="font-size: 12px; color: #666; margin-top: 4px;">Для продвинутых</span>
+        </a>
+      </div>
+      
+      <button onclick="this.parentElement.parentElement.remove()" style="
+        padding: 12px 24px;
+        background: #7FBC7F;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        color: white;
+        font-weight: 600;
+        font-size: 14px;
+        transition: background 0.2s ease;
+      " onmouseover="this.style.background='#6B8E6B'" onmouseout="this.style.background='#7FBC7F'">
+        Понятно
+      </button>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+  }
+
+  async logout() {
+    await this.disconnect();
   }
 
   async disconnect() {
@@ -323,13 +593,17 @@ class PrivyWalletManager {
       
       this.currentUser = null;
       this.walletAddress = null;
+      this.walletType = null;
+      this.chainId = null;
       this.isConnected = false;
       
       this.updateUI();
-      this.showSuccess('Wallet disconnected');
+      this.showSuccess('Кошелек отключен');
+      
+      console.log('🔌 Кошелек отключен');
     } catch (error) {
-      console.error('Disconnection error:', error);
-      this.showError('Failed to disconnect wallet.');
+      console.error('❌ Ошибка отключения:', error);
+      this.showError('Не удалось отключить кошелек.');
     } finally {
       this.setLoading(false);
     }
@@ -341,24 +615,14 @@ class PrivyWalletManager {
     }
 
     if (this.isConnected && this.walletAddress) {
-      // Update button text
-      this.walletButton.textContent = 'Disconnect';
-      
-      // Show wallet info
+      this.walletButton.textContent = 'Отключить';
       this.walletInfo.classList.remove('hidden');
-      this.walletStatus.textContent = 'Connected';
+      this.walletStatus.textContent = 'Подключен';
       this.walletAddressElement.textContent = this.formatAddress(this.walletAddress);
-      
-      // Add connected class for styling
       this.walletButton.classList.add('connected');
     } else {
-      // Update button text
-      this.walletButton.textContent = 'Connect Wallet';
-      
-      // Hide wallet info
+      this.walletButton.textContent = 'Подключить кошелек';
       this.walletInfo.classList.add('hidden');
-      
-      // Remove connected class
       this.walletButton.classList.remove('connected');
     }
   }
@@ -368,7 +632,7 @@ class PrivyWalletManager {
     
     if (loading) {
       this.walletButton.disabled = true;
-      this.walletButton.textContent = 'Connecting...';
+      this.walletButton.textContent = 'Подключение...';
       this.walletButton.classList.add('loading');
     } else {
       this.walletButton.disabled = false;
@@ -391,18 +655,19 @@ class PrivyWalletManager {
   }
 
   showNotification(message, type) {
-    // Create a simple notification
     const notification = document.createElement('div');
     notification.style.cssText = `
       position: fixed;
       top: 80px;
       right: 20px;
-      padding: 12px 20px;
-      border-radius: 8px;
+      padding: 16px 20px;
+      border-radius: 12px;
       color: white;
-      font-weight: bold;
+      font-weight: 600;
       z-index: 10000;
       animation: slideIn 0.3s ease;
+      max-width: 300px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
       ${type === 'error' ? 
         'background: linear-gradient(135deg, #ff6b6b, #ee5a52);' : 
         'background: linear-gradient(135deg, #7FBC7F, #6B8E6B);'
@@ -410,7 +675,6 @@ class PrivyWalletManager {
     `;
     notification.textContent = message;
 
-    // Add animation styles if not already present
     if (!document.getElementById('notification-styles')) {
       const style = document.createElement('style');
       style.id = 'notification-styles';
@@ -425,7 +689,6 @@ class PrivyWalletManager {
 
     document.body.appendChild(notification);
 
-    // Remove notification after 3 seconds
     setTimeout(() => {
       notification.style.animation = 'slideIn 0.3s ease reverse';
       setTimeout(() => {
@@ -433,10 +696,14 @@ class PrivyWalletManager {
           notification.parentNode.removeChild(notification);
         }
       }, 300);
-    }, 3000);
+    }, 4000);
   }
 
-  // Public API methods for game integration
+  // Privy-compatible API methods
+  getUser() {
+    return this.currentUser;
+  }
+
   getWalletAddress() {
     return this.walletAddress;
   }
@@ -445,14 +712,35 @@ class PrivyWalletManager {
     return this.isConnected;
   }
 
-  // Method to get user info in Privy format
   getCurrentUser() {
     return this.currentUser;
   }
+
+  // Additional utility methods
+  getChainId() {
+    return this.chainId;
+  }
+
+  getWalletType() {
+    return this.walletType;
+  }
+
+  getAppId() {
+    return this.appId;
+  }
 }
 
-// Initialize the wallet manager
+// Initialize the Privy-style wallet manager
+console.log('🚀 Загрузка Privy Wallet Manager...');
 window.privyWallet = new PrivyWalletManager();
 
 // Export for use in other scripts
 window.PrivyWalletManager = PrivyWalletManager;
+
+// Privy-compatible global aliases
+window.privy = {
+  login: () => window.privyWallet.login(),
+  logout: () => window.privyWallet.logout(),
+  getUser: () => window.privyWallet.getUser(),
+  isAuthenticated: () => window.privyWallet.isWalletConnected()
+};
