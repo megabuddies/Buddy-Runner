@@ -743,6 +743,143 @@ a:hover {
   100% { opacity: 1; }
 }
 
+/* Back button styles */
+.back-button,
+.back-button-small {
+  background: transparent;
+  color: var(--accent-color);
+  border: 2px solid var(--accent-color);
+  padding: 10px 16px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+  text-align: center;
+  box-shadow: 0 0 5px rgba(146, 147, 151, 0.3);
+  clip-path: polygon(0 0, 100% 0, 100% 85%, 90% 100%, 0 100%);
+  text-decoration: none;
+}
+
+.back-button::before,
+.back-button-small::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(146, 147, 151, 0.4), transparent);
+  transition: 0.5s;
+}
+
+.back-button:hover,
+.back-button-small:hover {
+  background-color: rgba(146, 147, 151, 0.1);
+  box-shadow: 0 5px 15px rgba(146, 147, 151, 0.3);
+  border-color: var(--secondary-color);
+  color: var(--secondary-color);
+}
+
+.back-button:hover::before,
+.back-button-small:hover::before {
+  left: 100%;
+}
+
+.back-button:active,
+.back-button-small:active {
+  transform: scale(0.98);
+}
+
+.back-button-small {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+/* Switch Network button styles */
+.switch-network-button {
+  background: linear-gradient(45deg, var(--accent-color), var(--secondary-color));
+  color: var(--background-color);
+  border: none;
+  padding: 12px 20px;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  display: inline-block;
+  text-align: center;
+  font-weight: bold;
+  box-shadow: 0 0 10px var(--secondary-glow-color);
+  clip-path: polygon(0 0, 100% 0, 100% 85%, 90% 100%, 0 100%);
+  text-decoration: none;
+}
+
+.switch-network-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  transition: 0.5s;
+}
+
+.switch-network-button:hover {
+  background: linear-gradient(45deg, var(--secondary-color), var(--accent-color));
+  box-shadow: 0 0 15px var(--secondary-glow-color);
+  transform: translateY(-2px);
+}
+
+.switch-network-button:hover::before {
+  left: 100%;
+}
+
+.switch-network-button:active {
+  transform: scale(0.98) translateY(0);
+}
+
+/* Network controls container */
+.network-controls {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.current-network {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.network-indicator {
+  padding: 8px 12px;
+  background: rgba(18, 18, 24, 0.9);
+  border: 1px solid var(--accent-color);
+  border-radius: 0;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-color);
+  clip-path: polygon(0 0, 100% 0, 100% 80%, 90% 100%, 0 100%);
+  box-shadow: 0 0 5px rgba(146, 147, 151, 0.3);
+}
+
+/* Back to wallet container styles */
+.back-to-wallet {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+}
+
 /* Mobile optimizations */
 @media (max-width: 768px) {
   .wallet-container {
@@ -824,6 +961,23 @@ a:hover {
   .button {
     padding: 10px 16px;
     font-size: 12px;
+  }
+  
+  .back-button,
+  .back-button-small {
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+  
+  .switch-network-button {
+    padding: 10px 16px;
+    font-size: 12px;
+  }
+  
+  .network-controls {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
   }
   
   .wallet-button,
