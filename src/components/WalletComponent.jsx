@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
 
-const WalletComponent = () => {
+const WalletComponent = ({ selectedNetwork }) => {
   const { user, authenticated, ready } = usePrivy();
   const { login } = useLogin();
   const { logout } = useLogout();
@@ -14,6 +14,30 @@ const WalletComponent = () => {
     { id: 84532, name: 'Base Sepolia', emoji: '🔵' },
     { id: 10143, name: 'Monad Testnet', emoji: '🟣' },
   ];
+
+  // Auto-switch to selected network when wallet connects
+  useEffect(() => {
+    const autoSwitchNetwork = async () => {
+      if (authenticated && wallets && wallets.length > 0 && selectedNetwork && !isNetworkSwitching) {
+        try {
+          const wallet = wallets[0];
+          const currentChainId = await wallet.getChainId();
+          
+          if (currentChainId !== selectedNetwork.id) {
+            console.log(`Auto-switching to ${selectedNetwork.name}...`);
+            setIsNetworkSwitching(true);
+            await switchNetwork(selectedNetwork.id);
+          }
+        } catch (error) {
+          console.warn('Auto network switch failed:', error);
+        } finally {
+          setIsNetworkSwitching(false);
+        }
+      }
+    };
+
+    autoSwitchNetwork();
+  }, [authenticated, wallets, selectedNetwork]);
 
   const handleWalletAction = () => {
     if (authenticated) {
@@ -210,11 +234,12 @@ const WalletComponent = () => {
                     key={network.id}
                     className={`network-option ${
                       getCurrentNetwork()?.id === network.id ? 'active' : ''
-                    }`}
+                    } ${selectedNetwork?.id === network.id ? 'selected-game-network' : ''}`}
                     onClick={() => switchNetwork(network.id)}
                     disabled={isNetworkSwitching}
                   >
                     {isNetworkSwitching ? '🔄' : network.emoji} {network.name}
+                    {selectedNetwork?.id === network.id && ' 🎮'}
                   </button>
                 ))}
               </div>
