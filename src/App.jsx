@@ -20,7 +20,7 @@ const App = () => {
     loginMethods: ['email', 'wallet'],
     supportedChains: [
       {
-        id: 12227332, // MegaETH Testnet
+        id: 6342, // MegaETH Testnet
         name: 'MegaETH Testnet',
         network: 'megaeth-testnet',
         nativeCurrency: {
@@ -30,13 +30,14 @@ const App = () => {
         },
         rpcUrls: {
           default: {
-            http: ['https://rpc.sepolia.megaeth.systems'],
+            http: ['https://carrot.megaeth.com/rpc'],
+            webSocket: ['wss://carrot.megaeth.com/ws'],
           },
         },
         blockExplorers: {
           default: {
             name: 'MegaETH Explorer',
-            url: 'https://sepolia-explorer.megaeth.systems',
+            url: 'https://carrot.megaeth.com',
           },
         },
       },
@@ -62,7 +63,7 @@ const App = () => {
         },
       },
       {
-        id: 41454, // Monad Testnet
+        id: 10143, // Monad Testnet
         name: 'Monad Testnet',
         network: 'monad-testnet',
         nativeCurrency: {
@@ -72,13 +73,13 @@ const App = () => {
         },
         rpcUrls: {
           default: {
-            http: ['https://testnet1.monad.xyz'],
+            http: ['https://testnet-rpc.monad.xyz'],
           },
         },
         blockExplorers: {
           default: {
             name: 'Monad Explorer',
-            url: 'https://testnet1-explorer.monad.xyz',
+            url: 'https://testnet.monadexplorer.com',
           },
         },
       },

@@ -14,9 +14,9 @@ const GAME_CONTRACT_ABI = [
 
 // Contract addresses for different networks
 const CONTRACT_ADDRESSES = {
-  12227332: "0x0000000000000000000000000000000000000000", // MegaETH Testnet - Deploy contract here
-  84532: "0x0000000000000000000000000000000000000000",    // Base Sepolia - Deploy contract here
-  41454: "0x0000000000000000000000000000000000000000"     // Monad Testnet - Deploy contract here
+  6342: "0x0000000000000000000000000000000000000000",  // MegaETH Testnet - Deploy contract here
+  84532: "0x0000000000000000000000000000000000000000", // Base Sepolia - Deploy contract here
+  10143: "0x0000000000000000000000000000000000000000"  // Monad Testnet - Deploy contract here
 };
 
 class BlockchainService {
@@ -199,9 +199,9 @@ class BlockchainService {
 
   getNetworkName() {
     const networks = {
-      12227332: 'MegaETH Testnet',
+      6342: 'MegaETH Testnet',
       84532: 'Base Sepolia',
-      41454: 'Monad Testnet',
+      10143: 'Monad Testnet',
       1: 'Ethereum Mainnet',
       11155111: 'Sepolia Testnet'
     };

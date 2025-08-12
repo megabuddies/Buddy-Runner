@@ -10,9 +10,9 @@ const WalletComponent = () => {
   const [isNetworkSwitching, setIsNetworkSwitching] = useState(false);
 
   const networks = [
-    { id: 12227332, name: 'MegaETH Testnet', emoji: '⚡' },
+    { id: 6342, name: 'MegaETH Testnet', emoji: '⚡' },
     { id: 84532, name: 'Base Sepolia', emoji: '🔵' },
-    { id: 41454, name: 'Monad Testnet', emoji: '🟣' },
+    { id: 10143, name: 'Monad Testnet', emoji: '🟣' },
   ];
 
   const handleWalletAction = () => {
@@ -79,16 +79,16 @@ const WalletComponent = () => {
 
   const getNetworkConfig = (chainId) => {
     const networkConfigs = {
-      12227332: {
-        chainId: '0xBA9304', // 12227332 in hex
+      6342: {
+        chainId: '0x18C6', // 6342 in hex
         chainName: 'MegaETH Testnet',
-        rpcUrls: ['https://rpc.sepolia.megaeth.systems'], // Updated RPC URL
+        rpcUrls: ['https://carrot.megaeth.com/rpc'],
         nativeCurrency: {
           name: 'Ether',
           symbol: 'ETH',
           decimals: 18,
         },
-        blockExplorerUrls: ['https://sepolia-explorer.megaeth.systems'],
+        blockExplorerUrls: ['https://carrot.megaeth.com'],
       },
       84532: {
         chainId: '0x14A34', // 84532 in hex
@@ -101,16 +101,16 @@ const WalletComponent = () => {
         },
         blockExplorerUrls: ['https://sepolia.basescan.org'],
       },
-      41454: {
-        chainId: '0xA1EE', // 41454 in hex
+      10143: {
+        chainId: '0x279F', // 10143 in hex
         chainName: 'Monad Testnet',
-        rpcUrls: ['https://testnet1.monad.xyz'], // Updated RPC URL
+        rpcUrls: ['https://testnet-rpc.monad.xyz'],
         nativeCurrency: {
           name: 'Monad',
           symbol: 'MON',
           decimals: 18,
         },
-        blockExplorerUrls: ['https://testnet1-explorer.monad.xyz'],
+        blockExplorerUrls: ['https://testnet.monadexplorer.com'],
       },
     };
     return networkConfigs[chainId];

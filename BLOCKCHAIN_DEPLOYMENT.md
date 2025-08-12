@@ -5,9 +5,9 @@ This guide will help you deploy and configure the smart contract for Buddy's gam
 ## 🚀 Quick Start
 
 Your game is now configured to work with the following high-speed testnets:
-- **MegaETH Testnet** ⚡ (Chain ID: 12227332) - 100,000 TPS
+- **MegaETH Testnet** ⚡ (Chain ID: 6342) - 100,000 TPS
 - **Base Sepolia** 🔵 (Chain ID: 84532) 
-- **Monad Testnet** 🟣 (Chain ID: 41454)
+- **Monad Testnet** 🟣 (Chain ID: 10143)
 
 ## 📋 Prerequisites
 
@@ -35,9 +35,9 @@ After deployment, update the contract addresses in `/src/services/blockchainServ
 
 ```javascript
 const CONTRACT_ADDRESSES = {
-  12227332: "YOUR_MEGAETH_CONTRACT_ADDRESS",    // MegaETH Testnet
+  6342: "YOUR_MEGAETH_CONTRACT_ADDRESS",       // MegaETH Testnet
   84532: "YOUR_BASE_SEPOLIA_CONTRACT_ADDRESS", // Base Sepolia
-  41454: "YOUR_MONAD_CONTRACT_ADDRESS"         // Monad Testnet
+  10143: "YOUR_MONAD_CONTRACT_ADDRESS"         // Monad Testnet
 };
 ```
 
