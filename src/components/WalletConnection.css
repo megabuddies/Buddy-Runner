@@ -106,8 +106,8 @@
 .preloader-content,
 .wallet-connection-content {
   text-align: center;
-  width: 400px;
-  max-width: 90vw;
+  width: 100%;
+  max-width: 600px;
   border: 2px solid var(--accent-color);
   border-radius: 5px;
   padding: 30px;
@@ -121,6 +121,7 @@
   justify-content: center;
   align-items: center;
   clip-path: polygon(0 0, 100% 0, 100% 95%, 95% 100%, 0 100%);
+  margin: 0 20px;
 }
 
 /* Border gradient effect */
@@ -550,7 +551,7 @@
 @media (max-width: 768px) {
   .preloader-content,
   .wallet-connection-content {
-    width: 320px;
+    margin: 0 15px;
     padding: 25px;
   }
   
@@ -575,7 +576,7 @@
 @media (max-width: 480px) {
   .preloader-content,
   .wallet-connection-content {
-    width: 280px;
+    margin: 0 10px;
     padding: 20px;
   }
   
