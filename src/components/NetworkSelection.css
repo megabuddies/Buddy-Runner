@@ -3,8 +3,8 @@
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   background-color: var(--background-color);
   background-image: 
     linear-gradient(0deg, rgba(146, 147, 151, 0.05) 1px, transparent 1px),
@@ -18,6 +18,7 @@
   opacity: 1;
   transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
   visibility: visible;
+  padding: min(20px, 2vh) min(10px, 1vw);
 }
 
 .network-scanner-overlay::before {
@@ -50,8 +51,8 @@
   position: fixed;
   top: 0;
   left: 0;
-  width: 100%;
-  height: 100%;
+  width: 100vw;
+  height: 100vh;
   background-color: var(--background-color);
   background-image: 
     linear-gradient(0deg, rgba(146, 147, 151, 0.05) 1px, transparent 1px),
@@ -66,7 +67,8 @@
   transition: opacity 0.5s ease-out, visibility 0.5s ease-out;
   visibility: visible;
   overflow-y: auto;
-  padding: 20px 0;
+  overflow-x: hidden;
+  padding: min(20px, 2vh) min(10px, 1vw);
 }
 
 .network-selection-overlay::before {
@@ -103,8 +105,8 @@
   gap: 15px;
   z-index: 2;
   width: 100%;
-  max-width: 900px;
   margin: 0 auto;
+  transition: all 0.3s ease;
 }
 
 /* Content containers */
@@ -112,20 +114,20 @@
 .network-selection-content {
   text-align: center;
   width: 100%;
-  max-width: 800px;
   border: 2px solid var(--accent-color);
   border-radius: 5px;
-  padding: 30px;
+  padding: min(30px, 4vw);
   background-color: rgba(18, 18, 24, 0.9);
   box-shadow: 0 0 20px var(--accent-glow-color),
               0 0 40px rgba(146, 147, 151, calc(var(--glow-intensity) * 0.3));
   position: relative;
-  overflow: hidden;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   clip-path: polygon(0 0, 100% 0, 100% 95%, 95% 100%, 0 100%);
+  transition: all 0.3s ease;
 }
 
 /* Border gradient and grid effects (shared) */
@@ -406,6 +408,8 @@
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 20px;
   margin-bottom: 30px;
+  width: 100%;
+  transition: all 0.3s ease;
 }
 
 .network-card {
@@ -703,12 +707,108 @@
   text-shadow: 0 0 5px var(--accent-color);
 }
 
-/* Mobile responsiveness */
-@media (max-width: 768px) {
+/* Responsive design для разных размеров экрана */
+
+/* Очень большие экраны (> 1600px) */
+@media (min-width: 1600px) {
+  .logo-text {
+    font-size: 32px;
+  }
+  
+  .terminal-title {
+    font-size: 16px;
+  }
+  
+  .briefing-title,
+  .selection-title {
+    font-size: 18px;
+  }
+  
+  .terminal-text {
+    font-size: 14px;
+  }
+  
+  .network-card {
+    padding: 25px;
+  }
+  
+  .scanner-display {
+    width: 250px;
+    height: 250px;
+  }
+}
+
+/* Большие экраны (1200px - 1600px) */
+@media (min-width: 1200px) and (max-width: 1599px) {
+  .logo-text {
+    font-size: 28px;
+  }
+  
+  .terminal-title {
+    font-size: 14px;
+  }
+  
+  .briefing-title,
+  .selection-title {
+    font-size: 16px;
+  }
+  
+  .network-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+  
+  .scanner-display {
+    width: 220px;
+    height: 220px;
+  }
+}
+
+/* Средние экраны (900px - 1199px) */
+@media (min-width: 900px) and (max-width: 1199px) {
+  .logo-text {
+    font-size: 24px;
+  }
+  
+  .network-grid {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  }
+  
+  .scanner-display {
+    width: 200px;
+    height: 200px;
+  }
+}
+
+/* Планшеты и малые ноутбуки (768px - 899px) */
+@media (min-width: 768px) and (max-width: 899px) {
+  .logo-text {
+    font-size: 22px;
+  }
+  
+  .terminal-title {
+    font-size: 11px;
+  }
+  
+  .network-grid {
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 18px;
+  }
+  
+  .scanner-display {
+    width: 180px;
+    height: 180px;
+  }
+  
+  .status-bar {
+    gap: 25px;
+  }
+}
+
+/* Мобильные устройства (481px - 767px) */
+@media (min-width: 481px) and (max-width: 767px) {
   .scanner-content,
   .network-selection-content {
     padding: 25px;
-    max-width: 95vw;
   }
   
   .logo-text {
@@ -734,7 +834,8 @@
   }
 }
 
-@media (max-width: 480px) {
+/* Маленькие мобильные устройства (320px - 480px) */
+@media (min-width: 320px) and (max-width: 480px) {
   .scanner-content,
   .network-selection-content {
     padding: 20px;
@@ -765,5 +866,118 @@
   .scanner-display {
     width: 120px;
     height: 120px;
+  }
+}
+
+/* Очень маленькие экраны (< 320px) */
+@media (max-width: 319px) {
+  .scanner-content,
+  .network-selection-content {
+    padding: 15px;
+  }
+  
+  .logo-text {
+    font-size: 16px;
+  }
+  
+  .terminal-title {
+    font-size: 8px;
+  }
+  
+  .briefing-title,
+  .selection-title {
+    font-size: 10px;
+  }
+  
+  .terminal-text {
+    font-size: 9px;
+  }
+  
+  .network-card {
+    padding: 12px;
+  }
+  
+  .launch-button {
+    padding: 10px 20px;
+    font-size: 8px;
+  }
+  
+  .scanner-display {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+/* Дополнительные стили для полной адаптивности */
+
+/* Динамические размеры шрифтов */
+.dynamic-font-size {
+  font-size: clamp(0.8rem, 2vw, 1.2rem);
+}
+
+.dynamic-title-size {
+  font-size: clamp(1.2rem, 4vw, 2rem);
+}
+
+/* Обеспечиваем, что элементы не выходят за границы экрана */
+* {
+  box-sizing: border-box;
+}
+
+/* Улучшенная адаптивность для всех элементов */
+.network-selection-content,
+.scanner-content {
+  min-width: 0; /* Позволяет flex элементам сжиматься */
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Адаптивные высоты для различных размеров экрана */
+@media (orientation: landscape) and (max-height: 600px) {
+  .scanner-content,
+  .network-selection-content {
+    padding: 15px;
+  }
+  
+  .logo-text {
+    font-size: 18px !important;
+  }
+  
+  .scanner-display {
+    width: 100px !important;
+    height: 100px !important;
+  }
+  
+  .network-card {
+    padding: 15px !important;
+  }
+}
+
+/* Экстра широкие экраны */
+@media (min-width: 2000px) {
+  .logo-text {
+    font-size: 36px;
+  }
+  
+  .terminal-title {
+    font-size: 18px;
+  }
+  
+  .briefing-title,
+  .selection-title {
+    font-size: 20px;
+  }
+  
+  .terminal-text {
+    font-size: 16px;
+  }
+  
+  .network-card {
+    padding: 30px;
+  }
+  
+  .scanner-display {
+    width: 300px;
+    height: 300px;
   }
 }
