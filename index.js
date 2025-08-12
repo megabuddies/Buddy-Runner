@@ -121,10 +121,10 @@ function getScaleRatio() {
 function showGameOver() {
   const fontSize = 70 * scaleRatio;
   ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "#FF7F7F";
+  ctx.fillStyle = "#FF6B6B";
   const x = canvas.width / 4.5;
   const y = canvas.height / 2;
-  ctx.fillText("OH NO!", x, y);
+  ctx.fillText("OOPS!", x, y);
 }
 
 function setupGameReset() {
@@ -149,12 +149,12 @@ function reset() {
 }
 
 function showStartGameText() {
-  const fontSize = 40 * scaleRatio;
+  const fontSize = 32 * scaleRatio;
   ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "#8FBC8F";
-  const x = canvas.width / 14;
+  ctx.fillStyle = "#6B8E6B";
+  const x = canvas.width / 18;
   const y = canvas.height / 2;
-  ctx.fillText("Help Buddy Jump Over Carrots!", x, y);
+  ctx.fillText("🐰 Press SPACE or tap to make Buddy jump! 🥕", x, y);
 }
 
 function updateGameSpeed(frameTimeDelta) {
@@ -162,8 +162,57 @@ function updateGameSpeed(frameTimeDelta) {
 }
 
 function clearScreen() {
-  ctx.fillStyle = "#f8fdf8";
+  // Create a beautiful sky gradient
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  gradient.addColorStop(0, "#87CEEB");  // Sky blue
+  gradient.addColorStop(0.7, "#B0E0E6"); // Powder blue
+  gradient.addColorStop(1, "#F0F8FF");   // Alice blue
+  
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Add some simple clouds
+  ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+  const cloudY = canvas.height * 0.2;
+  const cloudSize = 20 * scaleRatio;
+  
+  // Cloud 1
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.2, cloudY, cloudSize, 0, Math.PI * 2);
+  ctx.arc(canvas.width * 0.2 + cloudSize * 0.5, cloudY, cloudSize * 0.8, 0, Math.PI * 2);
+  ctx.arc(canvas.width * 0.2 + cloudSize, cloudY, cloudSize * 0.6, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Cloud 2
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.7, cloudY + cloudSize * 0.5, cloudSize * 0.7, 0, Math.PI * 2);
+  ctx.arc(canvas.width * 0.7 + cloudSize * 0.4, cloudY + cloudSize * 0.5, cloudSize * 0.9, 0, Math.PI * 2);
+  ctx.arc(canvas.width * 0.7 + cloudSize * 0.8, cloudY + cloudSize * 0.5, cloudSize * 0.5, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Add small flowers in the background
+  const flowerSize = 4 * scaleRatio;
+  const groundLevel = canvas.height - GROUND_HEIGHT * scaleRatio;
+  
+  // Flower 1
+  ctx.fillStyle = "#FFB6C1";
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.15, groundLevel - flowerSize, flowerSize, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#FFD700";
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.15, groundLevel - flowerSize, flowerSize * 0.4, 0, Math.PI * 2);
+  ctx.fill();
+  
+  // Flower 2
+  ctx.fillStyle = "#DDA0DD";
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.85, groundLevel - flowerSize * 0.8, flowerSize * 0.8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#FFD700";
+  ctx.beginPath();
+  ctx.arc(canvas.width * 0.85, groundLevel - flowerSize * 0.8, flowerSize * 0.3, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function gameLoop(currentTime) {
