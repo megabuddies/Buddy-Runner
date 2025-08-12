@@ -1,7 +1,7 @@
 {
-  "name": "buddy-carrot-adventure-privy",
+  "name": "buddy-runner-mega-buddies",
   "version": "1.0.0",
-  "description": "Buddy's Great Carrot Adventure with Privy Wallet Integration",
+  "description": "Buddy Runner - Powered by Mega Buddies - Blockchain jumping game",
   "main": "src/index.js",
   "scripts": {
     "dev": "vite",

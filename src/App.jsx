@@ -3,11 +3,12 @@ import { PrivyProvider } from '@privy-io/react-auth';
 import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
+import WalletConnection from './components/WalletConnection';
 import './App.css';
 
 const App = () => {
   const appId = 'cme84q0og02aalc0bh9blzwa9';
-  const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'game'
+  const [gameState, setGameState] = useState('wallet-connection'); // 'wallet-connection' | 'network-selection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
 
   const privyConfig = {
@@ -131,6 +132,10 @@ const App = () => {
     ],
   };
 
+  const handleWalletConnected = () => {
+    setGameState('network-selection');
+  };
+
   const handleNetworkSelect = (network) => {
     setSelectedNetwork(network);
   };
@@ -145,17 +150,34 @@ const App = () => {
     setSelectedNetwork(null);
   };
 
+  const handleBackToWalletConnection = () => {
+    setGameState('wallet-connection');
+    setSelectedNetwork(null);
+  };
+
   return (
     <PrivyProvider
       appId={appId}
       config={privyConfig}
     >
       <div className="app">
-        {gameState === 'network-selection' ? (
-          <NetworkSelection 
-            onNetworkSelect={handleNetworkSelect}
-            onStartGame={handleStartGame}
-          />
+        {gameState === 'wallet-connection' ? (
+          <WalletConnection onWalletConnected={handleWalletConnected} />
+        ) : gameState === 'network-selection' ? (
+          <div>
+            <div className="back-to-wallet">
+              <button 
+                className="back-button-small"
+                onClick={handleBackToWalletConnection}
+              >
+                ← Back to Wallet
+              </button>
+            </div>
+            <NetworkSelection 
+              onNetworkSelect={handleNetworkSelect}
+              onStartGame={handleStartGame}
+            />
+          </div>
         ) : (
           <>
             <WalletComponent selectedNetwork={selectedNetwork} />
@@ -167,7 +189,7 @@ const App = () => {
                 ← Back to Network Selection
               </button>
               <div className="title">
-                🐰 Buddy's Great Carrot Adventure 🥕
+                🐰 Buddy Runner - Powered by Mega Buddies 🥕
               </div>
               {selectedNetwork && (
                 <div className="current-network">

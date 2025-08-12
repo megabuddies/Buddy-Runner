@@ -43,14 +43,14 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
     <div className="network-selection-container">
       <div className="game-logo">
         <div className="logo-text">
-          <span className="logo-main">CROSSY</span>
-          <span className="logo-accent">Fluffle</span>
+          <span className="logo-main">BUDDY</span>
+          <span className="logo-accent">RUNNER</span>
         </div>
-        <div className="logo-trademark">®</div>
+        <div className="logo-powered">powered by <strong>Mega Buddies</strong></div>
       </div>
       
       <div className="game-description">
-        <p>Welcome to Crossy Fluffle. Get as far as you can in 60s on each</p>
+        <p>Welcome to Buddy Runner. Get as far as you can in 60s on each</p>
         <p>network to see the impact of block times on user experience. You</p>
         <p>will remember what real-time feels like.</p>
       </div>
