@@ -20,6 +20,7 @@ const GameComponent = ({ selectedNetwork }) => {
     onChainScore: 0
   });
 
+  // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
   const GAME_SPEED_INCREMENT = 0.00001;
   const GAME_WIDTH = 800;
@@ -99,88 +100,79 @@ const GameComponent = ({ selectedNetwork }) => {
       if (result.success && !result.simulated) {
         const walletAddress = getWalletAddress();
         if (walletAddress) {
-          const session = await blockchainService.getPlayerSession(walletAddress);
-          if (session) {
-            setBlockchainStatus(prev => ({
-              ...prev,
-              onChainScore: parseInt(session.score)
-            }));
-          }
+          const score = await blockchainService.getPlayerScore(walletAddress);
+          setBlockchainStatus(prev => ({ ...prev, onChainScore: score }));
         }
       }
     } catch (error) {
-      console.error('Failed to process on-chain movement:', error);
+      console.error('On-chain movement failed:', error);
     }
   };
 
+  // Get wallet information for display
   const getWalletInfo = () => {
     if (!authenticated || !user) return null;
     
-    const getWalletAddress = () => {
-      if (user?.wallet?.address) {
-        return user.wallet.address;
-      }
-      if (user?.linkedAccounts) {
-        const walletAccount = user.linkedAccounts.find(account => account.type === 'wallet');
-        return walletAccount?.address;
-      }
-      return null;
-    };
-
-    const getUserIdentifier = () => {
-      if (user?.email?.address) {
-        return user.email.address;
-      }
-      if (user?.phone?.number) {
-        return user.phone.number;
-      }
-      const walletAddress = getWalletAddress();
-      if (walletAddress) {
-        return `${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}`;
-      }
-      return 'Player';
-    };
-
+    const address = getWalletAddress();
+    if (address) {
+      return {
+        identifier: `${address.slice(0, 6)}...${address.slice(-4)}`,
+        address: address
+      };
+    }
+    
+    if (user.email) {
+      return {
+        identifier: user.email.split('@')[0],
+        address: null
+      };
+    }
+    
     return {
-      address: getWalletAddress(),
-      identifier: getUserIdentifier(),
-      user: user
+      identifier: 'User',
+      address: null
     };
   };
+
+  // Get wallet address
+  const getWalletAddress = () => {
+    if (!authenticated || !wallets || wallets.length === 0) return null;
+    return wallets[0]?.address || null;
+  };
+
+  useEffect(() => {
+    initializeBlockchain();
+  }, [authenticated, user, selectedNetwork]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // Initialize blockchain when wallet is connected
-    if (authenticated && wallets && wallets.length > 0) {
-      initializeBlockchain();
-    }
-
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext("2d");
     let animationId;
+    
+    // Disable image smoothing for pixel art effect
+    ctx.imageSmoothingEnabled = false;
+    ctx.webkitImageSmoothingEnabled = false;
+    ctx.mozImageSmoothingEnabled = false;
+    ctx.msImageSmoothingEnabled = false;
 
-    // Initialize game state
-    gameRef.current = {
+    const game = gameRef.current;
+    Object.assign(game, {
       scaleRatio: null,
       previousTime: null,
       gameSpeed: GAME_SPEED_START,
       gameOver: false,
       hasAddedEventListenersForRestart: false,
-      waitingToStart: true,
-      player: null,
-      ground: null,
-      carrotController: null,
-      score: null
-    };
-
-    const game = gameRef.current;
+      waitingToStart: true
+    });
 
     function createSprites() {
       const playerWidthInGame = PLAYER_WIDTH * game.scaleRatio;
       const playerHeightInGame = PLAYER_HEIGHT * game.scaleRatio;
       const minJumpHeightInGame = MIN_JUMP_HEIGHT * game.scaleRatio;
       const maxJumpHeightInGame = MAX_JUMP_HEIGHT * game.scaleRatio;
+
       const groundWidthInGame = GROUND_WIDTH * game.scaleRatio;
       const groundHeightInGame = GROUND_HEIGHT * game.scaleRatio;
 
@@ -190,8 +182,7 @@ const GameComponent = ({ selectedNetwork }) => {
         playerHeightInGame,
         minJumpHeightInGame,
         maxJumpHeightInGame,
-        game.scaleRatio,
-        handleOnChainMovement
+        game.scaleRatio
       );
 
       game.ground = new Ground(
@@ -202,24 +193,21 @@ const GameComponent = ({ selectedNetwork }) => {
         game.scaleRatio
       );
 
-      const carrotImages = CARROT_CONFIG.map((carrot) => {
-        const image = new Image();
-        image.src = carrot.image;
-        return {
-          image: image,
-          width: carrot.width * game.scaleRatio,
-          height: carrot.height * game.scaleRatio,
-        };
-      });
+      const carrotImages = CARROT_CONFIG.map(carrot => carrot.image);
+      const carrotSizes = CARROT_CONFIG.map(carrot => ({
+        width: carrot.width * game.scaleRatio,
+        height: carrot.height * game.scaleRatio
+      }));
 
       game.carrotController = new CarrotController(
         ctx,
         carrotImages,
-        game.scaleRatio,
-        GROUND_AND_CARROT_SPEED
+        carrotSizes,
+        GROUND_AND_CARROT_SPEED,
+        game.scaleRatio
       );
 
-      game.score = new Score(ctx, game.scaleRatio, blockchainStatus);
+      game.score = new Score(ctx, game.scaleRatio);
     }
 
     function setScreen() {
@@ -230,14 +218,8 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     function getScaleRatio() {
-      const screenHeight = Math.min(
-        window.innerHeight,
-        document.documentElement.clientHeight
-      );
-      const screenWidth = Math.min(
-        window.innerWidth,
-        document.documentElement.clientWidth
-      );
+      const screenHeight = Math.min(window.innerHeight, document.documentElement.clientHeight);
+      const screenWidth = Math.min(window.innerWidth, document.documentElement.clientWidth);
 
       if (screenWidth / screenHeight < GAME_WIDTH / GAME_HEIGHT) {
         return screenWidth / GAME_WIDTH;
@@ -246,96 +228,171 @@ const GameComponent = ({ selectedNetwork }) => {
       }
     }
 
-    function clearScreen() {
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      gradient.addColorStop(0, "#87CEEB");
-      gradient.addColorStop(0.7, "#B0E0E6");
-      gradient.addColorStop(1, "#F0F8FF");
-      
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      
-      // Add clouds
-      ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
-      const cloudY = canvas.height * 0.2;
-      const cloudSize = 20 * game.scaleRatio;
-      
-      // Cloud 1
-      ctx.beginPath();
-      ctx.arc(canvas.width * 0.2, cloudY, cloudSize, 0, Math.PI * 2);
-      ctx.arc(canvas.width * 0.2 + cloudSize * 0.5, cloudY, cloudSize * 0.8, 0, Math.PI * 2);
-      ctx.arc(canvas.width * 0.2 + cloudSize, cloudY, cloudSize * 0.6, 0, Math.PI * 2);
-      ctx.fill();
-      
-      // Cloud 2
-      ctx.beginPath();
-      ctx.arc(canvas.width * 0.7, cloudY + cloudSize * 0.5, cloudSize * 0.7, 0, Math.PI * 2);
-      ctx.arc(canvas.width * 0.7 + cloudSize * 0.4, cloudY + cloudSize * 0.5, cloudSize * 0.9, 0, Math.PI * 2);
-      ctx.arc(canvas.width * 0.7 + cloudSize * 0.8, cloudY + cloudSize * 0.5, cloudSize * 0.5, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
     function showGameOverWithWallet() {
-      const fontSize = Math.floor(game.scaleRatio * 70);
-      ctx.font = `${fontSize}px Verdana`;
-      ctx.fillStyle = "red";
+      // Create pixelated cyberpunk-style game over screen
+      const fontSize = Math.floor(game.scaleRatio * 32);
+      ctx.font = `${fontSize}px monospace`;
+      ctx.fillStyle = "#ef5435";
       ctx.textAlign = "center";
+      
+      // Add glow effect
+      ctx.shadowColor = "#ef5435";
+      ctx.shadowBlur = 10;
       ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - fontSize);
+      ctx.shadowBlur = 0;
 
-      const restartFontSize = Math.floor(game.scaleRatio * 30);
-      ctx.font = `${restartFontSize}px Verdana`;
-      ctx.fillStyle = "black";
+      const restartFontSize = Math.floor(game.scaleRatio * 16);
+      ctx.font = `${restartFontSize}px monospace`;
+      ctx.fillStyle = "#929397";
       ctx.fillText(
-        "Press any key or touch to restart",
+        "> PRESS ANY KEY TO RESTART",
         canvas.width / 2,
         canvas.height / 2 + restartFontSize
       );
 
-      // Show wallet info if connected
+      // Show blockchain status
       const walletInfo = getWalletInfo();
       if (walletInfo) {
-        const walletFontSize = Math.floor(game.scaleRatio * 20);
+        const walletFontSize = Math.floor(game.scaleRatio * 12);
         ctx.font = `${walletFontSize}px monospace`;
-        ctx.fillStyle = "#6B8E6B";
+        ctx.fillStyle = "#1391ff";
         ctx.fillText(
-          `Player: ${walletInfo.identifier}`,
+          `> PILOT: ${walletInfo.identifier}`,
           canvas.width / 2,
-          canvas.height / 2 + restartFontSize + walletFontSize + 10
+          canvas.height / 2 + restartFontSize + walletFontSize + 20
         );
+        
+        // Show blockchain stats
+        ctx.fillStyle = "#929397";
+        ctx.fillText(
+          `> NETWORK: ${blockchainStatus.networkName}`,
+          canvas.width / 2,
+          canvas.height / 2 + restartFontSize + walletFontSize * 2 + 25
+        );
+        
+        if (blockchainStatus.totalMovements > 0) {
+          ctx.fillText(
+            `> ON-CHAIN MOVES: ${blockchainStatus.totalMovements}`,
+            canvas.width / 2,
+            canvas.height / 2 + restartFontSize + walletFontSize * 3 + 30
+          );
+        }
       }
     }
 
     function showStartGameTextWithWallet() {
-      const fontSize = Math.floor(game.scaleRatio * 40);
-      ctx.font = `${fontSize}px Verdana`;
-      ctx.fillStyle = "black";
+      // Create cyberpunk-style start screen
+      const fontSize = Math.floor(game.scaleRatio * 24);
+      ctx.font = `${fontSize}px monospace`;
+      ctx.fillStyle = "#929397";
       ctx.textAlign = "center";
+      
+      // Add subtle glow effect
+      ctx.shadowColor = "#929397";
+      ctx.shadowBlur = 5;
       ctx.fillText(
-        "Press any key or touch to start",
+        "> PRESS ANY KEY TO START MISSION",
         canvas.width / 2,
         canvas.height / 2
       );
+      ctx.shadowBlur = 0;
 
-      // Show wallet connection status
+      // Show connection status
       const walletInfo = getWalletInfo();
-      const statusFontSize = Math.floor(game.scaleRatio * 20);
-      ctx.font = `${statusFontSize}px Verdana`;
+      const statusFontSize = Math.floor(game.scaleRatio * 12);
+      ctx.font = `${statusFontSize}px monospace`;
       
       if (walletInfo) {
-        ctx.fillStyle = "#6B8E6B";
+        ctx.fillStyle = "#1391ff";
+        ctx.shadowColor = "#1391ff";
+        ctx.shadowBlur = 3;
         ctx.fillText(
-          `🔗 Connected as ${walletInfo.identifier}`,
+          `> PILOT AUTHENTICATED: ${walletInfo.identifier}`,
           canvas.width / 2,
-          canvas.height / 2 + fontSize + 10
+          canvas.height / 2 + fontSize + 20
         );
-      } else {
-        ctx.fillStyle = "#8B7355";
+        ctx.shadowBlur = 0;
+        
+        // Show network status
+        ctx.fillStyle = "#929397";
         ctx.fillText(
-          "💳 Connect wallet in top-right corner",
+          `> TARGET NETWORK: ${blockchainStatus.networkName}`,
           canvas.width / 2,
-          canvas.height / 2 + fontSize + 10
+          canvas.height / 2 + fontSize + statusFontSize + 25
+        );
+        
+        if (blockchainStatus.initialized) {
+          ctx.fillStyle = "#28a745";
+          ctx.fillText(
+            "> BLOCKCHAIN CONNECTION: ACTIVE",
+            canvas.width / 2,
+            canvas.height / 2 + fontSize + statusFontSize * 2 + 30
+          );
+        } else {
+          ctx.fillStyle = "#ffc107";
+          ctx.fillText(
+            "> BLOCKCHAIN CONNECTION: SIMULATED MODE",
+            canvas.width / 2,
+            canvas.height / 2 + fontSize + statusFontSize * 2 + 30
+          );
+        }
+      } else {
+        ctx.fillStyle = "#ef5435";
+        ctx.fillText(
+          "> WARNING: NO PILOT AUTHENTICATED",
+          canvas.width / 2,
+          canvas.height / 2 + fontSize + 20
         );
       }
+    }
+
+    function clearScreen() {
+      // Create cyberpunk-style background with grid pattern
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, "#121218");
+      gradient.addColorStop(0.5, "#1a1a2e");
+      gradient.addColorStop(1, "#16213e");
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      // Add grid overlay
+      ctx.strokeStyle = "rgba(146, 147, 151, 0.1)";
+      ctx.lineWidth = 1;
+      
+      const gridSize = 20 * game.scaleRatio;
+      
+      // Vertical lines
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      
+      // Horizontal lines
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+      
+      // Add scanning line effect
+      const scanLineY = (Date.now() / 20) % canvas.height;
+      ctx.strokeStyle = "rgba(19, 145, 255, 0.3)";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, scanLineY);
+      ctx.lineTo(canvas.width, scanLineY);
+      ctx.stroke();
+      
+      // Add glow effect at top
+      const glowGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.3);
+      glowGradient.addColorStop(0, "rgba(19, 145, 255, 0.1)");
+      glowGradient.addColorStop(1, "transparent");
+      ctx.fillStyle = glowGradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height * 0.3);
     }
 
     function setupGameReset() {
@@ -357,14 +414,30 @@ const GameComponent = ({ selectedNetwork }) => {
       game.hasAddedEventListenersForRestart = false;
       game.gameOver = false;
       game.waitingToStart = false;
-      game.ground?.reset();
-      game.carrotController?.reset();
-      game.score?.reset();
+      game.ground.reset();
+      game.carrotController.reset();
+      game.score.reset();
       game.gameSpeed = GAME_SPEED_START;
     }
 
     function updateGameSpeed(frameTimeDelta) {
       game.gameSpeed += frameTimeDelta * GAME_SPEED_INCREMENT;
+    }
+
+    function checkCollision() {
+      const carrotBoxes = game.carrotController.collisionBoxes;
+      const playerBox = game.player.collisionBox;
+
+      return carrotBoxes.some(carrotBox => collision(carrotBox, playerBox));
+    }
+
+    function collision(rect1, rect2) {
+      return (
+        rect1.x < rect2.x + rect2.width &&
+        rect1.x + rect1.width > rect2.x &&
+        rect1.y < rect2.y + rect2.height &&
+        rect1.y + rect1.height > rect2.y
+      );
     }
 
     function gameLoop(currentTime) {
@@ -373,30 +446,37 @@ const GameComponent = ({ selectedNetwork }) => {
         animationId = requestAnimationFrame(gameLoop);
         return;
       }
+
       const frameTimeDelta = currentTime - game.previousTime;
       game.previousTime = currentTime;
 
       clearScreen();
 
       if (!game.gameOver && !game.waitingToStart) {
-        game.ground?.update(game.gameSpeed, frameTimeDelta);
-        game.carrotController?.update(game.gameSpeed, frameTimeDelta);
-        game.player?.update(game.gameSpeed, frameTimeDelta);
-        game.score?.update(frameTimeDelta);
+        // Update
+        game.ground.update(game.gameSpeed, frameTimeDelta);
+        game.carrotController.update(game.gameSpeed, frameTimeDelta);
+        game.player.update(game.gameSpeed, frameTimeDelta);
+        game.score.update(frameTimeDelta);
         updateGameSpeed(frameTimeDelta);
+
+        // Check collision
+        if (checkCollision()) {
+          game.gameOver = true;
+          setupGameReset();
+        }
+
+        // Handle blockchain movement (every few frames to avoid spam)
+        if (Math.random() < 0.01) { // ~1% chance per frame
+          handleOnChainMovement();
+        }
       }
 
-      if (!game.gameOver && game.carrotController?.collideWith(game.player)) {
-        game.gameOver = true;
-        setupGameReset();
-        game.score?.setHighScore();
-      }
-
-      // Draw game objects
-      game.ground?.draw();
-      game.carrotController?.draw();
-      game.player?.draw();
-      game.score?.draw();
+      // Draw
+      game.ground.draw();
+      game.carrotController.draw();
+      game.player.draw();
+      game.score.draw();
 
       if (game.gameOver) {
         showGameOverWithWallet();
@@ -447,16 +527,39 @@ const GameComponent = ({ selectedNetwork }) => {
   }, [authenticated, user, selectedNetwork]);
 
   return (
-    <canvas 
-      ref={canvasRef} 
-      id="game"
-      style={{
-        border: '1px solid rgba(255, 107, 157, 0.3)',
-        borderRadius: '16px',
-        boxShadow: '0 8px 24px rgba(255, 107, 157, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.05)',
-        backdropFilter: 'blur(10px)'
-      }}
-    />
+    <div className="game-canvas-container">
+      <canvas 
+        ref={canvasRef} 
+        id="game"
+        className="game-canvas"
+      />
+      <div className="game-ui-overlay">
+        <div className="blockchain-status">
+          <div className="status-item">
+            <span className="status-label">NETWORK:</span>
+            <span className="status-value">{blockchainStatus.networkName}</span>
+          </div>
+          <div className="status-item">
+            <span className="status-label">BLOCKCHAIN:</span>
+            <span className={`status-value ${blockchainStatus.initialized ? 'online' : 'offline'}`}>
+              {blockchainStatus.initialized ? 'ACTIVE' : 'SIMULATED'}
+            </span>
+          </div>
+          {blockchainStatus.totalMovements > 0 && (
+            <div className="status-item">
+              <span className="status-label">ON-CHAIN MOVES:</span>
+              <span className="status-value">{blockchainStatus.totalMovements}</span>
+            </div>
+          )}
+          {blockchainStatus.pendingTransactions > 0 && (
+            <div className="status-item">
+              <span className="status-label">PENDING TX:</span>
+              <span className="status-value pending">{blockchainStatus.pendingTransactions}</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
 
