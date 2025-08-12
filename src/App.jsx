@@ -1,11 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
 import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
+import NetworkSelection from './components/NetworkSelection';
 import './App.css';
 
 const App = () => {
   const appId = 'cme84q0og02aalc0bh9blzwa9';
+  const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'game'
+  const [selectedNetwork, setSelectedNetwork] = useState(null);
 
   const privyConfig = {
     appearance: {
@@ -128,22 +131,60 @@ const App = () => {
     ],
   };
 
+  const handleNetworkSelect = (network) => {
+    setSelectedNetwork(network);
+  };
+
+  const handleStartGame = (network) => {
+    setSelectedNetwork(network);
+    setGameState('game');
+  };
+
+  const handleBackToNetworkSelection = () => {
+    setGameState('network-selection');
+    setSelectedNetwork(null);
+  };
+
   return (
     <PrivyProvider
       appId={appId}
       config={privyConfig}
     >
       <div className="app">
-        <WalletComponent />
-        <div className="title">
-          🐰 Buddy's Great Carrot Adventure 🥕
-        </div>
-        <GameComponent />
-        <div className="instructions">
-          <p className="main-instruction">📱 Press SPACE or tap to make Buddy jump!</p>
-          <p className="help-text">Help our brave bunny Buddy hop over the giant carrots and achieve the highest score!</p>
-          <p className="warning-text">Watch out for those sneaky garden carrots!</p>
-        </div>
+        {gameState === 'network-selection' ? (
+          <NetworkSelection 
+            onNetworkSelect={handleNetworkSelect}
+            onStartGame={handleStartGame}
+          />
+        ) : (
+          <>
+            <WalletComponent selectedNetwork={selectedNetwork} />
+            <div className="game-header">
+              <button 
+                className="back-button"
+                onClick={handleBackToNetworkSelection}
+              >
+                ← Back to Network Selection
+              </button>
+              <div className="title">
+                🐰 Buddy's Great Carrot Adventure 🥕
+              </div>
+              {selectedNetwork && (
+                <div className="current-network">
+                  <span className="network-indicator">
+                    {selectedNetwork.emoji} Playing on: <strong>{selectedNetwork.name}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+            <GameComponent selectedNetwork={selectedNetwork} />
+            <div className="instructions">
+              <p className="main-instruction">📱 Press SPACE or tap to make Buddy jump!</p>
+              <p className="help-text">Help our brave bunny Buddy hop over the giant carrots and achieve the highest score!</p>
+              <p className="warning-text">Watch out for those sneaky garden carrots!</p>
+            </div>
+          </>
+        )}
       </div>
     </PrivyProvider>
   );

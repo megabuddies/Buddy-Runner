@@ -143,6 +143,17 @@ a {
   color: white;
 }
 
+.network-option.selected-game-network {
+  border-left: 4px solid #E91E63;
+  background: linear-gradient(to right, #E91E6310, transparent);
+  font-weight: 600;
+}
+
+.network-option.selected-game-network.active {
+  background: linear-gradient(45deg, #7FBC7F, #E91E63);
+  border-left: 4px solid #FFFFFF;
+}
+
 .wallet-button {
   background: linear-gradient(135deg, #7FBC7F 0%, #6B8E6B 100%);
   border: none;
@@ -248,6 +259,85 @@ a {
   display: none;
 }
 
+/* Game Header Styles */
+.game-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  position: relative;
+}
+
+.back-button {
+  position: absolute;
+  top: 0;
+  left: 2rem;
+  background: linear-gradient(45deg, #7FBC7F, #9ACD32);
+  color: white;
+  border: none;
+  border-radius: 25px;
+  padding: 0.8rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(127, 188, 127, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.back-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(127, 188, 127, 0.4);
+  background: linear-gradient(45deg, #6BA86B, #8BB82B);
+}
+
+.back-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(127, 188, 127, 0.3);
+}
+
+.current-network {
+  position: absolute;
+  top: 0;
+  right: 2rem;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border: 2px solid #7FBC7F;
+  border-radius: 20px;
+  padding: 0.8rem 1.5rem;
+  box-shadow: 0 4px 15px rgba(127, 188, 127, 0.2);
+  animation: networkPulse 3s ease-in-out infinite;
+}
+
+@keyframes networkPulse {
+  0%, 100% { 
+    transform: scale(1);
+    box-shadow: 0 4px 15px rgba(127, 188, 127, 0.2);
+  }
+  50% { 
+    transform: scale(1.02);
+    box-shadow: 0 6px 20px rgba(127, 188, 127, 0.3);
+  }
+}
+
+.network-indicator {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #2C3E50;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.network-indicator strong {
+  color: #7FBC7F;
+  font-weight: 700;
+}
+
 /* Responsive design */
 @media (max-width: 768px) {
   .wallet-container {
@@ -294,5 +384,29 @@ a {
     margin: 10px 15px;
     padding: 10px 15px;
     font-size: 0.9em;
+  }
+
+  .game-header {
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .back-button,
+  .current-network {
+    position: static;
+    align-self: center;
+  }
+
+  .back-button {
+    order: -1;
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
+  }
+
+  .current-network {
+    order: 1;
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
   }
 }

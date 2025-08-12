@@ -6,14 +6,14 @@ import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
 import blockchainService from '../services/blockchainService.js';
 
-const GameComponent = () => {
+const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const [blockchainStatus, setBlockchainStatus] = useState({
     initialized: false,
-    networkName: 'Unknown',
+    networkName: selectedNetwork?.name || 'Unknown',
     contractAvailable: false,
     pendingTransactions: 0,
     totalMovements: 0,
@@ -40,18 +40,28 @@ const GameComponent = () => {
 
   // Initialize blockchain service
   const initializeBlockchain = async () => {
-    if (!authenticated || !wallets || wallets.length === 0) {
+    if (!authenticated || !wallets || wallets.length === 0 || !selectedNetwork) {
       setBlockchainStatus(prev => ({ ...prev, initialized: false }));
       return;
     }
 
     try {
       const wallet = wallets[0]; // Use first available wallet
+      
+      // First, ensure the wallet is on the correct network
+      try {
+        await wallet.switchChain(selectedNetwork.id);
+        console.log(`Switched to ${selectedNetwork.name}`);
+      } catch (switchError) {
+        console.warn(`Failed to switch to ${selectedNetwork.name}:`, switchError);
+        // Continue anyway, blockchain service will handle the network mismatch
+      }
+      
       const success = await blockchainService.initialize(wallet);
       
       setBlockchainStatus({
         initialized: success,
-        networkName: blockchainService.getNetworkName(),
+        networkName: selectedNetwork.name,
         contractAvailable: blockchainService.isContractAvailable(),
         pendingTransactions: 0,
         totalMovements: 0,
@@ -64,7 +74,11 @@ const GameComponent = () => {
       }
     } catch (error) {
       console.error('Failed to initialize blockchain:', error);
-      setBlockchainStatus(prev => ({ ...prev, initialized: false }));
+      setBlockchainStatus(prev => ({ 
+        ...prev, 
+        initialized: false, 
+        networkName: selectedNetwork.name 
+      }));
     }
   };
 
@@ -430,7 +444,7 @@ const GameComponent = () => {
       document.removeEventListener("keyup", initialKeyHandler);
       document.removeEventListener("touchstart", initialKeyHandler);
     };
-  }, [authenticated, user]);
+  }, [authenticated, user, selectedNetwork]);
 
   return (
     <canvas 
