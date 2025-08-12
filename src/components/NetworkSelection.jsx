@@ -5,6 +5,10 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
   const [selectedNetwork, setSelectedNetwork] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [terminalText, setTerminalText] = useState('');
+  const [windowDimensions, setWindowDimensions] = useState({
+    width: window.innerWidth,
+    height: window.innerHeight
+  });
 
   const networks = [
     { 
@@ -60,6 +64,84 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
     return () => clearInterval(interval);
   }, []);
 
+  // Hook для отслеживания размеров окна
+  useEffect(() => {
+    const handleResize = () => {
+      setWindowDimensions({
+        width: window.innerWidth,
+        height: window.innerHeight
+      });
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Debug информация для разработки
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Window dimensions changed:', windowDimensions);
+      console.log('Dynamic styles:', getDynamicStyles());
+    }
+  }, [windowDimensions]);
+
+  // Динамические стили на основе размеров окна
+  const getDynamicStyles = () => {
+    const { width, height } = windowDimensions;
+    
+    // Определяем тип устройства на основе размеров
+    const isMobile = width <= 768;
+    const isTablet = width > 768 && width <= 1024;
+    const isDesktop = width > 1024;
+    const isLargeDesktop = width > 1600;
+    
+    // Адаптивная ширина контейнера
+    let containerWidth;
+    if (isMobile) {
+      containerWidth = Math.min(width * 0.98, width - 20);
+    } else if (isTablet) {
+      containerWidth = Math.min(width * 0.92, width - 60);
+    } else if (isLargeDesktop) {
+      containerWidth = Math.min(width * 0.85, 1400);
+    } else {
+      containerWidth = Math.min(width * 0.88, 1200);
+    }
+    
+    // Адаптивная высота контейнера
+    const containerMaxHeight = height * (isMobile ? 0.95 : 0.9);
+    const containerMinHeight = Math.min(height * (isMobile ? 0.7 : 0.6), isMobile ? 500 : 600);
+    
+    // Адаптивный padding
+    const padding = isMobile ? 
+      Math.max(15, width * 0.03) : 
+      Math.max(20, width * 0.025);
+    
+    return {
+      containerStyle: {
+        width: `${containerWidth}px`,
+        maxHeight: `${containerMaxHeight}px`,
+        minHeight: `${containerMinHeight}px`,
+        transition: 'all 0.3s ease'
+      },
+      contentStyle: {
+        maxHeight: `${containerMaxHeight - 40}px`,
+        overflowY: containerMaxHeight < height * 0.9 ? 'auto' : 'visible',
+        padding: `${padding}px`,
+        transition: 'all 0.3s ease'
+      },
+      networkGridStyle: {
+        gridTemplateColumns: isMobile ? 
+          '1fr' : 
+          isTablet ? 
+            'repeat(auto-fit, minmax(280px, 1fr))' : 
+            'repeat(auto-fit, minmax(300px, 1fr))',
+        gap: `${isMobile ? 15 : isDesktop ? 25 : 20}px`
+      }
+    };
+  };
+
+  const { containerStyle, contentStyle, networkGridStyle } = getDynamicStyles();
+
   const handleNetworkSelect = (network) => {
     setSelectedNetwork(network);
     onNetworkSelect(network);
@@ -74,8 +156,8 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
   if (isInitializing) {
     return (
       <div className="network-scanner-overlay">
-        <div className="scanner-container">
-          <div className="scanner-content">
+        <div className="scanner-container" style={containerStyle}>
+          <div className="scanner-content" style={contentStyle}>
             <div className="terminal-header">
               <div className="terminal-title">NETWORK SCANNER PROTOCOL</div>
               <div className="terminal-buttons">
@@ -112,8 +194,8 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
 
   return (
     <div className="network-selection-overlay">
-      <div className="network-selection-container">
-        <div className="network-selection-content">
+      <div className="network-selection-container" style={containerStyle}>
+        <div className="network-selection-content" style={contentStyle}>
           <div className="terminal-header">
             <div className="terminal-title">BLOCKCHAIN NETWORK SELECTOR</div>
             <div className="terminal-buttons">
@@ -151,7 +233,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
           <div className="network-selection">
             <div className="selection-title">SELECT TARGET BLOCKCHAIN NETWORK:</div>
             
-            <div className="network-grid">
+            <div className="network-grid" style={networkGridStyle}>
               {networks.map((network) => (
                 <div
                   key={network.id}
@@ -224,6 +306,12 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
                 <span className="status-label">READY:</span>
                 <span className="status-value ready">TRUE</span>
               </div>
+              {process.env.NODE_ENV === 'development' && (
+                <div className="status-item">
+                  <span className="status-label">SCREEN:</span>
+                  <span className="status-value ready">{windowDimensions.width}x{windowDimensions.height}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
