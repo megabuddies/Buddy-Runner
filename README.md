@@ -1,8 +1,8 @@
-# 🐰 Buddy's Great Carrot Adventure 🥕⛓️
+# 🐰 Buddy Runner - Powered by Mega Buddies 🥕⛓️
 
 A **fully on-chain** jumping game featuring Buddy the bunny! Every jump is a blockchain transaction, showcasing the power of high-speed networks like **MegaETH** (100,000 TPS).
 
-**🚀 Experience real-time blockchain gaming - just like Crossy Fluffle!**
+**🚀 Experience real-time blockchain gaming with seamless wallet integration!**
 
 ## 🚀 Features
 
@@ -36,9 +36,10 @@ A **fully on-chain** jumping game featuring Buddy the bunny! Every jump is a blo
 
 ## 🎮 How to Play
 
-1. **Connect your wallet** using the button in the top-right corner
-2. **Press SPACE** or **tap the screen** to make Buddy jump
-3. **Avoid the carrots** and try to achieve the highest score!
+1. **Connect your wallet** first using email, phone, or external wallet
+2. **Choose your network** from MegaETH, Base Sepolia, or Monad Testnet  
+3. **Press SPACE** or **tap the screen** to make Buddy jump
+4. **Avoid the carrots** and try to achieve the highest score!
 
 ## 🔐 Wallet Integration
 
@@ -128,4 +129,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-**Enjoy playing Buddy's Great Carrot Adventure! 🐰🥕**
+**Enjoy playing Buddy Runner - Powered by Mega Buddies! 🐰🥕**

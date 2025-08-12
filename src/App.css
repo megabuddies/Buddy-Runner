@@ -298,6 +298,39 @@ a {
   box-shadow: 0 2px 8px rgba(127, 188, 127, 0.3);
 }
 
+.back-to-wallet {
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  z-index: 10;
+}
+
+.back-button-small {
+  background: linear-gradient(45deg, #7FBC7F, #9ACD32);
+  color: white;
+  border: none;
+  border-radius: 20px;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 3px 10px rgba(127, 188, 127, 0.3);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.back-button-small:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(127, 188, 127, 0.4);
+  background: linear-gradient(45deg, #6BA86B, #8BB82B);
+}
+
+.back-button-small:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(127, 188, 127, 0.3);
+}
+
 .current-network {
   position: absolute;
   top: 0;
