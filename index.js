@@ -119,12 +119,7 @@ function getScaleRatio() {
 }
 
 function showGameOver() {
-  const fontSize = 70 * scaleRatio;
-  ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "#FF6B6B";
-  const x = canvas.width / 4.5;
-  const y = canvas.height / 2;
-  ctx.fillText("OOPS!", x, y);
+  showGameOverWithWallet();
 }
 
 function setupGameReset() {
@@ -149,12 +144,7 @@ function reset() {
 }
 
 function showStartGameText() {
-  const fontSize = 32 * scaleRatio;
-  ctx.font = `${fontSize}px Verdana`;
-  ctx.fillStyle = "#6B8E6B";
-  const x = canvas.width / 18;
-  const y = canvas.height / 2;
-  ctx.fillText("🐰 Press SPACE or tap to make Buddy jump! 🥕", x, y);
+  showStartGameTextWithWallet();
 }
 
 function updateGameSpeed(frameTimeDelta) {
@@ -259,6 +249,89 @@ function gameLoop(currentTime) {
 }
 
 requestAnimationFrame(gameLoop);
+
+// Wallet integration functionality
+function getWalletInfo() {
+  if (window.privyWallet && window.privyWallet.isWalletConnected()) {
+    return {
+      address: window.privyWallet.getWalletAddress(),
+      user: window.privyWallet.getCurrentUser()
+    };
+  }
+  return null;
+}
+
+// Enhanced game over screen with wallet info
+function showGameOverWithWallet() {
+  const fontSize = Math.floor(scaleRatio * 70);
+  ctx.font = `${fontSize}px Verdana`;
+  ctx.fillStyle = "red";
+  ctx.textAlign = "center";
+  ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - fontSize);
+
+  const restartFontSize = Math.floor(scaleRatio * 30);
+  ctx.font = `${restartFontSize}px Verdana`;
+  ctx.fillStyle = "black";
+  ctx.fillText(
+    "Press any key or touch to restart",
+    canvas.width / 2,
+    canvas.height / 2 + restartFontSize
+  );
+
+  // Show wallet info if connected
+  const walletInfo = getWalletInfo();
+  if (walletInfo) {
+    const walletFontSize = Math.floor(scaleRatio * 20);
+    ctx.font = `${walletFontSize}px monospace`;
+    ctx.fillStyle = "#6B8E6B";
+    ctx.fillText(
+      `Player: ${walletInfo.address.slice(0, 6)}...${walletInfo.address.slice(-4)}`,
+      canvas.width / 2,
+      canvas.height / 2 + restartFontSize + walletFontSize + 10
+    );
+  }
+}
+
+// Enhanced start screen with wallet connection prompt
+function showStartGameTextWithWallet() {
+  const fontSize = Math.floor(scaleRatio * 40);
+  ctx.font = `${fontSize}px Verdana`;
+  ctx.fillStyle = "black";
+  ctx.textAlign = "center";
+  ctx.fillText(
+    "Press any key or touch to start",
+    canvas.width / 2,
+    canvas.height / 2
+  );
+
+  // Show wallet connection status
+  const walletInfo = getWalletInfo();
+  const statusFontSize = Math.floor(scaleRatio * 20);
+  ctx.font = `${statusFontSize}px Verdana`;
+  
+  if (walletInfo) {
+    ctx.fillStyle = "#6B8E6B";
+    ctx.fillText(
+      `🔗 Wallet Connected`,
+      canvas.width / 2,
+      canvas.height / 2 + fontSize + 10
+    );
+    
+    ctx.font = `${Math.floor(scaleRatio * 16)}px monospace`;
+    ctx.fillText(
+      `${walletInfo.address.slice(0, 8)}...${walletInfo.address.slice(-6)}`,
+      canvas.width / 2,
+      canvas.height / 2 + fontSize + statusFontSize + 20
+    );
+  } else {
+    ctx.fillStyle = "#8B7355";
+    ctx.fillText(
+      "💳 Connect wallet in top-right corner",
+      canvas.width / 2,
+      canvas.height / 2 + fontSize + 10
+    );
+  }
+}
 
 window.addEventListener("keyup", reset, { once: true });
 window.addEventListener("touchstart", reset, { once: true });
