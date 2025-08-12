@@ -124,8 +124,6 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
         transition: 'all 0.3s ease'
       },
       contentStyle: {
-        maxHeight: `${containerMaxHeight - 40}px`,
-        overflowY: containerMaxHeight < height * 0.9 ? 'auto' : 'visible',
         padding: `${padding}px`,
         transition: 'all 0.3s ease'
       },
@@ -292,28 +290,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
             )}
           </div>
 
-          <div className="system-status">
-            <div className="status-bar">
-              <div className="status-item">
-                <span className="status-label">SYSTEMS:</span>
-                <span className="status-value online">ONLINE</span>
-              </div>
-              <div className="status-item">
-                <span className="status-label">SECURITY:</span>
-                <span className="status-value secure">SECURE</span>
-              </div>
-              <div className="status-item">
-                <span className="status-label">READY:</span>
-                <span className="status-value ready">TRUE</span>
-              </div>
-              {process.env.NODE_ENV === 'development' && (
-                <div className="status-item">
-                  <span className="status-label">SCREEN:</span>
-                  <span className="status-value ready">{windowDimensions.width}x{windowDimensions.height}</span>
-                </div>
-              )}
-            </div>
-          </div>
+
         </div>
       </div>
     </div>
