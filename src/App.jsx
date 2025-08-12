@@ -198,22 +198,16 @@ const App = () => {
                 ← Back to Network Selection
               </button>
               <div className="title">
-                🐰 Buddy Runner - Powered by Mega Buddies 🥕
+                Buddy Runner
               </div>
-              <div className="network-controls">
+              <div className="header-info">
                 {selectedNetwork && (
-                  <div className="current-network">
+                  <div className="current-network-info">
                     <span className="network-indicator">
-                      {selectedNetwork.emoji} Playing on: <strong>{selectedNetwork.name}</strong>
+                      {selectedNetwork.emoji} {selectedNetwork.name}
                     </span>
                   </div>
                 )}
-                <button 
-                  className="switch-network-button"
-                  onClick={handleBackToNetworkSelection}
-                >
-                  🔄 Switch Network
-                </button>
               </div>
             </div>
             <GameComponent selectedNetwork={selectedNetwork} />
