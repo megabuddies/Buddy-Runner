@@ -51,7 +51,7 @@
         40% { transform: translateY(-5px); }
         60% { transform: translateY(-3px); }
       }
-      .wallet-container {
+      .auth-container {
         position: absolute;
         top: 20px;
         right: 20px;
@@ -60,7 +60,7 @@
         align-items: flex-end;
         gap: 10px;
       }
-      .wallet-button {
+      .auth-button {
         background: linear-gradient(135deg, #7FBC7F 0%, #6B8E6B 100%);
         border: none;
         border-radius: 10px;
@@ -72,22 +72,22 @@
         box-shadow: 0 4px 15px rgba(127, 188, 127, 0.3);
         font-family: inherit;
       }
-      .wallet-button:hover {
+      .auth-button:hover {
         transform: translateY(-2px);
         box-shadow: 0 6px 20px rgba(127, 188, 127, 0.4);
       }
-      .wallet-button:disabled {
+      .auth-button:disabled {
         opacity: 0.6;
         cursor: not-allowed;
         transform: none;
       }
-      .wallet-button.connected {
+      .auth-button.connected {
         background: linear-gradient(135deg, #ff6b6b 0%, #ee5a52 100%);
       }
-      .wallet-button.connected:hover {
+      .auth-button.connected:hover {
         background: linear-gradient(135deg, #ff5252 0%, #e53935 100%);
       }
-      .wallet-info {
+      .user-info {
         background: rgba(255, 255, 255, 0.9);
         border: 2px solid #A4D4A4;
         border-radius: 10px;
@@ -98,7 +98,7 @@
         max-width: 200px;
         text-align: right;
       }
-      .wallet-address {
+      .user-address {
         font-family: monospace;
         font-size: 0.8em;
         margin-top: 5px;
@@ -138,31 +138,324 @@
       .hidden {
         display: none;
       }
+      .email-auth-form {
+        background: rgba(255, 255, 255, 0.95);
+        border: 2px solid #A4D4A4;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 10px 0;
+        box-shadow: 0 3px 10px rgba(164, 212, 164, 0.3);
+        min-width: 280px;
+      }
+      .email-auth-form input {
+        width: 100%;
+        padding: 10px;
+        margin: 8px 0;
+        border: 2px solid #e0e0e0;
+        border-radius: 8px;
+        font-family: inherit;
+        font-size: 14px;
+      }
+      .email-auth-form input:focus {
+        outline: none;
+        border-color: #7FBC7F;
+      }
+      .email-auth-form button {
+        width: 100%;
+        padding: 12px;
+        margin: 8px 0;
+        background: linear-gradient(135deg, #7FBC7F 0%, #6B8E6B 100%);
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-family: inherit;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+      .email-auth-form button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(127, 188, 127, 0.4);
+      }
+      .email-auth-form button:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
+      .email-auth-form .form-title {
+        text-align: center;
+        font-weight: bold;
+        color: #6B8E6B;
+        margin-bottom: 15px;
+      }
+      .email-auth-form .form-subtitle {
+        text-align: center;
+        color: #7A9E7A;
+        font-size: 0.9em;
+        margin-bottom: 15px;
+      }
     </style>
-    <!-- Privy-style Wallet Integration -->
-    <script src="privy-config.js" defer></script>
-    <script src="index.js" defer type="module"></script>
+    
+    <!-- React and ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Privy React Auth SDK -->
+    <script src="https://unpkg.com/@privy-io/react-auth@1.94.2/dist/index.umd.js"></script>
   </head>
   <body>
-    <!-- Wallet Connection UI -->
-    <div class="wallet-container">
-      <button id="walletButton" class="wallet-button">
-        Connect Wallet
-      </button>
-      <div id="walletInfo" class="wallet-info hidden">
-        <div id="walletStatus">Connected</div>
-        <div id="walletAddress" class="wallet-address"></div>
-      </div>
-    </div>
+    <!-- React App Root -->
+    <div id="root"></div>
+    
+    <!-- Game Canvas (will be moved into React component) -->
+    <canvas id="game" style="display: none;"></canvas>
+    
+    <!-- Privy React Integration -->
+    <script type="text/babel">
+      const { useState, useEffect } = React;
+      const { PrivyProvider, usePrivy, useLoginWithEmail, useEmbeddedWallet } = window.PrivyReactAuth;
 
-    <div class="title">
-      🐰 Buddy's Great Carrot Adventure 🥕
-    </div>
-    <canvas id="game"></canvas>
-    <div class="instructions">
-      <p class="main-instruction">📱 Press SPACE or tap to make Buddy jump!</p>
-      <p class="help-text">Help our brave bunny Buddy hop over the giant carrots and achieve the highest score!</p>
-      <p class="warning-text">Watch out for those sneaky garden carrots!</p>
-    </div>
+      // Auth Component
+      function AuthComponent() {
+        const { ready, authenticated, user, login, logout } = usePrivy();
+        const [showEmailForm, setShowEmailForm] = useState(false);
+        
+        if (!ready) {
+          return (
+            <div className="auth-container">
+              <button className="auth-button" disabled>
+                Loading...
+              </button>
+            </div>
+          );
+        }
+
+        if (authenticated && user) {
+          return (
+            <div className="auth-container">
+              <button 
+                className="auth-button connected"
+                onClick={logout}
+              >
+                Logout
+              </button>
+              <div className="user-info">
+                <div>Connected</div>
+                {user.wallet && (
+                  <div className="user-address">
+                    {user.wallet.address.slice(0, 6)}...{user.wallet.address.slice(-4)}
+                  </div>
+                )}
+                {user.email && (
+                  <div style={{fontSize: '0.8em', marginTop: '5px'}}>
+                    {user.email.address}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <div className="auth-container">
+            {!showEmailForm ? (
+              <button 
+                className="auth-button"
+                onClick={() => setShowEmailForm(true)}
+              >
+                Login / Sign Up
+              </button>
+            ) : (
+              <EmailAuthForm onCancel={() => setShowEmailForm(false)} />
+            )}
+          </div>
+        );
+      }
+
+      // Email Authentication Form
+      function EmailAuthForm({ onCancel }) {
+        const [email, setEmail] = useState('');
+        const [code, setCode] = useState('');
+        const [codeSent, setCodeSent] = useState(false);
+        const [loading, setLoading] = useState(false);
+        const { sendCode, loginWithCode } = useLoginWithEmail({
+          onComplete: (user) => {
+            console.log('User logged in:', user);
+            onCancel();
+          },
+          onError: (error) => {
+            console.error('Login error:', error);
+            alert('Login failed: ' + error.message);
+          }
+        });
+
+        const handleSendCode = async () => {
+          if (!email) return;
+          
+          setLoading(true);
+          try {
+            await sendCode({ email });
+            setCodeSent(true);
+          } catch (error) {
+            console.error('Error sending code:', error);
+            alert('Failed to send code: ' + error.message);
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        const handleLogin = async () => {
+          if (!code) return;
+          
+          setLoading(true);
+          try {
+            await loginWithCode({ code });
+          } catch (error) {
+            console.error('Error logging in:', error);
+            alert('Failed to login: ' + error.message);
+          } finally {
+            setLoading(false);
+          }
+        };
+
+        return (
+          <div className="email-auth-form">
+            <div className="form-title">Welcome to Buddy's Adventure!</div>
+            {!codeSent ? (
+              <>
+                <div className="form-subtitle">Enter your email to get started</div>
+                <input
+                  type="email"
+                  placeholder="Enter your email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                />
+                <button 
+                  onClick={handleSendCode}
+                  disabled={loading || !email}
+                >
+                  {loading ? 'Sending...' : 'Send Code'}
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="form-subtitle">Enter the code sent to {email}</div>
+                <input
+                  type="text"
+                  placeholder="Enter verification code"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  disabled={loading}
+                />
+                <button 
+                  onClick={handleLogin}
+                  disabled={loading || !code}
+                >
+                  {loading ? 'Verifying...' : 'Login'}
+                </button>
+                <button 
+                  onClick={() => {
+                    setCodeSent(false);
+                    setCode('');
+                  }}
+                  disabled={loading}
+                  style={{background: '#e0e0e0', color: '#666'}}
+                >
+                  Back
+                </button>
+              </>
+            )}
+            <button 
+              onClick={onCancel}
+              disabled={loading}
+              style={{background: '#e0e0e0', color: '#666'}}
+            >
+              Cancel
+            </button>
+          </div>
+        );
+      }
+
+      // Main Game Component
+      function GameComponent() {
+        const { authenticated, user } = usePrivy();
+        
+        useEffect(() => {
+          // Initialize the game when component mounts
+          const canvas = document.getElementById('game');
+          canvas.style.display = 'block';
+          
+          // Import and start the game
+          import('./game-logic.js').then(gameModule => {
+            if (gameModule.initGame) {
+              gameModule.initGame();
+            }
+          }).catch(error => {
+            console.warn('Game module not found, loading legacy game');
+            // Fallback to existing game logic
+            if (window.initGame) {
+              window.initGame();
+            }
+          });
+        }, []);
+
+        // Update game with Privy user state
+        useEffect(() => {
+          if (window.updatePrivyUser) {
+            window.updatePrivyUser(user, authenticated);
+          }
+        }, [user, authenticated]);
+
+        return (
+          <>
+            <div className="title">
+              🐰 Buddy's Great Carrot Adventure 🥕
+            </div>
+            <div className="instructions">
+              <p className="main-instruction">📱 Press SPACE or tap to make Buddy jump!</p>
+              <p className="help-text">Help our brave bunny Buddy hop over the giant carrots and achieve the highest score!</p>
+              <p className="warning-text">Watch out for those sneaky garden carrots!</p>
+              {authenticated && user && (
+                <p style={{marginTop: '10px', color: '#6B8E6B', fontWeight: 'bold'}}>
+                  🎮 Playing as: {user.email ? user.email.address : 'Authenticated User'}
+                </p>
+              )}
+            </div>
+          </>
+        );
+      }
+
+      // Main App Component
+      function App() {
+        return (
+          <PrivyProvider
+            appId="cme84q0og02aalc0bh9blzwa9"
+            config={{
+              appearance: {
+                theme: 'light',
+                accentColor: '#7FBC7F',
+              },
+              embeddedWallets: {
+                createOnLogin: 'users-without-wallets',
+              },
+              loginMethods: ['email'],
+            }}
+          >
+            <AuthComponent />
+            <GameComponent />
+          </PrivyProvider>
+        );
+      }
+
+      // Render the app
+      ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+
+    <!-- Load game logic -->
+    <script src="game-logic.js" defer></script>
   </body>
 </html>

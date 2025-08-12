@@ -1,3 +1,4 @@
+// Import existing game components
 import Player from "./Player.js";
 import Ground from "./Ground.js";
 import CarrotController from "./CarrotController.js";
@@ -37,6 +38,10 @@ let gameSpeed = GAME_SPEED_START;
 let gameOver = false;
 let hasAddedEventListenersForRestart = false;
 let waitingToStart = true;
+
+// Privy integration
+let privyUser = null;
+let isPrivyAuthenticated = false;
 
 function createSprites() {
   const playerWidthInGame = PLAYER_WIDTH * scaleRatio;
@@ -91,14 +96,6 @@ function setScreen() {
   createSprites();
 }
 
-setScreen();
-//Use setTimeout on Safari mobile rotation otherwise works fine on desktop
-window.addEventListener("resize", () => setTimeout(setScreen, 500));
-
-if (screen.orientation) {
-  screen.orientation.addEventListener("change", setScreen);
-}
-
 function getScaleRatio() {
   const screenHeight = Math.min(
     window.innerHeight,
@@ -119,7 +116,7 @@ function getScaleRatio() {
 }
 
 function showGameOver() {
-  showGameOverWithWallet();
+  showGameOverWithPrivy();
 }
 
 function setupGameReset() {
@@ -144,7 +141,7 @@ function reset() {
 }
 
 function showStartGameText() {
-  showStartGameTextWithWallet();
+  showStartGameTextWithPrivy();
 }
 
 function updateGameSpeed(frameTimeDelta) {
@@ -248,21 +245,8 @@ function gameLoop(currentTime) {
   requestAnimationFrame(gameLoop);
 }
 
-requestAnimationFrame(gameLoop);
-
-// Wallet integration functionality
-function getWalletInfo() {
-  if (window.privyWallet && window.privyWallet.isWalletConnected()) {
-    return {
-      address: window.privyWallet.getWalletAddress(),
-      user: window.privyWallet.getCurrentUser()
-    };
-  }
-  return null;
-}
-
-// Enhanced game over screen with wallet info
-function showGameOverWithWallet() {
+// Enhanced game over screen with Privy user info
+function showGameOverWithPrivy() {
   const fontSize = Math.floor(scaleRatio * 70);
   ctx.font = `${fontSize}px Verdana`;
   ctx.fillStyle = "red";
@@ -278,22 +262,29 @@ function showGameOverWithWallet() {
     canvas.height / 2 + restartFontSize
   );
 
-  // Show wallet info if connected
-  const walletInfo = getWalletInfo();
-  if (walletInfo) {
-    const walletFontSize = Math.floor(scaleRatio * 20);
-    ctx.font = `${walletFontSize}px monospace`;
+  // Show Privy user info if authenticated
+  if (isPrivyAuthenticated && privyUser) {
+    const userFontSize = Math.floor(scaleRatio * 20);
+    ctx.font = `${userFontSize}px Verdana`;
     ctx.fillStyle = "#6B8E6B";
+    
+    let userIdentifier = 'Authenticated User';
+    if (privyUser.email) {
+      userIdentifier = privyUser.email.address;
+    } else if (privyUser.wallet) {
+      userIdentifier = `${privyUser.wallet.address.slice(0, 6)}...${privyUser.wallet.address.slice(-4)}`;
+    }
+    
     ctx.fillText(
-      `Player: ${walletInfo.address.slice(0, 6)}...${walletInfo.address.slice(-4)}`,
+      `Player: ${userIdentifier}`,
       canvas.width / 2,
-      canvas.height / 2 + restartFontSize + walletFontSize + 10
+      canvas.height / 2 + restartFontSize + userFontSize + 10
     );
   }
 }
 
-// Enhanced start screen with wallet connection prompt
-function showStartGameTextWithWallet() {
+// Enhanced start screen with Privy authentication status
+function showStartGameTextWithPrivy() {
   const fontSize = Math.floor(scaleRatio * 40);
   ctx.font = `${fontSize}px Verdana`;
   ctx.fillStyle = "black";
@@ -304,34 +295,66 @@ function showStartGameTextWithWallet() {
     canvas.height / 2
   );
 
-  // Show wallet connection status
-  const walletInfo = getWalletInfo();
+  // Show authentication status
   const statusFontSize = Math.floor(scaleRatio * 20);
   ctx.font = `${statusFontSize}px Verdana`;
   
-  if (walletInfo) {
+  if (isPrivyAuthenticated && privyUser) {
     ctx.fillStyle = "#6B8E6B";
     ctx.fillText(
-      `🔗 Wallet Connected`,
+      `🔗 Authenticated`,
       canvas.width / 2,
       canvas.height / 2 + fontSize + 10
     );
     
-    ctx.font = `${Math.floor(scaleRatio * 16)}px monospace`;
+    let userIdentifier = 'User';
+    if (privyUser.email) {
+      userIdentifier = privyUser.email.address;
+    } else if (privyUser.wallet) {
+      userIdentifier = `${privyUser.wallet.address.slice(0, 8)}...${privyUser.wallet.address.slice(-6)}`;
+    }
+    
+    ctx.font = `${Math.floor(scaleRatio * 16)}px Verdana`;
     ctx.fillText(
-      `${walletInfo.address.slice(0, 8)}...${walletInfo.address.slice(-6)}`,
+      userIdentifier,
       canvas.width / 2,
       canvas.height / 2 + fontSize + statusFontSize + 20
     );
   } else {
     ctx.fillStyle = "#8B7355";
     ctx.fillText(
-      "💳 Connect wallet in top-right corner",
+      "💳 Sign in to save your progress",
       canvas.width / 2,
       canvas.height / 2 + fontSize + 10
     );
   }
 }
 
-window.addEventListener("keyup", reset, { once: true });
-window.addEventListener("touchstart", reset, { once: true });
+// Function to update Privy user info from React
+function updatePrivyUser(user, authenticated) {
+  privyUser = user;
+  isPrivyAuthenticated = authenticated;
+}
+
+// Initialize game
+function initGame() {
+  setScreen();
+  //Use setTimeout on Safari mobile rotation otherwise works fine on desktop
+  window.addEventListener("resize", () => setTimeout(setScreen, 500));
+
+  if (screen.orientation) {
+    screen.orientation.addEventListener("change", setScreen);
+  }
+
+  window.addEventListener("keyup", reset, { once: true });
+  window.addEventListener("touchstart", reset, { once: true });
+
+  requestAnimationFrame(gameLoop);
+}
+
+// Export functions for external use
+export { initGame, updatePrivyUser };
+
+// Also make available globally for compatibility
+window.initGame = initGame;
+window.updatePrivyUser = updatePrivyUser;
