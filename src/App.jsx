@@ -30,13 +30,13 @@ const App = () => {
         },
         rpcUrls: {
           default: {
-            http: ['https://rpc.megaeth.systems'],
+            http: ['https://rpc.sepolia.megaeth.systems'],
           },
         },
         blockExplorers: {
           default: {
             name: 'MegaETH Explorer',
-            url: 'https://explorer.megaeth.systems',
+            url: 'https://sepolia-explorer.megaeth.systems',
           },
         },
       },
@@ -72,13 +72,13 @@ const App = () => {
         },
         rpcUrls: {
           default: {
-            http: ['https://testnet-rpc.monad.xyz'],
+            http: ['https://testnet1.monad.xyz'],
           },
         },
         blockExplorers: {
           default: {
             name: 'Monad Explorer',
-            url: 'https://testnet-explorer.monad.xyz',
+            url: 'https://testnet1-explorer.monad.xyz',
           },
         },
       },
