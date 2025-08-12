@@ -138,7 +138,7 @@ const App = () => {
 
   const handleStartGame = (network) => {
     setSelectedNetwork(network);
-    setGameState('wallet-connection');
+    setGameState('game'); // Skip wallet-connection state
   };
 
   const handleWalletConnected = () => {
@@ -152,6 +152,12 @@ const App = () => {
 
   const handleBackToWalletConnection = () => {
     setGameState('wallet-connection');
+  };
+
+  const handleDisconnect = () => {
+    // Reset state and return to network selection
+    setGameState('network-selection');
+    setSelectedNetwork(null);
   };
 
   return (
@@ -179,7 +185,11 @@ const App = () => {
           </div>
         ) : (
           <>
-            <WalletComponent selectedNetwork={selectedNetwork} />
+            <WalletComponent 
+              selectedNetwork={selectedNetwork} 
+              onDisconnect={handleDisconnect}
+              disableNetworkControls={true}
+            />
             <div className="game-header">
               <button 
                 className="back-button"
