@@ -103,44 +103,36 @@
   gap: 15px;
   z-index: 2;
   width: 100%;
-  max-width: 900px;
-  margin: 0 auto;
+  height: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 /* Content containers */
 .scanner-content,
 .network-selection-content {
   text-align: center;
-  width: 100%;
-  max-width: 800px;
-  border: 2px solid var(--accent-color);
-  border-radius: 5px;
-  padding: 30px;
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  border-radius: 0;
+  padding: 40px 20px;
   background-color: rgba(18, 18, 24, 0.9);
-  box-shadow: 0 0 20px var(--accent-glow-color),
-              0 0 40px rgba(146, 147, 151, calc(var(--glow-intensity) * 0.3));
+  box-shadow: none;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
-  clip-path: polygon(0 0, 100% 0, 100% 95%, 95% 100%, 0 100%);
+  clip-path: none;
 }
 
-/* Border gradient and grid effects (shared) */
+/* Border gradient and grid effects (shared) - removed for fullscreen */
 .scanner-content::before,
 .network-selection-content::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 2px solid transparent;
-  border-image: linear-gradient(to right, var(--accent-color), var(--secondary-color)) 1;
-  pointer-events: none;
-  z-index: 2;
+  display: none;
 }
 
 .scanner-content::after,
@@ -208,6 +200,7 @@
 
 /* Logo section (shared) */
 .logo-section {
+  margin-top: 40px;
   margin-bottom: 30px;
   z-index: 4;
   position: relative;
@@ -707,8 +700,9 @@
 @media (max-width: 768px) {
   .scanner-content,
   .network-selection-content {
-    padding: 25px;
-    max-width: 95vw;
+    padding: 25px 20px;
+    width: 100vw;
+    height: 100vh;
   }
   
   .logo-text {
@@ -737,7 +731,9 @@
 @media (max-width: 480px) {
   .scanner-content,
   .network-selection-content {
-    padding: 20px;
+    padding: 20px 15px;
+    width: 100vw;
+    height: 100vh;
   }
   
   .logo-text {

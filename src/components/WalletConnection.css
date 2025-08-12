@@ -106,36 +106,26 @@
 .preloader-content,
 .wallet-connection-content {
   text-align: center;
-  width: 400px;
-  max-width: 90vw;
-  border: 2px solid var(--accent-color);
-  border-radius: 5px;
-  padding: 30px;
+  width: 100vw;
+  height: 100vh;
+  border: none;
+  border-radius: 0;
+  padding: 40px;
   background-color: rgba(18, 18, 24, 0.9);
-  box-shadow: 0 0 20px var(--accent-glow-color),
-              0 0 40px rgba(146, 147, 151, calc(var(--glow-intensity) * 0.3));
+  box-shadow: none;
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
-  clip-path: polygon(0 0, 100% 0, 100% 95%, 95% 100%, 0 100%);
+  clip-path: none;
 }
 
-/* Border gradient effect */
+/* Border gradient effect - removed for fullscreen */
 .preloader-content::before,
 .wallet-connection-content::before {
-  content: '';
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 2px solid transparent;
-  border-image: linear-gradient(to right, var(--accent-color), var(--secondary-color)) 1;
-  pointer-events: none;
-  z-index: 2;
+  display: none;
 }
 
 /* Monitor grid effect */
@@ -550,8 +540,9 @@
 @media (max-width: 768px) {
   .preloader-content,
   .wallet-connection-content {
-    width: 320px;
-    padding: 25px;
+    width: 100vw;
+    height: 100vh;
+    padding: 25px 20px;
   }
   
   .logo-text {
@@ -575,8 +566,9 @@
 @media (max-width: 480px) {
   .preloader-content,
   .wallet-connection-content {
-    width: 280px;
-    padding: 20px;
+    width: 100vw;
+    height: 100vh;
+    padding: 20px 15px;
   }
   
   .logo-text {
