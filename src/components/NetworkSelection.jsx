@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLogin, usePrivy } from '@privy-io/react-auth';
 import './NetworkSelection.css';
 
 const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
@@ -9,6 +10,9 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
     width: window.innerWidth,
     height: window.innerHeight
   });
+
+  const { user, authenticated } = usePrivy();
+  const { login } = useLogin();
 
   const networks = [
     { 
@@ -147,9 +151,24 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
 
   const handleStartGame = () => {
     if (selectedNetwork) {
-      onStartGame(selectedNetwork);
+      if (authenticated && user) {
+        // If already authenticated, go directly to game
+        onStartGame(selectedNetwork);
+      } else {
+        // If not authenticated, trigger Privy login first
+        onNetworkSelect(selectedNetwork);
+        login();
+      }
     }
   };
+
+  // Check if user gets authenticated after login
+  useEffect(() => {
+    if (authenticated && user && selectedNetwork) {
+      // Auto-proceed to game when authentication completes
+      onStartGame(selectedNetwork);
+    }
+  }, [authenticated, user, selectedNetwork, onStartGame]);
 
   if (isInitializing) {
     return (

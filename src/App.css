@@ -139,8 +139,168 @@ a:hover {
   top: 20px;
   right: 20px;
   display: flex;
+  flex-direction: column;
   gap: 10px;
   z-index: 1000;
+}
+
+.wallet-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.wallet-button {
+  background: transparent;
+  color: var(--accent-color);
+  border: 2px solid var(--accent-color);
+  padding: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 90% 100%, 0 100%);
+  box-shadow: 0 0 5px rgba(146, 147, 151, 0.3);
+  min-width: 120px;
+}
+
+.wallet-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(146, 147, 151, 0.4), transparent);
+  transition: 0.5s;
+}
+
+.wallet-button:hover {
+  background-color: rgba(146, 147, 151, 0.1);
+  box-shadow: 0 5px 15px rgba(146, 147, 151, 0.3);
+  border-color: var(--secondary-color);
+  color: var(--secondary-color);
+}
+
+.wallet-button:hover::before {
+  left: 100%;
+}
+
+.wallet-button:active {
+  transform: scale(0.98);
+}
+
+.wallet-button.connected {
+  background: linear-gradient(45deg, var(--accent-color), var(--secondary-color));
+  color: var(--background-color);
+  border: 2px solid var(--secondary-color);
+  font-weight: bold;
+}
+
+.wallet-button.connected:hover {
+  background: linear-gradient(45deg, var(--secondary-color), var(--accent-color));
+  box-shadow: 0 0 15px var(--secondary-glow-color);
+}
+
+.network-selector {
+  position: relative;
+}
+
+.network-button {
+  background: transparent;
+  color: var(--accent-color);
+  border: 2px solid var(--accent-color);
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 90% 100%, 0 100%);
+  box-shadow: 0 0 5px rgba(146, 147, 151, 0.3);
+  min-width: 140px;
+}
+
+.network-button::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(146, 147, 151, 0.4), transparent);
+  transition: 0.5s;
+}
+
+.network-button:hover {
+  background-color: rgba(146, 147, 151, 0.1);
+  box-shadow: 0 5px 15px rgba(146, 147, 151, 0.3);
+  border-color: var(--secondary-color);
+  color: var(--secondary-color);
+}
+
+.network-button:hover::before {
+  left: 100%;
+}
+
+.network-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.network-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--card-background);
+  border: 2px solid var(--accent-color);
+  border-top: none;
+  clip-path: polygon(0 0, 100% 0, 100% 70%, 90% 100%, 0 100%);
+  z-index: 1001;
+  min-width: 200px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+}
+
+.network-option {
+  display: block;
+  width: 100%;
+  background: transparent;
+  color: var(--text-color);
+  border: none;
+  padding: 10px 15px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.3s ease;
+  border-bottom: 1px solid rgba(146, 147, 151, 0.2);
+}
+
+.network-option:hover {
+  background: rgba(146, 147, 151, 0.1);
+  color: var(--secondary-color);
+}
+
+.network-option.active {
+  background: rgba(19, 145, 255, 0.2);
+  color: var(--secondary-color);
+  font-weight: bold;
+}
+
+.network-option.selected-game-network {
+  background: rgba(146, 147, 151, 0.2);
+  color: var(--accent-color);
+}
+
+.network-option:last-child {
+  border-bottom: none;
 }
 
 .wallet-info {
@@ -148,16 +308,18 @@ a:hover {
   flex-direction: column;
   align-items: flex-end;
   gap: 5px;
-  padding: 12px 16px;
+  padding: 8px 12px;
   background: var(--card-background);
   border: 2px solid var(--accent-color);
   border-radius: 0;
   font-family: var(--font-mono);
-  font-size: 14px;
+  font-size: 11px;
   box-shadow: 0 0 10px rgba(146, 147, 151, 0.3);
   position: relative;
   overflow: hidden;
   clip-path: polygon(0 0, 100% 0, 100% 70%, 90% 100%, 0 100%);
+  margin-top: 5px;
+  max-width: 250px;
 }
 
 .wallet-info::before {
@@ -185,8 +347,25 @@ a:hover {
 .wallet-address {
   color: var(--text-color);
   opacity: 0.8;
-  font-size: 12px;
+  font-size: 10px;
   font-family: var(--font-mono);
+}
+
+.wallet-status {
+  color: var(--secondary-color);
+  font-weight: bold;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.wallet-user {
+  color: var(--accent-color);
+  font-size: 10px;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .button {
@@ -571,6 +750,27 @@ a:hover {
     top: auto;
     right: auto;
     margin-bottom: 20px;
+    align-items: flex-end;
+  }
+  
+  .wallet-controls {
+    flex-direction: column;
+    gap: 8px;
+    align-items: stretch;
+  }
+  
+  .wallet-button,
+  .network-button {
+    font-size: 11px;
+    padding: 6px 12px;
+    min-width: 100px;
+  }
+  
+  .network-dropdown {
+    position: relative;
+    top: 0;
+    right: auto;
+    margin-top: 5px;
   }
   
   .leaderboard-container {
@@ -626,9 +826,23 @@ a:hover {
     font-size: 12px;
   }
   
+  .wallet-button,
+  .network-button {
+    padding: 6px 10px;
+    font-size: 10px;
+    min-width: 90px;
+  }
+  
   .wallet-info {
-    padding: 10px 12px;
-    font-size: 12px;
+    padding: 6px 8px;
+    font-size: 10px;
+    max-width: 200px;
+  }
+  
+  .wallet-status,
+  .wallet-user,
+  .wallet-address {
+    font-size: 9px;
   }
   
   .stat-value {

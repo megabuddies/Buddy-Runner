@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
 
-const WalletComponent = ({ selectedNetwork }) => {
+const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls = false }) => {
   const { user, authenticated, ready } = usePrivy();
   const { login } = useLogin();
   const { logout } = useLogout();
@@ -42,6 +42,10 @@ const WalletComponent = ({ selectedNetwork }) => {
   const handleWalletAction = () => {
     if (authenticated) {
       logout();
+      // Call disconnect callback if provided
+      if (onDisconnect) {
+        onDisconnect();
+      }
     } else {
       login();
     }
@@ -211,7 +215,7 @@ const WalletComponent = ({ selectedNetwork }) => {
           {authenticated ? 'Disconnect' : 'Connect Wallet'}
         </button>
         
-        {authenticated && wallets && wallets.length > 0 && (
+        {authenticated && wallets && wallets.length > 0 && !disableNetworkControls && (
           <div className="network-selector">
             <button 
               className="network-button"
