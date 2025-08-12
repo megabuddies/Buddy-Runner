@@ -108,11 +108,12 @@ a:hover {
   margin-bottom: 25px;
   font-family: var(--font-display);
   font-weight: normal;
-  font-size: clamp(1.5rem, 4vw, 2.5rem);
-  color: var(--accent-color);
-  text-shadow: 0 0 15px var(--accent-glow-color), 
-               0 0 30px rgba(146, 147, 151, 0.5),
-               0 0 45px rgba(146, 147, 151, 0.3);
+  font-size: clamp(1.2rem, 3vw, 2rem);
+  background: linear-gradient(135deg, var(--accent-color) 0%, var(--secondary-color) 50%, var(--accent-color) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(146, 147, 151, 0.6)) drop-shadow(0 0 20px rgba(19, 145, 255, 0.4));
   animation: titlePulse 4s infinite alternate;
   letter-spacing: 3px;
   text-transform: uppercase;
@@ -142,6 +143,7 @@ a:hover {
   flex-direction: column;
   gap: 10px;
   z-index: 1000;
+  align-items: flex-end;
 }
 
 .wallet-controls {
@@ -582,6 +584,23 @@ a:hover {
   clip-path: polygon(0 0, 100% 0, 100% 95%, 95% 100%, 0 100%);
 }
 
+.header-info {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.current-network-info {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(146, 147, 151, 0.1);
+  border: 1px solid var(--accent-color);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--accent-color);
+}
+
 .game-stats {
   display: flex;
   gap: 30px;
@@ -922,6 +941,10 @@ a:hover {
     flex-direction: column;
     gap: 20px;
     text-align: center;
+  }
+  
+  .header-info {
+    justify-content: center;
   }
   
   .game-stats {
