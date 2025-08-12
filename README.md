@@ -1,12 +1,19 @@
-# 🐰 Buddy's Great Carrot Adventure 🥕
+# 🐰 Buddy's Great Carrot Adventure 🥕⛓️
 
-A fun jumping game featuring Buddy the bunny, now with Web3 wallet integration powered by **Privy**!
+A **fully on-chain** jumping game featuring Buddy the bunny! Every jump is a blockchain transaction, showcasing the power of high-speed networks like **MegaETH** (100,000 TPS).
+
+**🚀 Experience real-time blockchain gaming - just like Crossy Fluffle!**
 
 ## 🚀 Features
 
-- **Fun Gameplay**: Help Buddy jump over carrots and achieve high scores
+- **On-Chain Gameplay**: Every jump sends a blockchain transaction
+- **Multi-Network Support**: MegaETH Testnet, Base Sepolia, Monad Testnet
+- **Real-Time Transactions**: Experience the speed of modern blockchains
 - **Web3 Integration**: Connect wallets through Privy (email, phone, or wallet)
-- **Modern Tech Stack**: Built with React and Vite
+- **Transaction Queue**: Smart batching system for rapid movements
+- **On-Chain Scoring**: Persistent high scores stored on blockchain
+- **Network Comparison**: Feel the difference between block times
+- **Modern Tech Stack**: Built with React, Vite, and ethers.js
 - **Responsive Design**: Works on desktop and mobile devices
 - **Beautiful UI**: Clean, modern interface with smooth animations
 

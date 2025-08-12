@@ -20,6 +20,69 @@ const App = () => {
     loginMethods: ['email', 'wallet'],
     supportedChains: [
       {
+        id: 12227332, // MegaETH Testnet
+        name: 'MegaETH Testnet',
+        network: 'megaeth-testnet',
+        nativeCurrency: {
+          name: 'Ether',
+          symbol: 'ETH',
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: {
+            http: ['https://rpc.megaeth.systems'],
+          },
+        },
+        blockExplorers: {
+          default: {
+            name: 'MegaETH Explorer',
+            url: 'https://explorer.megaeth.systems',
+          },
+        },
+      },
+      {
+        id: 84532, // Base Sepolia
+        name: 'Base Sepolia',
+        network: 'base-sepolia',
+        nativeCurrency: {
+          name: 'Ether',
+          symbol: 'ETH',
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: {
+            http: ['https://sepolia.base.org'],
+          },
+        },
+        blockExplorers: {
+          default: {
+            name: 'Base Sepolia Explorer',
+            url: 'https://sepolia.basescan.org',
+          },
+        },
+      },
+      {
+        id: 41454, // Monad Testnet
+        name: 'Monad Testnet',
+        network: 'monad-testnet',
+        nativeCurrency: {
+          name: 'Monad',
+          symbol: 'MON',
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: {
+            http: ['https://testnet-rpc.monad.xyz'],
+          },
+        },
+        blockExplorers: {
+          default: {
+            name: 'Monad Explorer',
+            url: 'https://testnet-explorer.monad.xyz',
+          },
+        },
+      },
+      {
         id: 1, // Ethereum Mainnet
         name: 'Ethereum',
         network: 'homestead',

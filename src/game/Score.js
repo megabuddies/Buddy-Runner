@@ -2,10 +2,11 @@ export default class Score {
   score = 0;
   HIGH_SCORE_KEY = "highScore";
 
-  constructor(ctx, scaleRatio) {
+  constructor(ctx, scaleRatio, blockchainStatus = null) {
     this.ctx = ctx;
     this.canvas = ctx.canvas;
     this.scaleRatio = scaleRatio;
+    this.blockchainStatus = blockchainStatus;
   }
 
   update(frameTimeDelta) {
@@ -38,5 +39,48 @@ export default class Score {
 
     this.ctx.fillText(scorePadded, scoreX, y);
     this.ctx.fillText(`HI ${highScorePadded}`, highScoreX, y);
+
+    // Draw blockchain status if available
+    if (this.blockchainStatus) {
+      const blockchainY = y + 30 * this.scaleRatio;
+      const smallFontSize = 12 * this.scaleRatio;
+      this.ctx.font = `${smallFontSize}px monospace`;
+      
+      // Network name
+      this.ctx.fillStyle = this.blockchainStatus.contractAvailable ? "#7FBC7F" : "#FFA500";
+      this.ctx.fillText(
+        `⛓️ ${this.blockchainStatus.networkName}`,
+        10 * this.scaleRatio,
+        blockchainY
+      );
+
+      // On-chain movements
+      this.ctx.fillStyle = "#4169E1";
+      this.ctx.fillText(
+        `Moves: ${this.blockchainStatus.totalMovements}`,
+        10 * this.scaleRatio,
+        blockchainY + 20 * this.scaleRatio
+      );
+
+      // Pending transactions
+      if (this.blockchainStatus.pendingTransactions > 0) {
+        this.ctx.fillStyle = "#FF6347";
+        this.ctx.fillText(
+          `Pending: ${this.blockchainStatus.pendingTransactions}`,
+          10 * this.scaleRatio,
+          blockchainY + 40 * this.scaleRatio
+        );
+      }
+
+      // On-chain score (if available)
+      if (this.blockchainStatus.onChainScore > 0) {
+        this.ctx.fillStyle = "#32CD32";
+        this.ctx.fillText(
+          `On-chain: ${this.blockchainStatus.onChainScore}`,
+          10 * this.scaleRatio,
+          blockchainY + 60 * this.scaleRatio
+        );
+      }
+    }
   }
 }

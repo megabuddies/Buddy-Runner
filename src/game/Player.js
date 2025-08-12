@@ -13,7 +13,7 @@ export default class Player {
   showDust = false;
   dustTimer = 0;
 
-  constructor(ctx, width, height, minJumpHeight, maxJumpHeight, scaleRatio) {
+  constructor(ctx, width, height, minJumpHeight, maxJumpHeight, scaleRatio, onMovementCallback = null) {
     this.ctx = ctx;
     this.canvas = ctx.canvas;
     this.width = width;
@@ -21,6 +21,7 @@ export default class Player {
     this.minJumpHeight = minJumpHeight;
     this.maxJumpHeight = maxJumpHeight;
     this.scaleRatio = scaleRatio;
+    this.onMovementCallback = onMovementCallback;
 
     this.x = 10 * scaleRatio;
     this.y = this.canvas.height - this.height - 1.5 * scaleRatio;
@@ -90,6 +91,12 @@ export default class Player {
 
   jump(frameTimeDelta) {
     if (this.jumpPressed) {
+      if (!this.jumpInProgress) {
+        // Trigger on-chain movement when starting a new jump
+        if (this.onMovementCallback) {
+          this.onMovementCallback();
+        }
+      }
       this.jumpInProgress = true;
     }
 

@@ -1,14 +1,24 @@
-import React, { useEffect, useRef } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
+import React, { useEffect, useRef, useState } from 'react';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
+import blockchainService from '../services/blockchainService.js';
 
 const GameComponent = () => {
   const canvasRef = useRef(null);
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
+  const { wallets } = useWallets();
+  const [blockchainStatus, setBlockchainStatus] = useState({
+    initialized: false,
+    networkName: 'Unknown',
+    contractAvailable: false,
+    pendingTransactions: 0,
+    totalMovements: 0,
+    onChainScore: 0
+  });
 
   const GAME_SPEED_START = 1;
   const GAME_SPEED_INCREMENT = 0.00001;
@@ -27,6 +37,67 @@ const GameComponent = () => {
     { width: 98 / 1.5, height: 100 / 1.5, image: "/images/carrot_2.png" },
     { width: 68 / 1.5, height: 70 / 1.5, image: "/images/carrot_3.png" },
   ];
+
+  // Initialize blockchain service
+  const initializeBlockchain = async () => {
+    if (!authenticated || !wallets || wallets.length === 0) {
+      setBlockchainStatus(prev => ({ ...prev, initialized: false }));
+      return;
+    }
+
+    try {
+      const wallet = wallets[0]; // Use first available wallet
+      const success = await blockchainService.initialize(wallet);
+      
+      setBlockchainStatus({
+        initialized: success,
+        networkName: blockchainService.getNetworkName(),
+        contractAvailable: blockchainService.isContractAvailable(),
+        pendingTransactions: 0,
+        totalMovements: 0,
+        onChainScore: 0
+      });
+
+      // Start game session on blockchain if contract is available
+      if (success && blockchainService.isContractAvailable()) {
+        await blockchainService.startGame();
+      }
+    } catch (error) {
+      console.error('Failed to initialize blockchain:', error);
+      setBlockchainStatus(prev => ({ ...prev, initialized: false }));
+    }
+  };
+
+  // Handle on-chain movement
+  const handleOnChainMovement = async () => {
+    if (!blockchainStatus.initialized) return;
+
+    try {
+      const result = await blockchainService.makeMovement();
+      
+      setBlockchainStatus(prev => ({
+        ...prev,
+        totalMovements: prev.totalMovements + 1,
+        pendingTransactions: blockchainService.getPendingTransactions()
+      }));
+
+      // Update on-chain score if available
+      if (result.success && !result.simulated) {
+        const walletAddress = getWalletAddress();
+        if (walletAddress) {
+          const session = await blockchainService.getPlayerSession(walletAddress);
+          if (session) {
+            setBlockchainStatus(prev => ({
+              ...prev,
+              onChainScore: parseInt(session.score)
+            }));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to process on-chain movement:', error);
+    }
+  };
 
   const getWalletInfo = () => {
     if (!authenticated || !user) return null;
@@ -67,6 +138,11 @@ const GameComponent = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
+    // Initialize blockchain when wallet is connected
+    if (authenticated && wallets && wallets.length > 0) {
+      initializeBlockchain();
+    }
+
     const ctx = canvas.getContext('2d');
     let animationId;
 
@@ -100,7 +176,8 @@ const GameComponent = () => {
         playerHeightInGame,
         minJumpHeightInGame,
         maxJumpHeightInGame,
-        game.scaleRatio
+        game.scaleRatio,
+        handleOnChainMovement
       );
 
       game.ground = new Ground(
@@ -128,7 +205,7 @@ const GameComponent = () => {
         GROUND_AND_CARROT_SPEED
       );
 
-      game.score = new Score(ctx, game.scaleRatio);
+      game.score = new Score(ctx, game.scaleRatio, blockchainStatus);
     }
 
     function setScreen() {

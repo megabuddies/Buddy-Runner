@@ -1,10 +1,18 @@
-import React from 'react';
-import { useLogin, useLogout, usePrivy } from '@privy-io/react-auth';
+import React, { useState } from 'react';
+import { useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
 
 const WalletComponent = () => {
   const { user, authenticated, ready } = usePrivy();
   const { login } = useLogin();
   const { logout } = useLogout();
+  const { wallets } = useWallets();
+  const [showNetworks, setShowNetworks] = useState(false);
+
+  const networks = [
+    { id: 12227332, name: 'MegaETH Testnet', emoji: '⚡' },
+    { id: 84532, name: 'Base Sepolia', emoji: '🔵' },
+    { id: 41454, name: 'Monad Testnet', emoji: '🟣' },
+  ];
 
   const handleWalletAction = () => {
     if (authenticated) {
@@ -12,6 +20,24 @@ const WalletComponent = () => {
     } else {
       login();
     }
+  };
+
+  const switchNetwork = async (chainId) => {
+    if (!wallets || wallets.length === 0) return;
+    
+    try {
+      const wallet = wallets[0];
+      await wallet.switchChain(chainId);
+      setShowNetworks(false);
+    } catch (error) {
+      console.error('Failed to switch network:', error);
+    }
+  };
+
+  const getCurrentNetwork = () => {
+    if (!wallets || wallets.length === 0) return null;
+    const wallet = wallets[0];
+    return networks.find(network => network.id === wallet.chainId);
   };
 
   const formatAddress = (address) => {
@@ -56,12 +82,45 @@ const WalletComponent = () => {
 
   return (
     <div className="wallet-container">
-      <button 
-        className={`wallet-button ${authenticated ? 'connected' : ''}`}
-        onClick={handleWalletAction}
-      >
-        {authenticated ? 'Disconnect' : 'Connect Wallet'}
-      </button>
+      <div className="wallet-controls">
+        <button 
+          className={`wallet-button ${authenticated ? 'connected' : ''}`}
+          onClick={handleWalletAction}
+        >
+          {authenticated ? 'Disconnect' : 'Connect Wallet'}
+        </button>
+        
+        {authenticated && wallets && wallets.length > 0 && (
+          <div className="network-selector">
+            <button 
+              className="network-button"
+              onClick={() => setShowNetworks(!showNetworks)}
+            >
+              {getCurrentNetwork() ? (
+                `${getCurrentNetwork().emoji} ${getCurrentNetwork().name}`
+              ) : (
+                '🌐 Select Network'
+              )}
+            </button>
+            
+            {showNetworks && (
+              <div className="network-dropdown">
+                {networks.map(network => (
+                  <button
+                    key={network.id}
+                    className={`network-option ${
+                      getCurrentNetwork()?.id === network.id ? 'active' : ''
+                    }`}
+                    onClick={() => switchNetwork(network.id)}
+                  >
+                    {network.emoji} {network.name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
       
       {authenticated && (
         <div className="wallet-info">
