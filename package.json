@@ -1,0 +1,31 @@
+{
+  "name": "buddy-carrot-adventure-privy",
+  "version": "1.0.0",
+  "description": "Buddy's Great Carrot Adventure with Privy Wallet Integration",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "serve": "serve -s dist"
+  },
+  "dependencies": {
+    "@privy-io/react-auth": "^1.82.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.1.0",
+    "serve": "^14.2.1"
+  },
+  "keywords": [
+    "react",
+    "privy",
+    "web3",
+    "wallet",
+    "game"
+  ],
+  "author": "",
+  "license": "MIT"
+}
