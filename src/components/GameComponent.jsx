@@ -534,30 +534,6 @@ const GameComponent = ({ selectedNetwork }) => {
         className="game-canvas"
       />
       <div className="game-ui-overlay">
-        <div className="blockchain-status">
-          <div className="status-item">
-            <span className="status-label">NETWORK:</span>
-            <span className="status-value">{blockchainStatus.networkName}</span>
-          </div>
-          <div className="status-item">
-            <span className="status-label">BLOCKCHAIN:</span>
-            <span className={`status-value ${blockchainStatus.initialized ? 'online' : 'offline'}`}>
-              {blockchainStatus.initialized ? 'ACTIVE' : 'SIMULATED'}
-            </span>
-          </div>
-          {blockchainStatus.totalMovements > 0 && (
-            <div className="status-item">
-              <span className="status-label">ON-CHAIN MOVES:</span>
-              <span className="status-value">{blockchainStatus.totalMovements}</span>
-            </div>
-          )}
-          {blockchainStatus.pendingTransactions > 0 && (
-            <div className="status-item">
-              <span className="status-label">PENDING TX:</span>
-              <span className="status-value pending">{blockchainStatus.pendingTransactions}</span>
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
