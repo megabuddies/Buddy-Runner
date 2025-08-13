@@ -13,7 +13,9 @@ export default class Carrot {
   }
 
   draw() {
-    this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    if (this.image && this.image.complete && this.image.naturalWidth > 0) {
+      this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    }
   }
 
   collideWith(sprite) {

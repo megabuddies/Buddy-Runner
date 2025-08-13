@@ -29,16 +29,20 @@ export default class Player {
 
     this.standingStillImage = new Image();
     this.standingStillImage.src = "images/buddy_standing_still.png";
+    this.standingStillImage.onerror = () => console.error('Failed to load buddy_standing_still.png');
     this.image = this.standingStillImage;
 
     this.jumpingImage = new Image();
     this.jumpingImage.src = "images/buddy_standing_still_eye_closed.png";
+    this.jumpingImage.onerror = () => console.error('Failed to load buddy_standing_still_eye_closed.png');
 
     const buddyRunImage1 = new Image();
     buddyRunImage1.src = "images/buddy_run1.png";
+    buddyRunImage1.onerror = () => console.error('Failed to load buddy_run1.png');
 
     const buddyRunImage2 = new Image();
     buddyRunImage2.src = "images/buddy_run2.png";
+    buddyRunImage2.onerror = () => console.error('Failed to load buddy_run2.png');
 
     this.buddyRunImages.push(buddyRunImage1);
     this.buddyRunImages.push(buddyRunImage2);
@@ -151,7 +155,9 @@ export default class Player {
   }
 
   draw() {
-    this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    if (this.image && this.image.complete && this.image.naturalWidth > 0) {
+      this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
+    }
     
     // Draw dust effect when landing
     if (this.showDust) {
