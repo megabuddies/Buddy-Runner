@@ -150,6 +150,15 @@ export default class Player {
     this.walkAnimationTimer -= frameTimeDelta * gameSpeed;
   }
 
+  get collisionBox() {
+    return {
+      x: this.x,
+      y: this.y,
+      width: this.width,
+      height: this.height
+    };
+  }
+
   draw() {
     this.ctx.drawImage(this.image, this.x, this.y, this.width, this.height);
     

@@ -61,6 +61,10 @@ export default class CarrotController {
     this.carrots = this.carrots.filter((carrot) => carrot.x > -carrot.width);
   }
 
+  get collisionBoxes() {
+    return this.carrots.map(carrot => carrot.collisionBox);
+  }
+
   draw() {
     this.carrots.forEach((carrot) => carrot.draw());
   }

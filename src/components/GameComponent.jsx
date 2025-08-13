@@ -212,7 +212,11 @@ const GameComponent = ({ selectedNetwork }) => {
         game.scaleRatio
       );
 
-      const carrotImages = CARROT_CONFIG.map(carrot => carrot.image);
+      const carrotImages = CARROT_CONFIG.map(carrot => {
+        const img = new Image();
+        img.src = carrot.image;
+        return img;
+      });
       const carrotSizes = CARROT_CONFIG.map(carrot => ({
         width: carrot.width * game.scaleRatio,
         height: carrot.height * game.scaleRatio
@@ -482,6 +486,7 @@ const GameComponent = ({ selectedNetwork }) => {
         // Check collision
         if (checkCollision()) {
           game.gameOver = true;
+          game.score.setHighScore();
           setupGameReset();
         }
 
