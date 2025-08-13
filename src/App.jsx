@@ -191,16 +191,20 @@ const App = () => {
               disableNetworkControls={true}
             />
             <div className="game-header">
-              <button 
-                className="back-button"
-                onClick={handleBackToNetworkSelection}
-              >
-                ← Back to Network Selection
-              </button>
-              <div className="title">
-                Buddy Runner
+              <div className="header-left">
+                <button 
+                  className="back-button"
+                  onClick={handleBackToNetworkSelection}
+                >
+                  ← Back to Network Selection
+                </button>
               </div>
-              <div className="header-info">
+              <div className="header-center">
+                <div className="title">
+                  Buddy Runner
+                </div>
+              </div>
+              <div className="header-right">
                 {selectedNetwork && (
                   <div className="current-network-info">
                     <span className="network-indicator">
