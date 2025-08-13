@@ -1,6 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import { imageAssets } from '../assets/images.js'
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
@@ -35,9 +34,9 @@ const GameComponent = ({ selectedNetwork }) => {
   const GROUND_AND_CARROT_SPEED = 0.5;
 
   const CARROT_CONFIG = [
-    { width: 48 / 1.5, height: 100 / 1.5, imageSrc: imageAssets.carrot1 },
-    { width: 98 / 1.5, height: 100 / 1.5, imageSrc: imageAssets.carrot2 },
-    { width: 68 / 1.5, height: 70 / 1.5, imageSrc: imageAssets.carrot3 },
+    { width: 48 / 1.5, height: 100 / 1.5, imageSrc: "./images/carrot_1.png" },
+    { width: 98 / 1.5, height: 100 / 1.5, imageSrc: "./images/carrot_2.png" },
+    { width: 68 / 1.5, height: 70 / 1.5, imageSrc: "./images/carrot_3.png" },
   ];
 
   // Initialize blockchain service

@@ -1,5 +1,3 @@
-import { imageAssets } from '../assets/images.js'
-
 export default class Ground {
   constructor(ctx, width, height, speed, scaleRatio) {
     this.ctx = ctx;
@@ -13,7 +11,7 @@ export default class Ground {
     this.y = this.canvas.height - this.height;
 
     this.groundImage = new Image();
-    this.groundImage.src = imageAssets.ground;
+    this.groundImage.src = "./images/ground.png";
     this.groundImage.onerror = () => console.error('Failed to load ground.png');
   }
 
