@@ -1,3 +1,9 @@
+// Import images as modules so Vite can properly handle them
+import buddyStandingStillImg from '/images/buddy_standing_still.png?url';
+import buddyStandingStillEyeClosedImg from '/images/buddy_standing_still_eye_closed.png?url';
+import buddyRun1Img from '/images/buddy_run1.png?url';
+import buddyRun2Img from '/images/buddy_run2.png?url';
+
 export default class Player {
   WALK_ANIMATION_TIMER = 180;
   walkAnimationTimer = this.WALK_ANIMATION_TIMER;
@@ -28,20 +34,20 @@ export default class Player {
     this.yStandingPosition = this.y;
 
     this.standingStillImage = new Image();
-    this.standingStillImage.src = "/images/buddy_standing_still.png";
+    this.standingStillImage.src = buddyStandingStillImg;
     this.standingStillImage.onerror = () => console.error('Failed to load buddy_standing_still.png');
     this.image = this.standingStillImage;
 
     this.jumpingImage = new Image();
-    this.jumpingImage.src = "/images/buddy_standing_still_eye_closed.png";
+    this.jumpingImage.src = buddyStandingStillEyeClosedImg;
     this.jumpingImage.onerror = () => console.error('Failed to load buddy_standing_still_eye_closed.png');
 
     const buddyRunImage1 = new Image();
-    buddyRunImage1.src = "/images/buddy_run1.png";
+    buddyRunImage1.src = buddyRun1Img;
     buddyRunImage1.onerror = () => console.error('Failed to load buddy_run1.png');
 
     const buddyRunImage2 = new Image();
-    buddyRunImage2.src = "/images/buddy_run2.png";
+    buddyRunImage2.src = buddyRun2Img;
     buddyRunImage2.onerror = () => console.error('Failed to load buddy_run2.png');
 
     this.buddyRunImages.push(buddyRunImage1);

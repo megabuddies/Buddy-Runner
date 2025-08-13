@@ -1,3 +1,6 @@
+// Import ground image as module so Vite can properly handle it
+import groundImg from '/images/ground.png?url';
+
 export default class Ground {
   constructor(ctx, width, height, speed, scaleRatio) {
     this.ctx = ctx;
@@ -11,7 +14,7 @@ export default class Ground {
     this.y = this.canvas.height - this.height;
 
     this.groundImage = new Image();
-    this.groundImage.src = "/images/ground.png";
+    this.groundImage.src = groundImg;
     this.groundImage.onerror = () => console.error('Failed to load ground.png');
   }
 
