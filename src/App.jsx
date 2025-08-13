@@ -190,8 +190,8 @@ const App = () => {
               onDisconnect={handleDisconnect}
               disableNetworkControls={true}
             />
-            <div className="game-header">
-              <div className="header-left">
+            <div className="game-layout">
+              <div className="back-button-container">
                 <button 
                   className="back-button"
                   onClick={handleBackToNetworkSelection}
@@ -199,19 +199,12 @@ const App = () => {
                   ← Back to Network Selection
                 </button>
               </div>
-              <div className="header-center">
-                <div className="title">
-                  Buddy Runner
-                </div>
-              </div>
-              <div className="header-right">
-                {selectedNetwork && (
-                  <div className="current-network-info">
-                    <span className="network-indicator">
-                      {selectedNetwork.emoji} {selectedNetwork.name}
-                    </span>
+              <div className="game-header">
+                <div className="header-center">
+                  <div className="title">
+                    Buddy Runner
                   </div>
-                )}
+                </div>
               </div>
             </div>
             <GameComponent selectedNetwork={selectedNetwork} />
