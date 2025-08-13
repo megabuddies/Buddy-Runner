@@ -185,20 +185,20 @@ const App = () => {
           </div>
         ) : (
           <>
+            <div className="back-to-network-button">
+              <button 
+                className="back-button"
+                onClick={handleBackToNetworkSelection}
+              >
+                ← Back to Network Selection
+              </button>
+            </div>
             <WalletComponent 
               selectedNetwork={selectedNetwork} 
               onDisconnect={handleDisconnect}
               disableNetworkControls={true}
             />
             <div className="game-layout">
-              <div className="back-button-container">
-                <button 
-                  className="back-button"
-                  onClick={handleBackToNetworkSelection}
-                >
-                  ← Back to Network Selection
-                </button>
-              </div>
               <div className="game-header">
                 <div className="header-center">
                   <div className="title">
