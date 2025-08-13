@@ -213,15 +213,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
     <div className="network-selection-overlay">
       <div className="network-selection-container" style={containerStyle}>
         <div className="network-selection-content" style={contentStyle}>
-          <div className="terminal-header">
-            <div className="terminal-title">BLOCKCHAIN NETWORK SELECTOR</div>
-            <div className="terminal-buttons">
-              <div className="terminal-button red"></div>
-              <div className="terminal-button yellow"></div>
-              <div className="terminal-button green"></div>
-            </div>
-          </div>
-
+          
           <div className="logo-section">
             <div className="pixel-logo">
               <div className="logo-text">
@@ -231,84 +223,94 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
               <div className="logo-powered">POWERED BY <strong>MEGA BUDDIES</strong></div>
             </div>
           </div>
-          
-          <div className="mission-briefing">
-            <div className="briefing-title">MISSION BRIEFING</div>
-            <div className="briefing-content">
-              <div className="terminal-text">
-                <span className="terminal-prompt">></span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
-              </div>
-              <div className="terminal-text">
-                <span className="terminal-prompt">></span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
-              </div>
-              <div className="terminal-text">
-                <span className="terminal-prompt">></span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
+
+          <div className="main-content">
+            <div className="terminal-header">
+              <div className="terminal-title">BLOCKCHAIN NETWORK SELECTOR</div>
+              <div className="terminal-buttons">
+                <div className="terminal-button red"></div>
+                <div className="terminal-button yellow"></div>
+                <div className="terminal-button green"></div>
               </div>
             </div>
-          </div>
-
-          <div className="network-selection">
-            <div className="selection-title">SELECT TARGET BLOCKCHAIN NETWORK:</div>
             
-            <div className="network-grid" style={networkGridStyle}>
-              {networks.map((network) => (
-                <div
-                  key={network.id}
-                  className={`network-card ${selectedNetwork?.id === network.id ? 'selected' : ''}`}
-                  onClick={() => handleNetworkSelect(network)}
-                >
-                  <div className="network-header">
-                    <div className="network-icon">{network.icon}</div>
-                    <div className="network-status" data-status={network.status}>
-                      {network.status}
-                    </div>
-                  </div>
-                  
-                  <div className="network-info">
-                    <div className="network-name">{network.name}</div>
-                    <div className="network-description">{network.description}</div>
-                    <div className="network-tech">{network.tech}</div>
-                  </div>
-
-                  <div className="network-specs">
-                    <div className="spec-item">
-                      <span className="spec-label">CHAIN ID:</span>
-                      <span className="spec-value">{network.id}</span>
-                    </div>
-                    <div className="spec-item">
-                      <span className="spec-label">NETWORK:</span>
-                      <span className="spec-value">TESTNET</span>
-                    </div>
-                  </div>
-
-                  <div className="selection-indicator">
-                    {selectedNetwork?.id === network.id && (
-                      <div className="selected-glow">SELECTED</div>
-                    )}
-                  </div>
+            <div className="mission-briefing">
+              <div className="briefing-title">MISSION BRIEFING</div>
+              <div className="briefing-content">
+                <div className="terminal-text">
+                  <span className="terminal-prompt">></span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
                 </div>
-              ))}
+                <div className="terminal-text">
+                  <span className="terminal-prompt">></span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
+                </div>
+                <div className="terminal-text">
+                  <span className="terminal-prompt">></span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
+                </div>
+              </div>
             </div>
 
-            {selectedNetwork && (
-              <div className="launch-section">
-                <div className="launch-info">
-                  <div className="terminal-text">
-                    <span className="terminal-prompt">></span> TARGET NETWORK: {selectedNetwork.name}
-                  </div>
-                  <div className="terminal-text">
-                    <span className="terminal-prompt">></span> MISSION STATUS: READY FOR DEPLOYMENT
-                  </div>
-                </div>
-                <button className="launch-button" onClick={handleStartGame}>
-                  <span className="button-icon">🚀</span>
-                  LAUNCH MISSION ON {selectedNetwork.name}
-                  <div className="button-glow"></div>
-                </button>
-              </div>
-            )}
-          </div>
+            <div className="network-selection">
+              <div className="selection-title">SELECT TARGET BLOCKCHAIN NETWORK:</div>
+              
+              <div className="network-grid" style={networkGridStyle}>
+                {networks.map((network) => (
+                  <div
+                    key={network.id}
+                    className={`network-card ${selectedNetwork?.id === network.id ? 'selected' : ''}`}
+                    onClick={() => handleNetworkSelect(network)}
+                  >
+                    <div className="network-header">
+                      <div className="network-icon">{network.icon}</div>
+                      <div className="network-status" data-status={network.status}>
+                        {network.status}
+                      </div>
+                    </div>
+                    
+                    <div className="network-info">
+                      <div className="network-name">{network.name}</div>
+                      <div className="network-description">{network.description}</div>
+                      <div className="network-tech">{network.tech}</div>
+                    </div>
 
+                    <div className="network-specs">
+                      <div className="spec-item">
+                        <span className="spec-label">CHAIN ID:</span>
+                        <span className="spec-value">{network.id}</span>
+                      </div>
+                      <div className="spec-item">
+                        <span className="spec-label">NETWORK:</span>
+                        <span className="spec-value">TESTNET</span>
+                      </div>
+                    </div>
+
+                    <div className="selection-indicator">
+                      {selectedNetwork?.id === network.id && (
+                        <div className="selected-glow">SELECTED</div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {selectedNetwork && (
+                <div className="launch-section">
+                  <div className="launch-info">
+                    <div className="terminal-text">
+                      <span className="terminal-prompt">></span> TARGET NETWORK: {selectedNetwork.name}
+                    </div>
+                    <div className="terminal-text">
+                      <span className="terminal-prompt">></span> MISSION STATUS: READY FOR DEPLOYMENT
+                    </div>
+                  </div>
+                  <button className="launch-button" onClick={handleStartGame}>
+                    <span className="button-icon">🚀</span>
+                    LAUNCH MISSION ON {selectedNetwork.name}
+                    <div className="button-glow"></div>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
 
         </div>
       </div>
