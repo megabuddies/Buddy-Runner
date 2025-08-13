@@ -201,7 +201,8 @@ const GameComponent = ({ selectedNetwork }) => {
         playerHeightInGame,
         minJumpHeightInGame,
         maxJumpHeightInGame,
-        game.scaleRatio
+        game.scaleRatio,
+        selectedNetwork && !selectedNetwork.isWeb2 ? handleOnChainMovement : null
       );
 
       game.ground = new Ground(
@@ -448,20 +449,10 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     function checkCollision() {
-      const carrotBoxes = game.carrotController.collisionBoxes;
-      const playerBox = game.player.collisionBox;
-
-      return carrotBoxes.some(carrotBox => collision(carrotBox, playerBox));
+      return game.carrotController.collideWith(game.player);
     }
 
-    function collision(rect1, rect2) {
-      return (
-        rect1.x < rect2.x + rect2.width &&
-        rect1.x + rect1.width > rect2.x &&
-        rect1.y < rect2.y + rect2.height &&
-        rect1.y + rect1.height > rect2.y
-      );
-    }
+
 
     function gameLoop(currentTime) {
       if (game.previousTime === null) {
