@@ -4,11 +4,12 @@ import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
+import ContractDashboard from './components/ContractDashboard';
 import './App.css';
 
 const App = () => {
   const appId = 'cme84q0og02aalc0bh9blzwa9';
-  const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
+  const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game' | 'contracts'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
 
   const privyConfig = {
@@ -160,6 +161,14 @@ const App = () => {
     setSelectedNetwork(null);
   };
 
+  const handleViewContracts = () => {
+    setGameState('contracts');
+  };
+
+  const handleBackToGame = () => {
+    setGameState('game');
+  };
+
   return (
     <PrivyProvider
       appId={appId}
@@ -183,6 +192,32 @@ const App = () => {
             </div>
             <WalletConnection onWalletConnected={handleWalletConnected} />
           </div>
+        ) : gameState === 'contracts' ? (
+          <>
+            <div className="back-to-network-button">
+              <button 
+                className="back-button"
+                onClick={handleBackToNetworkSelection}
+              >
+                ← Back to Network Selection
+              </button>
+              <button 
+                className="back-button"
+                onClick={handleBackToGame}
+              >
+                ← Back to Game
+              </button>
+            </div>
+            {/* Only show WalletComponent for blockchain networks, not for web2 */}
+            {selectedNetwork && !selectedNetwork.isWeb2 && (
+              <WalletComponent 
+                selectedNetwork={selectedNetwork} 
+                onDisconnect={handleDisconnect}
+                disableNetworkControls={true}
+              />
+            )}
+            <ContractDashboard />
+          </>
         ) : (
           <>
             <div className="back-to-network-button">
@@ -192,6 +227,15 @@ const App = () => {
               >
                 ← Back to Network Selection
               </button>
+              {/* Only show contracts button for blockchain networks, not for web2 */}
+              {selectedNetwork && !selectedNetwork.isWeb2 && (
+                <button 
+                  className="contracts-button"
+                  onClick={handleViewContracts}
+                >
+                  🔗 View Contracts
+                </button>
+              )}
             </div>
             {/* Only show WalletComponent for blockchain networks, not for web2 */}
             {selectedNetwork && !selectedNetwork.isWeb2 && (
