@@ -10,9 +10,9 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
   const [isNetworkSwitching, setIsNetworkSwitching] = useState(false);
 
   const networks = [
-    { id: 6342, name: 'MegaETH Testnet', emoji: '⚡' },
-    { id: 84532, name: 'Base Sepolia', emoji: '🔵' },
-    { id: 10143, name: 'Monad Testnet', emoji: '🟣' },
+    { id: 6342, name: 'MegaETH Testnet' },
+    { id: 84532, name: 'Base Sepolia' },
+    { id: 10143, name: 'Monad Testnet' },
   ];
 
   // Auto-switch to selected network when wallet connects
@@ -223,11 +223,11 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
               disabled={isNetworkSwitching}
             >
               {isNetworkSwitching ? (
-                '🔄 Switching...'
+                'Switching...'
               ) : getCurrentNetwork() ? (
-                `${getCurrentNetwork().emoji} ${getCurrentNetwork().name}`
+                getCurrentNetwork().name
               ) : (
-                '🌐 Select Network'
+                'Select Network'
               )}
             </button>
             
@@ -242,8 +242,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
                     onClick={() => switchNetwork(network.id)}
                     disabled={isNetworkSwitching}
                   >
-                    {isNetworkSwitching ? '🔄' : network.emoji} {network.name}
-                    {selectedNetwork?.id === network.id && ' 🎮'}
+                    {network.name}
                   </button>
                 ))}
               </div>

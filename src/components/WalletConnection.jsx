@@ -101,7 +101,6 @@ const WalletConnection = ({ onWalletConnected }) => {
           </div>
           
           <div className="connection-section">
-            <div className="connection-icon">🔗</div>
             <h2 className="connection-title">AUTHENTICATION REQUIRED</h2>
             <div className="terminal-content">
               <div className="terminal-text">
@@ -116,7 +115,6 @@ const WalletConnection = ({ onWalletConnected }) => {
             </div>
             
             <button className="connect-wallet-button" onClick={handleConnect}>
-              <span className="button-icon">🔐</span>
               CONNECT WALLET
               <div className="button-glow"></div>
             </button>
@@ -125,19 +123,15 @@ const WalletConnection = ({ onWalletConnected }) => {
               <div className="options-title">SUPPORTED AUTHENTICATION METHODS:</div>
               <div className="options-grid">
                 <div className="option-item">
-                  <span className="option-icon">📧</span>
                   <span className="option-text">EMAIL</span>
                 </div>
                 <div className="option-item">
-                  <span className="option-icon">📱</span>
                   <span className="option-text">PHONE</span>
                 </div>
                 <div className="option-item">
-                  <span className="option-icon">🦊</span>
                   <span className="option-text">METAMASK</span>
                 </div>
                 <div className="option-item">
-                  <span className="option-icon">💼</span>
                   <span className="option-text">OTHER WALLETS</span>
                 </div>
               </div>

@@ -49,7 +49,7 @@ export default class Score {
       // Network name
       this.ctx.fillStyle = this.blockchainStatus.contractAvailable ? "#7FBC7F" : "#FFA500";
       this.ctx.fillText(
-        `⛓️ ${this.blockchainStatus.networkName}`,
+        `${this.blockchainStatus.networkName}`,
         10 * this.scaleRatio,
         blockchainY
       );

@@ -18,43 +18,35 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
     { 
       id: 'web2', 
       name: 'CLASSIC BROWSER', 
-      emoji: '🌐',
       description: 'Pure web2 experience',
       tech: 'No wallet required',
       color: '#2ecc71',
       status: 'ONLINE',
-      icon: '🦕',
       isWeb2: true
     },
     { 
       id: 6342, 
       name: 'MEGAETH TESTNET', 
-      emoji: '⚡',
       description: 'Ultra-fast execution layer',
       tech: 'Lightning-fast transactions',
       color: '#ff6b6b',
-      status: 'ONLINE',
-      icon: '🚀'
+      status: 'ONLINE'
     },
     { 
       id: 84532, 
       name: 'BASE SEPOLIA', 
-      emoji: '🔵',
       description: 'Ethereum L2 testnet',
       tech: 'Reliable scaling solution',
       color: '#4ecdc4',
-      status: 'ONLINE',
-      icon: '🌐'
+      status: 'ONLINE'
     },
     { 
       id: 10143, 
       name: 'MONAD TESTNET', 
-      emoji: '🟣',
       description: 'Next-gen blockchain',
       tech: 'Advanced consensus',
       color: '#9b59b6',
-      status: 'BETA',
-      icon: '🔮'
+      status: 'ONLINE'
     }
   ];
 
@@ -254,13 +246,13 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
             <div className="briefing-title">MISSION BRIEFING</div>
             <div className="briefing-content">
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
+                <span className="terminal-prompt">></span> COMPARE BUDDY'S SPEED ACROSS DIFFERENT BLOCKCHAINS
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
+                <span className="terminal-prompt">></span> TEST PERFORMANCE AGAINST CLASSIC WEB2 VERSION
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
+                <span className="terminal-prompt">></span> DISCOVER HOW NETWORK SPEED AFFECTS GAMING EXPERIENCE
               </div>
             </div>
           </div>
@@ -276,7 +268,6 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
                   onClick={() => handleNetworkSelect(network)}
                 >
                   <div className="network-header">
-                    <div className="network-icon">{network.icon}</div>
                     <div className="network-status" data-status={network.status}>
                       {network.status}
                     </div>
@@ -319,7 +310,6 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
                   </div>
                 </div>
                 <button className="launch-button" onClick={handleStartGame}>
-                  <span className="button-icon">🚀</span>
                   LAUNCH MISSION ON {selectedNetwork.name}
                   <div className="button-glow"></div>
                 </button>
