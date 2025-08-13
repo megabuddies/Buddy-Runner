@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Buddy Runner</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #fff;
+            font-family: monospace;
+        }
+        .console {
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-size: 12px;
+        }
+        .game-frame {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #333;
+            margin: 10px 0;
+        }
+        .controls {
+            margin: 10px 0;
+        }
+        button {
+            background: #7FBC7F;
+            color: #000;
+            border: none;
+            padding: 10px;
+            margin: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <h1>🐰 Buddy Runner Debug Console</h1>
+    
+    <div class="controls">
+        <button onclick="openGame()">Open Game</button>
+        <button onclick="clearConsole()">Clear Console</button>
+        <button onclick="reloadGame()">Reload Game</button>
+    </div>
+    
+    <div id="console" class="console">Console output will appear here...\n</div>
+    
+    <iframe id="gameFrame" class="game-frame" src="about:blank"></iframe>
+
+    <script>
+        const consoleDiv = document.getElementById('console');
+        const gameFrame = document.getElementById('gameFrame');
+        
+        // Capture console logs
+        const originalLog = console.log;
+        const originalError = console.error;
+        const originalWarn = console.warn;
+        
+        function addToConsole(type, message) {
+            const timestamp = new Date().toLocaleTimeString();
+            consoleDiv.textContent += `[${timestamp}] ${type}: ${message}\n`;
+            consoleDiv.scrollTop = consoleDiv.scrollHeight;
+        }
+        
+        console.log = function(...args) {
+            originalLog.apply(console, args);
+            addToConsole('LOG', args.join(' '));
+        };
+        
+        console.error = function(...args) {
+            originalError.apply(console, args);
+            addToConsole('ERROR', args.join(' '));
+        };
+        
+        console.warn = function(...args) {
+            originalWarn.apply(console, args);
+            addToConsole('WARN', args.join(' '));
+        };
+        
+        function openGame() {
+            addToConsole('INFO', 'Loading game...');
+            gameFrame.src = 'http://localhost:3001';
+            
+            gameFrame.onload = function() {
+                addToConsole('INFO', 'Game loaded successfully');
+                
+                // Listen to console messages from iframe
+                try {
+                    const iframeWindow = gameFrame.contentWindow;
+                    
+                    iframeWindow.addEventListener('error', function(e) {
+                        addToConsole('IFRAME-ERROR', `${e.message} at ${e.filename}:${e.lineno}`);
+                    });
+                    
+                    // Override console in iframe
+                    const iframeConsole = iframeWindow.console;
+                    
+                    iframeWindow.console.log = function(...args) {
+                        iframeConsole.log.apply(iframeConsole, args);
+                        addToConsole('GAME-LOG', args.join(' '));
+                    };
+                    
+                    iframeWindow.console.error = function(...args) {
+                        iframeConsole.error.apply(iframeConsole, args);
+                        addToConsole('GAME-ERROR', args.join(' '));
+                    };
+                    
+                    iframeWindow.console.warn = function(...args) {
+                        iframeConsole.warn.apply(iframeConsole, args);
+                        addToConsole('GAME-WARN', args.join(' '));
+                    };
+                    
+                } catch (e) {
+                    addToConsole('ERROR', 'Cannot access iframe console: ' + e.message);
+                }
+            };
+            
+            gameFrame.onerror = function(e) {
+                addToConsole('ERROR', 'Failed to load game: ' + e);
+            };
+        }
+        
+        function clearConsole() {
+            consoleDiv.textContent = 'Console cleared...\n';
+        }
+        
+        function reloadGame() {
+            gameFrame.src = gameFrame.src;
+        }
+        
+        // Auto-open game on page load
+        window.onload = function() {
+            setTimeout(openGame, 1000);
+        };
+    </script>
+</body>
+</html>

@@ -4,6 +4,7 @@ import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
+import ErrorBoundary from './components/ErrorBoundary';
 import './App.css';
 
 const App = () => {
@@ -213,7 +214,9 @@ const App = () => {
                 </div>
               </div>
             </div>
-            <GameComponent selectedNetwork={selectedNetwork} />
+            <ErrorBoundary>
+              <GameComponent selectedNetwork={selectedNetwork} />
+            </ErrorBoundary>
             <div className="instructions">
               <p className="main-instruction">📱 Press SPACE or tap to make Buddy jump!</p>
               <p className="help-text">Help our brave bunny Buddy hop over the giant carrots and achieve the highest score!</p>

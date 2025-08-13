@@ -14,6 +14,8 @@ export default class Player {
   dustTimer = 0;
 
   constructor(ctx, width, height, minJumpHeight, maxJumpHeight, scaleRatio, onMovementCallback = null) {
+    console.log('Creating Player...');
+    
     this.ctx = ctx;
     this.canvas = ctx.canvas;
     this.width = width;
@@ -27,35 +29,52 @@ export default class Player {
     this.y = this.canvas.height - this.height - 1.5 * scaleRatio;
     this.yStandingPosition = this.y;
 
-    this.standingStillImage = new Image();
-    this.standingStillImage.src = "images/buddy_standing_still.png";
-    this.image = this.standingStillImage;
+    // Load images
+    try {
+      this.standingStillImage = new Image();
+      this.standingStillImage.src = "images/buddy_standing_still.png";
+      this.image = this.standingStillImage;
 
-    this.jumpingImage = new Image();
-    this.jumpingImage.src = "images/buddy_standing_still_eye_closed.png";
+      this.jumpingImage = new Image();
+      this.jumpingImage.src = "images/buddy_standing_still_eye_closed.png";
 
-    const buddyRunImage1 = new Image();
-    buddyRunImage1.src = "images/buddy_run1.png";
+      const buddyRunImage1 = new Image();
+      buddyRunImage1.src = "images/buddy_run1.png";
 
-    const buddyRunImage2 = new Image();
-    buddyRunImage2.src = "images/buddy_run2.png";
+      const buddyRunImage2 = new Image();
+      buddyRunImage2.src = "images/buddy_run2.png";
 
-    this.buddyRunImages.push(buddyRunImage1);
-    this.buddyRunImages.push(buddyRunImage2);
+      this.buddyRunImages.push(buddyRunImage1);
+      this.buddyRunImages.push(buddyRunImage2);
+      console.log('Player images loaded');
+    } catch (error) {
+      console.error('Error loading player images:', error);
+    }
 
-    //keyboard
-    window.removeEventListener("keydown", this.keydown);
-    window.removeEventListener("keyup", this.keyup);
+    // Clean up old event listeners first
+    this.cleanup();
 
-    window.addEventListener("keydown", this.keydown);
-    window.addEventListener("keyup", this.keyup);
+    // Add new event listeners
+    try {
+      window.addEventListener("keydown", this.keydown);
+      window.addEventListener("keyup", this.keyup);
+      window.addEventListener("touchstart", this.touchstart);
+      window.addEventListener("touchend", this.touchend);
+      console.log('Player event listeners added');
+    } catch (error) {
+      console.error('Error adding player event listeners:', error);
+    }
+  }
 
-    //touch
-    window.removeEventListener("touchstart", this.touchstart);
-    window.removeEventListener("touchend", this.touchend);
-
-    window.addEventListener("touchstart", this.touchstart);
-    window.addEventListener("touchend", this.touchend);
+  cleanup() {
+    try {
+      window.removeEventListener("keydown", this.keydown);
+      window.removeEventListener("keyup", this.keyup);
+      window.removeEventListener("touchstart", this.touchstart);
+      window.removeEventListener("touchend", this.touchend);
+    } catch (error) {
+      console.error('Error cleaning up player event listeners:', error);
+    }
   }
 
   touchstart = () => {

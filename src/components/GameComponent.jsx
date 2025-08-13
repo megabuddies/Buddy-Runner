@@ -164,11 +164,17 @@ const GameComponent = ({ selectedNetwork }) => {
   }, [authenticated, user, selectedNetwork]);
 
   useEffect(() => {
+    console.log('GameComponent useEffect starting...');
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      console.error('Canvas not found!');
+      return;
+    }
 
     const ctx = canvas.getContext("2d");
     let animationId;
+    
+    try {
     
     // Disable image smoothing for pixel art effect
     ctx.imageSmoothingEnabled = false;
@@ -187,50 +193,63 @@ const GameComponent = ({ selectedNetwork }) => {
     });
 
     function createSprites() {
-      const playerWidthInGame = PLAYER_WIDTH * game.scaleRatio;
-      const playerHeightInGame = PLAYER_HEIGHT * game.scaleRatio;
-      const minJumpHeightInGame = MIN_JUMP_HEIGHT * game.scaleRatio;
-      const maxJumpHeightInGame = MAX_JUMP_HEIGHT * game.scaleRatio;
+      try {
+        console.log('Creating sprites...');
+        const playerWidthInGame = PLAYER_WIDTH * game.scaleRatio;
+        const playerHeightInGame = PLAYER_HEIGHT * game.scaleRatio;
+        const minJumpHeightInGame = MIN_JUMP_HEIGHT * game.scaleRatio;
+        const maxJumpHeightInGame = MAX_JUMP_HEIGHT * game.scaleRatio;
 
-      const groundWidthInGame = GROUND_WIDTH * game.scaleRatio;
-      const groundHeightInGame = GROUND_HEIGHT * game.scaleRatio;
+        const groundWidthInGame = GROUND_WIDTH * game.scaleRatio;
+        const groundHeightInGame = GROUND_HEIGHT * game.scaleRatio;
 
-      game.player = new Player(
-        ctx,
-        playerWidthInGame,
-        playerHeightInGame,
-        minJumpHeightInGame,
-        maxJumpHeightInGame,
-        game.scaleRatio
-      );
+        console.log('Creating Player...');
+        game.player = new Player(
+          ctx,
+          playerWidthInGame,
+          playerHeightInGame,
+          minJumpHeightInGame,
+          maxJumpHeightInGame,
+          game.scaleRatio
+        );
 
-      game.ground = new Ground(
-        ctx,
-        groundWidthInGame,
-        groundHeightInGame,
-        GROUND_AND_CARROT_SPEED,
-        game.scaleRatio
-      );
+        console.log('Creating Ground...');
+        game.ground = new Ground(
+          ctx,
+          groundWidthInGame,
+          groundHeightInGame,
+          GROUND_AND_CARROT_SPEED,
+          game.scaleRatio
+        );
 
-      const carrotImages = CARROT_CONFIG.map(carrot => {
-        const img = new Image();
-        img.src = carrot.image;
-        return img;
-      });
-      const carrotSizes = CARROT_CONFIG.map(carrot => ({
-        width: carrot.width * game.scaleRatio,
-        height: carrot.height * game.scaleRatio
-      }));
+        console.log('Creating carrot images...');
+        const carrotImages = CARROT_CONFIG.map(carrot => {
+          const img = new Image();
+          img.src = carrot.image;
+          return img;
+        });
+        const carrotSizes = CARROT_CONFIG.map(carrot => ({
+          width: carrot.width * game.scaleRatio,
+          height: carrot.height * game.scaleRatio
+        }));
 
-      game.carrotController = new CarrotController(
-        ctx,
-        carrotImages,
-        carrotSizes,
-        GROUND_AND_CARROT_SPEED,
-        game.scaleRatio
-      );
+        console.log('Creating CarrotController...');
+        game.carrotController = new CarrotController(
+          ctx,
+          carrotImages,
+          carrotSizes,
+          GROUND_AND_CARROT_SPEED,
+          game.scaleRatio
+        );
 
-      game.score = new Score(ctx, game.scaleRatio);
+        console.log('Creating Score...');
+        game.score = new Score(ctx, game.scaleRatio);
+        console.log('All sprites created successfully!');
+      } catch (error) {
+        console.error('Error creating sprites:', error);
+        console.error('Error stack:', error.stack);
+        throw error;
+      }
     }
 
     function setScreen() {
@@ -370,14 +389,20 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     function clearScreen() {
-      // Create cyberpunk-style background with grid pattern
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      gradient.addColorStop(0, "#121218");
-      gradient.addColorStop(0.5, "#1a1a2e");
-      gradient.addColorStop(1, "#16213e");
-      
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      try {
+        if (!ctx || !canvas) {
+          console.error('clearScreen: ctx or canvas is null');
+          return;
+        }
+        
+        // Create cyberpunk-style background with grid pattern
+        const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        gradient.addColorStop(0, "#121218");
+        gradient.addColorStop(0.5, "#1a1a2e");
+        gradient.addColorStop(1, "#16213e");
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       // Add grid overlay
       ctx.strokeStyle = "rgba(146, 147, 151, 0.1)";
@@ -410,12 +435,15 @@ const GameComponent = ({ selectedNetwork }) => {
       ctx.lineTo(canvas.width, scanLineY);
       ctx.stroke();
       
-      // Add glow effect at top
-      const glowGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.3);
-      glowGradient.addColorStop(0, "rgba(19, 145, 255, 0.1)");
-      glowGradient.addColorStop(1, "transparent");
-      ctx.fillStyle = glowGradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height * 0.3);
+        // Add glow effect at top
+        const glowGradient = ctx.createLinearGradient(0, 0, 0, canvas.height * 0.3);
+        glowGradient.addColorStop(0, "rgba(19, 145, 255, 0.1)");
+        glowGradient.addColorStop(1, "transparent");
+        ctx.fillStyle = glowGradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height * 0.3);
+      } catch (error) {
+        console.error('Error in clearScreen:', error);
+      }
     }
 
     function setupGameReset() {
@@ -448,10 +476,23 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     function checkCollision() {
-      const carrotBoxes = game.carrotController.collisionBoxes;
-      const playerBox = game.player.collisionBox;
+      try {
+        if (!game.carrotController || !game.player) {
+          return false;
+        }
+        
+        const carrotBoxes = game.carrotController.collisionBoxes;
+        const playerBox = game.player.collisionBox;
 
-      return carrotBoxes.some(carrotBox => collision(carrotBox, playerBox));
+        if (!carrotBoxes || !playerBox) {
+          return false;
+        }
+
+        return carrotBoxes.some(carrotBox => collision(carrotBox, playerBox));
+      } catch (error) {
+        console.error('Error in checkCollision:', error);
+        return false;
+      }
     }
 
     function collision(rect1, rect2) {
@@ -464,43 +505,62 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     function gameLoop(currentTime) {
-      if (game.previousTime === null) {
+      try {
+        if (game.previousTime === null) {
+          game.previousTime = currentTime;
+          animationId = requestAnimationFrame(gameLoop);
+          return;
+        }
+
+        const frameTimeDelta = currentTime - game.previousTime;
         game.previousTime = currentTime;
-        animationId = requestAnimationFrame(gameLoop);
-        return;
-      }
 
-      const frameTimeDelta = currentTime - game.previousTime;
-      game.previousTime = currentTime;
+        clearScreen();
 
-      clearScreen();
+        if (!game.gameOver && !game.waitingToStart) {
+          // Update
+          if (game.ground && typeof game.ground.update === 'function') {
+            game.ground.update(game.gameSpeed, frameTimeDelta);
+          }
+          if (game.carrotController && typeof game.carrotController.update === 'function') {
+            game.carrotController.update(game.gameSpeed, frameTimeDelta);
+          }
+          if (game.player && typeof game.player.update === 'function') {
+            game.player.update(game.gameSpeed, frameTimeDelta);
+          }
+          if (game.score && typeof game.score.update === 'function') {
+            game.score.update(frameTimeDelta);
+          }
+          updateGameSpeed(frameTimeDelta);
 
-      if (!game.gameOver && !game.waitingToStart) {
-        // Update
-        game.ground.update(game.gameSpeed, frameTimeDelta);
-        game.carrotController.update(game.gameSpeed, frameTimeDelta);
-        game.player.update(game.gameSpeed, frameTimeDelta);
-        game.score.update(frameTimeDelta);
-        updateGameSpeed(frameTimeDelta);
+          // Check collision
+          if (checkCollision()) {
+            game.gameOver = true;
+            if (game.score && typeof game.score.setHighScore === 'function') {
+              game.score.setHighScore();
+            }
+            setupGameReset();
+          }
 
-        // Check collision
-        if (checkCollision()) {
-          game.gameOver = true;
-          game.score.setHighScore();
-          setupGameReset();
+          // Handle blockchain movement (every few frames to avoid spam)
+          if (Math.random() < 0.01) { // ~1% chance per frame
+            handleOnChainMovement();
+          }
         }
 
-        // Handle blockchain movement (every few frames to avoid spam)
-        if (Math.random() < 0.01) { // ~1% chance per frame
-          handleOnChainMovement();
+              // Draw
+        if (game.ground && typeof game.ground.draw === 'function') {
+          game.ground.draw();
         }
-      }
-
-      // Draw
-      game.ground.draw();
-      game.carrotController.draw();
-      game.player.draw();
-      game.score.draw();
+        if (game.carrotController && typeof game.carrotController.draw === 'function') {
+          game.carrotController.draw();
+        }
+        if (game.player && typeof game.player.draw === 'function') {
+          game.player.draw();
+        }
+        if (game.score && typeof game.score.draw === 'function') {
+          game.score.draw();
+        }
 
       if (game.gameOver) {
         showGameOverWithWallet();
@@ -511,6 +571,12 @@ const GameComponent = ({ selectedNetwork }) => {
       }
 
       animationId = requestAnimationFrame(gameLoop);
+      } catch (error) {
+        console.error('Error in gameLoop:', error);
+        console.error('Error stack:', error.stack);
+        // Try to continue the game loop despite the error
+        animationId = requestAnimationFrame(gameLoop);
+      }
     }
 
     // Initialize game
@@ -535,12 +601,20 @@ const GameComponent = ({ selectedNetwork }) => {
     document.addEventListener("touchstart", initialKeyHandler);
 
     // Start game loop
+    console.log('Starting game loop...');
     animationId = requestAnimationFrame(gameLoop);
 
     return () => {
+      console.log('Cleaning up game...');
       if (animationId) {
         cancelAnimationFrame(animationId);
       }
+      
+      // Clean up player event listeners
+      if (game.player && game.player.cleanup) {
+        game.player.cleanup();
+      }
+      
       window.removeEventListener("resize", handleResize);
       if (screen.orientation) {
         screen.orientation.removeEventListener("change", setScreen);
@@ -548,6 +622,11 @@ const GameComponent = ({ selectedNetwork }) => {
       document.removeEventListener("keyup", initialKeyHandler);
       document.removeEventListener("touchstart", initialKeyHandler);
     };
+    
+    } catch (error) {
+      console.error('Error in GameComponent useEffect:', error);
+      console.error('Error stack:', error.stack);
+    }
   }, [authenticated, user, selectedNetwork]);
 
   return (
