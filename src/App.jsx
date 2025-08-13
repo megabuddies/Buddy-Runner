@@ -185,11 +185,6 @@ const App = () => {
           </div>
         ) : (
           <>
-            <WalletComponent 
-              selectedNetwork={selectedNetwork} 
-              onDisconnect={handleDisconnect}
-              disableNetworkControls={true}
-            />
             <div className="game-layout">
               <div className="back-button-container">
                 <button 
@@ -204,6 +199,14 @@ const App = () => {
                   <div className="title">
                     Buddy Runner
                   </div>
+                </div>
+                <div className="disconnect-button-container">
+                  <button 
+                    className="disconnect-button"
+                    onClick={handleDisconnect}
+                  >
+                    Disconnect
+                  </button>
                 </div>
               </div>
             </div>

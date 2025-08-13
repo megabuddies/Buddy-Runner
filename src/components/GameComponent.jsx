@@ -123,7 +123,7 @@ const GameComponent = ({ selectedNetwork }) => {
     
     if (user.email) {
       return {
-        identifier: user.email.split('@')[0],
+        identifier: user.email.address.split('@')[0],
         address: null
       };
     }
@@ -131,6 +131,26 @@ const GameComponent = ({ selectedNetwork }) => {
     return {
       identifier: 'User',
       address: null
+    };
+  };
+
+  // Get network info with emoji
+  const getNetworkInfo = () => {
+    const networkEmojis = {
+      'MegaETH Testnet': '⚡',
+      'Base Sepolia': '🔵',
+      'Monad Testnet': '🟣',
+      'Ethereum': '⚪',
+      'Sepolia': '🟨'
+    };
+    
+    const networkName = blockchainStatus.networkName || 'Unknown';
+    const emoji = networkEmojis[networkName] || '🌐';
+    
+    return {
+      name: networkName,
+      emoji: emoji,
+      displayName: `${emoji} ${networkName}`
     };
   };
 
@@ -252,6 +272,8 @@ const GameComponent = ({ selectedNetwork }) => {
 
       // Show blockchain status
       const walletInfo = getWalletInfo();
+      const networkInfo = getNetworkInfo();
+      
       if (walletInfo) {
         const walletFontSize = Math.floor(game.scaleRatio * 12);
         ctx.font = `${walletFontSize}px monospace`;
@@ -262,19 +284,43 @@ const GameComponent = ({ selectedNetwork }) => {
           canvas.height / 2 + restartFontSize + walletFontSize + 20
         );
         
-        // Show blockchain stats
-        ctx.fillStyle = "#929397";
+        // Show network info with enhanced styling
+        const networkFontSize = Math.floor(game.scaleRatio * 14);
+        ctx.font = `bold ${networkFontSize}px monospace`;
+        ctx.fillStyle = "#28a745";
+        ctx.shadowColor = "#28a745";
+        ctx.shadowBlur = 8;
         ctx.fillText(
-          `> NETWORK: ${blockchainStatus.networkName}`,
+          `> NETWORK: ${networkInfo.displayName}`,
           canvas.width / 2,
           canvas.height / 2 + restartFontSize + walletFontSize * 2 + 25
         );
+        ctx.shadowBlur = 0;
+        
+        // Show connection status
+        ctx.font = `${walletFontSize}px monospace`;
+        if (blockchainStatus.initialized) {
+          ctx.fillStyle = "#28a745";
+          ctx.fillText(
+            "> CONNECTION: ACTIVE",
+            canvas.width / 2,
+            canvas.height / 2 + restartFontSize + networkFontSize + walletFontSize * 2 + 35
+          );
+        } else {
+          ctx.fillStyle = "#ffc107";
+          ctx.fillText(
+            "> CONNECTION: SIMULATED",
+            canvas.width / 2,
+            canvas.height / 2 + restartFontSize + networkFontSize + walletFontSize * 2 + 35
+          );
+        }
         
         if (blockchainStatus.totalMovements > 0) {
+          ctx.fillStyle = "#929397";
           ctx.fillText(
             `> ON-CHAIN MOVES: ${blockchainStatus.totalMovements}`,
             canvas.width / 2,
-            canvas.height / 2 + restartFontSize + walletFontSize * 3 + 30
+            canvas.height / 2 + restartFontSize + networkFontSize + walletFontSize * 3 + 45
           );
         }
       }
@@ -299,6 +345,7 @@ const GameComponent = ({ selectedNetwork }) => {
 
       // Show connection status
       const walletInfo = getWalletInfo();
+      const networkInfo = getNetworkInfo();
       const statusFontSize = Math.floor(game.scaleRatio * 12);
       ctx.font = `${statusFontSize}px monospace`;
       
@@ -313,27 +360,34 @@ const GameComponent = ({ selectedNetwork }) => {
         );
         ctx.shadowBlur = 0;
         
-        // Show network status
-        ctx.fillStyle = "#929397";
+        // Show network status with enhanced styling
+        const networkFontSize = Math.floor(game.scaleRatio * 14);
+        ctx.font = `bold ${networkFontSize}px monospace`;
+        ctx.fillStyle = "#28a745";
+        ctx.shadowColor = "#28a745";
+        ctx.shadowBlur = 8;
         ctx.fillText(
-          `> TARGET NETWORK: ${blockchainStatus.networkName}`,
+          `> TARGET NETWORK: ${networkInfo.displayName}`,
           canvas.width / 2,
           canvas.height / 2 + fontSize + statusFontSize + 25
         );
+        ctx.shadowBlur = 0;
         
+        // Show connection status
+        ctx.font = `${statusFontSize}px monospace`;
         if (blockchainStatus.initialized) {
           ctx.fillStyle = "#28a745";
           ctx.fillText(
             "> BLOCKCHAIN CONNECTION: ACTIVE",
             canvas.width / 2,
-            canvas.height / 2 + fontSize + statusFontSize * 2 + 30
+            canvas.height / 2 + fontSize + networkFontSize + statusFontSize + 35
           );
         } else {
           ctx.fillStyle = "#ffc107";
           ctx.fillText(
             "> BLOCKCHAIN CONNECTION: SIMULATED MODE",
             canvas.width / 2,
-            canvas.height / 2 + fontSize + statusFontSize * 2 + 30
+            canvas.height / 2 + fontSize + networkFontSize + statusFontSize + 35
           );
         }
       } else {
