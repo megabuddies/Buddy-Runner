@@ -256,11 +256,9 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         <div className="wallet-info">
           <div className="wallet-status">Connected</div>
           <div className="wallet-user">{getUserIdentifier()}</div>
-          {getWalletAddress() && (
-            <div className="wallet-address">
-              Wallet: {formatAddress(getWalletAddress())}
-            </div>
-          )}
+          <div className="wallet-network">
+            {selectedNetwork ? selectedNetwork.name : getCurrentNetwork()?.name || 'Unknown Network'}
+          </div>
         </div>
       )}
     </div>
