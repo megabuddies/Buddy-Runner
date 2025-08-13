@@ -16,6 +16,17 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
 
   const networks = [
     { 
+      id: 'web2', 
+      name: 'CLASSIC BROWSER', 
+      emoji: '🌐',
+      description: 'Pure web2 experience',
+      tech: 'No wallet required',
+      color: '#2ecc71',
+      status: 'ONLINE',
+      icon: '🦕',
+      isWeb2: true
+    },
+    { 
       id: 6342, 
       name: 'MEGAETH TESTNET', 
       emoji: '⚡',
@@ -151,6 +162,13 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
 
   const handleStartGame = () => {
     if (selectedNetwork) {
+      // If web2 option is selected, skip wallet connection entirely
+      if (selectedNetwork.isWeb2) {
+        onStartGame(selectedNetwork);
+        return;
+      }
+      
+      // For blockchain networks, handle wallet authentication
       if (authenticated && user) {
         // If already authenticated, go directly to game
         onStartGame(selectedNetwork);
@@ -272,12 +290,12 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
 
                   <div className="network-specs">
                     <div className="spec-item">
-                      <span className="spec-label">CHAIN ID:</span>
-                      <span className="spec-value">{network.id}</span>
+                      <span className="spec-label">{network.isWeb2 ? 'TYPE:' : 'CHAIN ID:'}</span>
+                      <span className="spec-value">{network.isWeb2 ? 'WEB2' : network.id}</span>
                     </div>
                     <div className="spec-item">
                       <span className="spec-label">NETWORK:</span>
-                      <span className="spec-value">TESTNET</span>
+                      <span className="spec-value">{network.isWeb2 ? 'BROWSER' : 'TESTNET'}</span>
                     </div>
                   </div>
 

@@ -111,6 +111,15 @@ const GameComponent = ({ selectedNetwork }) => {
 
   // Get wallet information for display
   const getWalletInfo = () => {
+    // For web2 mode, return special identifier
+    if (selectedNetwork && selectedNetwork.isWeb2) {
+      return {
+        identifier: "CLASSIC PLAYER",
+        address: null,
+        isWeb2: true
+      };
+    }
+    
     if (!authenticated || !user) return null;
     
     const address = getWalletAddress();
@@ -128,10 +137,7 @@ const GameComponent = ({ selectedNetwork }) => {
       };
     }
     
-    return {
-      identifier: 'User',
-      address: null
-    };
+    return null;
   };
 
   // Get wallet address
@@ -141,6 +147,19 @@ const GameComponent = ({ selectedNetwork }) => {
   };
 
   useEffect(() => {
+    // Skip blockchain initialization for web2 mode
+    if (selectedNetwork && selectedNetwork.isWeb2) {
+      setBlockchainStatus({
+        initialized: false,
+        networkName: selectedNetwork.name,
+        contractAvailable: false,
+        pendingTransactions: 0,
+        totalMovements: 0,
+        onChainScore: 0
+      });
+      return;
+    }
+    
     initializeBlockchain();
   }, [authenticated, user, selectedNetwork]);
 

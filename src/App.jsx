@@ -193,16 +193,22 @@ const App = () => {
                 ← Back to Network Selection
               </button>
             </div>
-            <WalletComponent 
-              selectedNetwork={selectedNetwork} 
-              onDisconnect={handleDisconnect}
-              disableNetworkControls={true}
-            />
+            {/* Only show WalletComponent for blockchain networks, not for web2 */}
+            {selectedNetwork && !selectedNetwork.isWeb2 && (
+              <WalletComponent 
+                selectedNetwork={selectedNetwork} 
+                onDisconnect={handleDisconnect}
+                disableNetworkControls={true}
+              />
+            )}
             <div className="game-layout">
               <div className="game-header">
                 <div className="header-center">
                   <div className="title">
                     Buddy Runner
+                    {selectedNetwork && selectedNetwork.isWeb2 && (
+                      <span className="web2-mode"> - Classic Mode</span>
+                    )}
                   </div>
                 </div>
               </div>
