@@ -1,8 +1,4 @@
-// Import images as modules so Vite can properly handle them
-import buddyStandingStillImg from '/images/buddy_standing_still.png?url';
-import buddyStandingStillEyeClosedImg from '/images/buddy_standing_still_eye_closed.png?url';
-import buddyRun1Img from '/images/buddy_run1.png?url';
-import buddyRun2Img from '/images/buddy_run2.png?url';
+// Import images as static assets - Vite will handle public directory assets automatically
 
 export default class Player {
   WALK_ANIMATION_TIMER = 180;
@@ -33,25 +29,11 @@ export default class Player {
     this.y = this.canvas.height - this.height - 1.5 * scaleRatio;
     this.yStandingPosition = this.y;
 
-    this.standingStillImage = new Image();
-    this.standingStillImage.src = buddyStandingStillImg;
-    this.standingStillImage.onerror = () => console.error('Failed to load buddy_standing_still.png');
-    this.image = this.standingStillImage;
+    // Initialize with fallback images first
+    this.createFallbackImages();
 
-    this.jumpingImage = new Image();
-    this.jumpingImage.src = buddyStandingStillEyeClosedImg;
-    this.jumpingImage.onerror = () => console.error('Failed to load buddy_standing_still_eye_closed.png');
-
-    const buddyRunImage1 = new Image();
-    buddyRunImage1.src = buddyRun1Img;
-    buddyRunImage1.onerror = () => console.error('Failed to load buddy_run1.png');
-
-    const buddyRunImage2 = new Image();
-    buddyRunImage2.src = buddyRun2Img;
-    buddyRunImage2.onerror = () => console.error('Failed to load buddy_run2.png');
-
-    this.buddyRunImages.push(buddyRunImage1);
-    this.buddyRunImages.push(buddyRunImage2);
+    // Try to load real images
+    this.loadImages();
 
     //keyboard
     window.removeEventListener("keydown", this.keydown);
@@ -66,6 +48,72 @@ export default class Player {
 
     window.addEventListener("touchstart", this.touchstart);
     window.addEventListener("touchend", this.touchend);
+  }
+
+  // Create fallback images (colored rectangles)
+  createFallbackImages() {
+    const createColoredCanvas = (width, height, color) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, width, height);
+      
+      const img = new Image();
+      img.src = canvas.toDataURL();
+      return img;
+    };
+
+    console.log("Creating fallback images...");
+    this.standingStillImage = createColoredCanvas(88, 94, '#FF6B6B');
+    this.image = this.standingStillImage;
+    this.jumpingImage = createColoredCanvas(88, 94, '#4ECDC4');
+    
+    const runImage1 = createColoredCanvas(88, 94, '#45B7D1');
+    const runImage2 = createColoredCanvas(88, 94, '#96CEB4');
+    
+    this.buddyRunImages = [runImage1, runImage2];
+  }
+
+  // Load real images asynchronously
+  async loadImages() {
+    const loadImage = (src, name) => {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        
+        img.onload = () => {
+          console.log(`✓ Successfully loaded: ${name} from ${src}`);
+          resolve(img);
+        };
+        
+        img.onerror = (error) => {
+          console.error(`✗ Failed to load: ${name} from ${src}`, error);
+          reject(new Error(`Failed to load ${name}`));
+        };
+        
+        img.src = src;
+      });
+    };
+
+    try {
+      console.log("Attempting to load real images...");
+      
+      const standingStillImage = await loadImage("/images/buddy_standing_still.png", "buddy_standing_still");
+      const jumpingImage = await loadImage("/images/buddy_standing_still_eye_closed.png", "buddy_standing_still_eye_closed");
+      const runImage1 = await loadImage("/images/buddy_run1.png", "buddy_run1");
+      const runImage2 = await loadImage("/images/buddy_run2.png", "buddy_run2");
+
+      // Replace fallback images with real ones
+      this.standingStillImage = standingStillImage;
+      this.image = this.standingStillImage;
+      this.jumpingImage = jumpingImage;
+      this.buddyRunImages = [runImage1, runImage2];
+
+      console.log("All Player images loaded successfully!");
+    } catch (error) {
+      console.error("Failed to load Player images, using fallbacks:", error);
+    }
   }
 
   touchstart = () => {

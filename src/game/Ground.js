@@ -1,5 +1,4 @@
-// Import ground image as module so Vite can properly handle it
-import groundImg from '/images/ground.png?url';
+// Ground image will be loaded from public directory
 
 export default class Ground {
   constructor(ctx, width, height, speed, scaleRatio) {
@@ -13,9 +12,12 @@ export default class Ground {
     this.x = 0;
     this.y = this.canvas.height - this.height;
 
+    // Initialize ground image
     this.groundImage = new Image();
-    this.groundImage.src = groundImg;
-    this.groundImage.onerror = () => console.error('Failed to load ground.png');
+    this.groundImage.src = "/images/ground.png";
+    this.groundImage.onerror = () => {
+      console.error('Failed to load ground.png, using fallback rendering');
+    };
   }
 
   update(gameSpeed, frameTimeDelta) {

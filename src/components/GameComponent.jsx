@@ -6,10 +6,7 @@ import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
 import blockchainService from '../services/blockchainService.js';
 
-// Import carrot images as modules so Vite can properly handle them
-import carrot1Img from '/images/carrot_1.png?url';
-import carrot2Img from '/images/carrot_2.png?url';
-import carrot3Img from '/images/carrot_3.png?url';
+// Carrot images will be loaded from public directory
 
 const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
@@ -38,10 +35,12 @@ const GameComponent = ({ selectedNetwork }) => {
   const GROUND_HEIGHT = 24;
   const GROUND_AND_CARROT_SPEED = 0.5;
 
+  // Note: Carrot images will be loaded with direct paths
+
   const CARROT_CONFIG = [
-    { width: 48 / 1.5, height: 100 / 1.5, imageSrc: carrot1Img },
-    { width: 98 / 1.5, height: 100 / 1.5, imageSrc: carrot2Img },
-    { width: 68 / 1.5, height: 70 / 1.5, imageSrc: carrot3Img },
+    { width: 48 / 1.5, height: 100 / 1.5, imageSrc: "/images/carrot_1.png" },
+    { width: 98 / 1.5, height: 100 / 1.5, imageSrc: "/images/carrot_2.png" },
+    { width: 68 / 1.5, height: 70 / 1.5, imageSrc: "/images/carrot_3.png" },
   ];
 
   // Initialize blockchain service
