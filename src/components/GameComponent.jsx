@@ -5,6 +5,7 @@ import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
 import blockchainService from '../services/blockchainService.js';
+import contractService from '../services/contractService.js';
 
 const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
@@ -55,22 +56,40 @@ const GameComponent = ({ selectedNetwork }) => {
         console.log(`Switched to ${selectedNetwork.name}`);
       } catch (switchError) {
         console.warn(`Failed to switch to ${selectedNetwork.name}:`, switchError);
-        // Continue anyway, blockchain service will handle the network mismatch
+        // Continue anyway, services will handle the network mismatch
       }
       
-      const success = await blockchainService.initialize(wallet);
+      // Initialize both old and new services
+      const legacySuccess = await blockchainService.initialize(wallet);
+      const contractSuccess = await contractService.initialize(wallet);
       
       setBlockchainStatus({
-        initialized: success,
+        initialized: contractSuccess || legacySuccess,
         networkName: selectedNetwork.name,
-        contractAvailable: blockchainService.isContractAvailable(),
+        contractAvailable: contractService.areContractsAvailable() || blockchainService.isContractAvailable(),
         pendingTransactions: 0,
         totalMovements: 0,
         onChainScore: 0
       });
 
-      // Start game session on blockchain if contract is available
-      if (success && blockchainService.isContractAvailable()) {
+      // Log contract status for debugging
+      if (contractService.areContractsAvailable()) {
+        console.log('✅ NEW CONTRACTS AVAILABLE! Each jump will be a real blockchain transaction on MegaETH!');
+        try {
+          const currentNumber = await contractService.getUpdaterNumber();
+          console.log('🔢 Current Updater number:', currentNumber);
+          setBlockchainStatus(prev => ({ ...prev, onChainScore: currentNumber || 0 }));
+        } catch (err) {
+          console.error('Failed to get initial number:', err);
+        }
+      } else if (blockchainService.isContractAvailable()) {
+        console.log('✅ Legacy BuddyGame contract available');
+      } else {
+        console.log('⚠️ No contracts available - movements will be simulated');
+      }
+
+      // Start game session on blockchain if old contract is available
+      if (legacySuccess && blockchainService.isContractAvailable()) {
         await blockchainService.startGame();
       }
     } catch (error) {
@@ -88,7 +107,18 @@ const GameComponent = ({ selectedNetwork }) => {
     if (!blockchainStatus.initialized) return;
 
     try {
-      const result = await blockchainService.makeMovement();
+      let result = { success: false, simulated: true };
+      
+      // Try new Updater contract first (for MegaETH)
+      if (contractService.areContractsAvailable()) {
+        console.log('🚀 Making REAL on-chain jump with Updater contract!');
+        result = await contractService.updateNumber();
+        console.log('Jump result:', result);
+      }
+      // Fall back to old BuddyGame contract if available
+      else if (blockchainService.isContractAvailable()) {
+        result = await blockchainService.makeMovement();
+      }
       
       setBlockchainStatus(prev => ({
         ...prev,
@@ -96,8 +126,17 @@ const GameComponent = ({ selectedNetwork }) => {
         pendingTransactions: blockchainService.getPendingTransactions()
       }));
 
-      // Update on-chain score if available
-      if (result.success && !result.simulated) {
+      // Update on-chain score if using new contracts
+      if (result.success && !result.simulated && contractService.areContractsAvailable()) {
+        try {
+          const currentNumber = await contractService.getUpdaterNumber();
+          setBlockchainStatus(prev => ({ ...prev, onChainScore: currentNumber || 0 }));
+        } catch (err) {
+          console.error('Failed to get updated number:', err);
+        }
+      }
+      // Update using old contract if available
+      else if (result.success && !result.simulated) {
         const walletAddress = getWalletAddress();
         if (walletAddress) {
           const score = await blockchainService.getPlayerScore(walletAddress);
