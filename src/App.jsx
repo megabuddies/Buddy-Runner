@@ -4,11 +4,12 @@ import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
+import GameDemo from './components/GameDemo';
 import './App.css';
 
 const App = () => {
   const appId = 'cme84q0og02aalc0bh9blzwa9';
-  const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
+  const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game' | 'blockchain-demo'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
 
   const privyConfig = {
@@ -167,10 +168,59 @@ const App = () => {
     >
       <div className="app">
         {gameState === 'network-selection' ? (
-          <NetworkSelection 
-            onNetworkSelect={handleNetworkSelect}
-            onStartGame={handleStartGame}
-          />
+          <div>
+            <div style={{ 
+              position: 'absolute', 
+              top: '20px', 
+              right: '20px', 
+              zIndex: 1000 
+            }}>
+              <button
+                onClick={() => setGameState('blockchain-demo')}
+                style={{
+                  background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  padding: '12px 20px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+                }}
+              >
+                🚀 Blockchain Demo
+              </button>
+            </div>
+            <NetworkSelection 
+              onNetworkSelect={handleNetworkSelect}
+              onStartGame={handleStartGame}
+            />
+          </div>
+        ) : gameState === 'blockchain-demo' ? (
+          <div>
+            <div style={{ 
+              position: 'absolute', 
+              top: '20px', 
+              left: '20px', 
+              zIndex: 1000 
+            }}>
+              <button
+                onClick={() => setGameState('network-selection')}
+                style={{
+                  background: 'rgba(255,255,255,0.2)',
+                  color: 'white',
+                  border: '1px solid rgba(255,255,255,0.3)',
+                  borderRadius: '8px',
+                  padding: '12px 20px',
+                  cursor: 'pointer',
+                  fontWeight: 'bold'
+                }}
+              >
+                ← Назад к игре
+              </button>
+            </div>
+            <GameDemo />
+          </div>
         ) : gameState === 'wallet-connection' ? (
           <div>
             <div className="back-to-wallet">
