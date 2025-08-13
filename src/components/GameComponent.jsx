@@ -34,9 +34,9 @@ const GameComponent = ({ selectedNetwork }) => {
   const GROUND_AND_CARROT_SPEED = 0.5;
 
   const CARROT_CONFIG = [
-    { width: 48 / 1.5, height: 100 / 1.5, image: "/images/carrot_1.png" },
-    { width: 98 / 1.5, height: 100 / 1.5, image: "/images/carrot_2.png" },
-    { width: 68 / 1.5, height: 70 / 1.5, image: "/images/carrot_3.png" },
+    { width: 48 / 1.5, height: 100 / 1.5, imageSrc: "images/carrot_1.png" },
+    { width: 98 / 1.5, height: 100 / 1.5, imageSrc: "images/carrot_2.png" },
+    { width: 68 / 1.5, height: 70 / 1.5, imageSrc: "images/carrot_3.png" },
   ];
 
   // Initialize blockchain service
@@ -212,18 +212,22 @@ const GameComponent = ({ selectedNetwork }) => {
         game.scaleRatio
       );
 
-      const carrotImages = CARROT_CONFIG.map(carrot => carrot.image);
-      const carrotSizes = CARROT_CONFIG.map(carrot => ({
-        width: carrot.width * game.scaleRatio,
-        height: carrot.height * game.scaleRatio
-      }));
+      const carrotImages = CARROT_CONFIG.map(carrot => {
+        const image = new Image();
+        image.src = carrot.imageSrc;
+        image.onerror = () => console.error(`Failed to load ${carrot.imageSrc}`);
+        return {
+          image: image,
+          width: carrot.width * game.scaleRatio,
+          height: carrot.height * game.scaleRatio
+        };
+      });
 
       game.carrotController = new CarrotController(
         ctx,
         carrotImages,
-        carrotSizes,
-        GROUND_AND_CARROT_SPEED,
-        game.scaleRatio
+        game.scaleRatio,
+        GROUND_AND_CARROT_SPEED
       );
 
       game.score = new Score(ctx, game.scaleRatio);
