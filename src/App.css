@@ -136,7 +136,7 @@ a:hover {
 }
 
 .wallet-container {
-  position: absolute;
+  position: fixed;
   top: 20px;
   right: 20px;
   display: flex;
@@ -572,16 +572,42 @@ a:hover {
   margin: 0 auto;
 }
 
+.game-layout {
+  position: relative;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.back-button-container {
+  position: absolute;
+  left: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+}
+
 .game-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   width: 100%;
   padding: 20px;
   background: var(--terminal-bg);
   border: 2px solid var(--accent-color);
-  margin-bottom: 20px;
   clip-path: polygon(0 0, 100% 0, 100% 95%, 95% 100%, 0 100%);
+}
+
+.header-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.header-center .title {
+  margin-bottom: 0;
 }
 
 .header-info {
@@ -866,9 +892,19 @@ a:hover {
     margin-bottom: 20px;
   }
   
-  .game-header {
+  .game-layout {
     flex-direction: column;
-    gap: 20px;
+    gap: 15px;
+    margin-bottom: 15px;
+  }
+
+  .back-button-container {
+    position: static;
+    transform: none;
+    order: -1;
+  }
+
+  .game-header {
     text-align: center;
   }
   
