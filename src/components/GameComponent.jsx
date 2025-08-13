@@ -5,19 +5,32 @@ import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
 import blockchainService from '../services/blockchainService.js';
+import { useOptimizedBlockchain } from '../hooks/useOptimizedBlockchain.js';
 
 const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
+  
+  // Интеграция оптимизированной blockchain системы
+  const {
+    initializeSystem,
+    sendPlayerAction,
+    isSystemReady,
+    realtimeStats,
+    contractState
+  } = useOptimizedBlockchain();
+  
   const [blockchainStatus, setBlockchainStatus] = useState({
     initialized: false,
     networkName: selectedNetwork?.name || 'Unknown',
     contractAvailable: false,
     pendingTransactions: 0,
     totalMovements: 0,
-    onChainScore: 0
+    onChainScore: 0,
+    optimizedSystemReady: false,
+    lastTransactionTime: null
   });
 
   // Game constants with pixel art scaling
@@ -60,14 +73,32 @@ const GameComponent = ({ selectedNetwork }) => {
       
       const success = await blockchainService.initialize(wallet);
       
+      // Определяем ключ сети для оптимизированной системы
+      let networkKey = 'local'; // по умолчанию
+      if (selectedNetwork.id === 6342) networkKey = 'megaeth';
+      else if (selectedNetwork.id === 84532) networkKey = 'base';
+      
+      console.log(`🚀 Инициализация оптимизированной blockchain системы для ${selectedNetwork.name}...`);
+      
+      // Инициализируем оптимизированную систему
+      const optimizedSuccess = await initializeSystem(networkKey, 30); // 30 предподписанных транзакций для игры
+      
       setBlockchainStatus({
         initialized: success,
         networkName: selectedNetwork.name,
         contractAvailable: blockchainService.isContractAvailable(),
         pendingTransactions: 0,
         totalMovements: 0,
-        onChainScore: 0
+        onChainScore: contractState.currentNumber || 0,
+        optimizedSystemReady: optimizedSuccess,
+        lastTransactionTime: null
       });
+      
+      if (optimizedSuccess) {
+        console.log(`✅ Оптимизированная система готова! Каждый прыжок будет отправлен в блокчейн за ~1-10ms!`);
+      } else {
+        console.log(`⚠️ Используем fallback систему`);
+      }
 
       // Start game session on blockchain if contract is available
       if (success && blockchainService.isContractAvailable()) {
@@ -83,8 +114,38 @@ const GameComponent = ({ selectedNetwork }) => {
     }
   };
 
-  // Handle on-chain movement
+  // Handle on-chain movement with optimized blockchain system
   const handleOnChainMovement = async () => {
+    if (!isSystemReady) {
+      console.log('🎮 Optimized blockchain system not ready yet');
+      return;
+    }
+
+    try {
+      const actionStartTime = performance.now();
+      
+      // Отправляем действие через оптимизированную систему
+      const result = await sendPlayerAction();
+      
+      if (result.success) {
+        setBlockchainStatus(prev => ({
+          ...prev,
+          totalMovements: prev.totalMovements + 1,
+          lastTransactionTime: result.executionTime,
+          onChainScore: contractState.currentNumber || prev.onChainScore
+        }));
+        
+        console.log(`🚀 Прыжок отправлен в блокчейн за ${result.executionTime.toFixed(2)}ms!`);
+      } else {
+        console.error('❌ Ошибка отправки прыжка:', result.error);
+      }
+    } catch (error) {
+      console.error('❌ Критическая ошибка при отправке прыжка:', error);
+    }
+  };
+
+  // Fallback для старой системы (если новая не готова)
+  const handleOnChainMovementFallback = async () => {
     if (!blockchainStatus.initialized) return;
 
     try {
@@ -480,10 +541,8 @@ const GameComponent = ({ selectedNetwork }) => {
           setupGameReset();
         }
 
-        // Handle blockchain movement (every few frames to avoid spam)
-        if (Math.random() < 0.01) { // ~1% chance per frame
-          handleOnChainMovement();
-        }
+        // Blockchain движения обрабатываются в Player.js при прыжках
+        // Здесь мы не вызываем handleOnChainMovement автоматически
       }
 
       // Draw
@@ -548,7 +607,138 @@ const GameComponent = ({ selectedNetwork }) => {
         className="game-canvas"
       />
       <div className="game-ui-overlay">
+        {/* Blockchain Status Display */}
+        {selectedNetwork && !selectedNetwork.isWeb2 && (
+          <div className="blockchain-status">
+            <div className="status-header">
+              <span className={`status-indicator ${isSystemReady ? 'ready' : 'not-ready'}`}>
+                {isSystemReady ? '🚀' : '⏳'}
+              </span>
+              <span className="network-name">{blockchainStatus.networkName}</span>
+            </div>
+            
+            {isSystemReady && (
+              <div className="blockchain-stats">
+                <div className="stat-item">
+                  <span className="stat-label">Прыжков:</span>
+                  <span className="stat-value">{blockchainStatus.totalMovements}</span>
+                </div>
+                
+                {blockchainStatus.lastTransactionTime && (
+                  <div className="stat-item">
+                    <span className="stat-label">Последний прыжок:</span>
+                    <span className="stat-value">{blockchainStatus.lastTransactionTime.toFixed(2)}ms</span>
+                  </div>
+                )}
+                
+                {realtimeStats.averageTimeThisSession > 0 && (
+                  <div className="stat-item">
+                    <span className="stat-label">Среднее время:</span>
+                    <span className="stat-value">{realtimeStats.averageTimeThisSession.toFixed(2)}ms</span>
+                  </div>
+                )}
+                
+                <div className="stat-item">
+                  <span className="stat-label">Счетчик контракта:</span>
+                  <span className="stat-value">{contractState.currentNumber || 0}</span>
+                </div>
+              </div>
+            )}
+            
+            {!isSystemReady && (
+              <div className="status-message">
+                Инициализация blockchain системы...
+              </div>
+            )}
+          </div>
+        )}
       </div>
+      
+      <style jsx>{`
+        .game-canvas-container {
+          position: relative;
+          width: 100%;
+          height: 100%;
+        }
+        
+        .game-ui-overlay {
+          position: absolute;
+          top: 20px;
+          right: 20px;
+          z-index: 10;
+        }
+        
+        .blockchain-status {
+          background: rgba(0, 0, 0, 0.8);
+          border: 2px solid #1391ff;
+          border-radius: 8px;
+          padding: 12px;
+          min-width: 200px;
+          font-family: 'Courier New', monospace;
+          color: white;
+          font-size: 12px;
+        }
+        
+        .status-header {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 8px;
+          font-weight: bold;
+        }
+        
+        .status-indicator.ready {
+          color: #4ade80;
+        }
+        
+        .status-indicator.not-ready {
+          color: #fbbf24;
+        }
+        
+        .network-name {
+          color: #1391ff;
+        }
+        
+        .blockchain-stats {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+        
+        .stat-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .stat-label {
+          color: #929397;
+        }
+        
+        .stat-value {
+          color: #4ade80;
+          font-weight: bold;
+        }
+        
+        .status-message {
+          color: #fbbf24;
+          font-style: italic;
+          text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+          .game-ui-overlay {
+            top: 10px;
+            right: 10px;
+          }
+          
+          .blockchain-status {
+            font-size: 10px;
+            padding: 8px;
+            min-width: 150px;
+          }
+        }
+      `}</style>
     </div>
   );
 };
