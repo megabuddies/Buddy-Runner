@@ -6,8 +6,8 @@ export const CONTRACTS = {
     name: "MegaETH Testnet",
     explorer: "https://carrot.megaeth.com",
     contracts: {
-      updater: "0x0000000000000000000000000000000000000000", // Replace with your deployed Updater contract address
-      faucet: "0x0000000000000000000000000000000000000000",  // Replace with your deployed Faucet contract address
+      updater: "0xb34cac1135c27ec810e7e6880325085783c1a7e0", // Deployed Updater contract
+      faucet: "0x76b71a17d82232fd29aca475d14ed596c67c4b85",  // Deployed Faucet contract
     }
   },
   

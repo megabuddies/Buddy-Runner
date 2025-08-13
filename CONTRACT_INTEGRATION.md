@@ -4,13 +4,21 @@ This project now includes full integration with your Updater and Faucet smart co
 
 ## 🚀 Deployed Contracts
 
-### MegaETH Testnet Configuration
+### MegaETH Testnet - Live Contracts ✅
 
-The contracts are configured for MegaETH testnet (Chain ID: 6342). To use them:
+**Updater Contract:**
+- Address: `0xb34cac1135c27ec810e7e6880325085783c1a7e0`
+- Transaction: `0xa1538acccf8a5b7f9fdcf305db56c858b8f62f64a378826bbc11e495deb63aae`
+- Block: 13907936
 
-1. **Deploy your contracts** using Remix IDE or your preferred deployment tool
-2. **Update contract addresses** in `src/config/contracts.js`
-3. **Fund the faucet** if you want to use the drip functionality
+**Faucet Contract:**
+- Address: `0x76b71a17d82232fd29aca475d14ed596c67c4b85`
+- Transaction: `0x1f483a2fd41a393cadabb5ef7fe3cf72a430592bbb49ec9e82dc75664002c425`
+- Block: 13907925
+
+**Owner:** `0x0Fd736429b6fCeFC750d24a4C2A3bE61b39724c3`
+
+The contracts are now **LIVE** and ready to use! 🎉
 
 ## 📁 Project Structure
 
@@ -75,9 +83,9 @@ contract Faucet {
 }
 ```
 
-### 2. Update Configuration
+### 2. Configuration ✅ COMPLETED
 
-Edit `src/config/contracts.js` and replace the placeholder addresses:
+The contract addresses are already configured in `src/config/contracts.js`:
 
 ```javascript
 export const CONTRACTS = {
@@ -86,8 +94,8 @@ export const CONTRACTS = {
     name: "MegaETH Testnet",
     explorer: "https://carrot.megaeth.com",
     contracts: {
-      updater: "0xYOUR_UPDATER_CONTRACT_ADDRESS",
-      faucet: "0xYOUR_FAUCET_CONTRACT_ADDRESS",
+      updater: "0xb34cac1135c27ec810e7e6880325085783c1a7e0", // ✅ LIVE
+      faucet: "0x76b71a17d82232fd29aca475d14ed596c67c4b85",  // ✅ LIVE
     }
   },
   // ... other networks
