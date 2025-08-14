@@ -64,7 +64,7 @@ const UPDATER_ABI = [
 ];
 
 export const useBlockchainUtils = () => {
-  const { authenticated } = usePrivy();
+  const { authenticated, user, login, logout, isReady, signTransaction } = usePrivy();
   const { wallets } = useWallets();
   
   // Состояние
@@ -193,7 +193,7 @@ export const useBlockchainUtils = () => {
               if (method === 'eth_signTransaction') {
                 // Локальное подписание через Privy
                 const tx = params[0];
-                return await embeddedWallet.signTransaction(tx);
+                return await signTransaction(tx);
               }
               // Остальные методы идут через публичный RPC
               return await publicClient.request({ method, params });
@@ -374,7 +374,7 @@ export const useBlockchainUtils = () => {
           signedTx = await retryWithBackoff(
             async () => {
               // Прямое подписание через embedded wallet
-              return await embeddedWallet.signTransaction(txData);
+              return await signTransaction(txData);
             },
             fallbackConfig ? 1 : 2, // Меньше retry в fallback режиме
             500
@@ -511,7 +511,7 @@ export const useBlockchainUtils = () => {
       // Подписываем транзакцию
       if (chainId === 6342) {
         // MegaETH: локальное подписание
-        return await embeddedWallet.signTransaction(txData);
+        return await signTransaction(txData);
       } else {
         // Другие сети: через walletClient
         const { walletClient } = await createClients(chainId);
