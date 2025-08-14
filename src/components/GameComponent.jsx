@@ -41,6 +41,19 @@ const GameComponent = ({ selectedNetwork }) => {
   const transactionPendingRef = useRef(false);
   const pendingJumpRef = useRef(null);
   const [manualFaucetLoading, setManualFaucetLoading] = useState(false);
+  
+  // Store blockchain functions in refs to avoid dependency issues
+  const blockchainFunctionsRef = useRef({});
+  
+  // Update refs when blockchain functions change
+  useEffect(() => {
+    blockchainFunctionsRef.current = {
+      sendUpdate,
+      getContractNumber,
+      selectedNetwork,
+      blockchainInitialized: blockchainStatus.initialized
+    };
+  }, [sendUpdate, getContractNumber, selectedNetwork, blockchainStatus.initialized]);
 
   // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
@@ -103,8 +116,10 @@ const GameComponent = ({ selectedNetwork }) => {
 
   // Обработка ончейн прыжка
   const handleOnChainMovement = useCallback(async () => {
+    const { sendUpdate, getContractNumber, selectedNetwork, blockchainInitialized } = blockchainFunctionsRef.current;
+    
     // Проверяем, поддерживает ли сеть ончейн функциональность
-    if (!selectedNetwork || selectedNetwork.isWeb2 || !blockchainStatus.initialized) {
+    if (!selectedNetwork || selectedNetwork.isWeb2 || !blockchainInitialized) {
       console.log('Skipping on-chain movement - Web2 mode or not initialized');
       return;
     }
@@ -170,7 +185,7 @@ const GameComponent = ({ selectedNetwork }) => {
       transactionPendingRef.current = false;
       setShowToast(false);
     }
-  }, [selectedNetwork, blockchainStatus.initialized, sendUpdate, getContractNumber]);
+  }, []); // Empty dependency array - function is stable now
 
   // Manual faucet call function
   const handleManualFaucet = async () => {
