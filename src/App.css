@@ -1039,8 +1039,9 @@ a:hover {
   .game-canvas-container {
     padding: 5px;
   }
+}
 
-  /* Web2 Classic Mode Styles */
+/* Web2 Classic Mode Styles */
 .web2-mode {
   color: #2ecc71;
   font-weight: normal;
