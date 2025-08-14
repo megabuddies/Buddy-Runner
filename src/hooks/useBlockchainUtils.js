@@ -127,20 +127,85 @@ export const useBlockchainUtils = () => {
     const embeddedWallet = getEmbeddedWallet();
     if (!embeddedWallet) throw new Error('No embedded wallet found');
 
-    // Создаем публичный клиент
-    const publicClient = createPublicClient({
-      transport: http(config.rpcUrl),
-    });
+    try {
+      // Создаем публичный клиент с более надежной конфигурацией
+      const publicClient = createPublicClient({
+        chain: {
+          id: chainId,
+          name: config.name,
+          network: config.name.toLowerCase().replace(/\s+/g, '-'),
+          nativeCurrency: {
+            name: 'Ether',
+            symbol: 'ETH',
+            decimals: 18,
+          },
+          rpcUrls: {
+            default: { http: [config.rpcUrl] },
+            public: { http: [config.rpcUrl] },
+          },
+        },
+        transport: http(config.rpcUrl, {
+          retryCount: 3,
+          timeout: 10000,
+        }),
+      });
 
-    // Создаем клиент кошелька
-    const walletClient = createWalletClient({
-      account: embeddedWallet.address,
-      transport: custom(embeddedWallet.getEthereumProvider()),
-    });
+      // Создаем клиент кошелька с проверкой провайдера
+      let walletClient;
+      try {
+        const provider = embeddedWallet.getEthereumProvider();
+        if (!provider) {
+          throw new Error('Embedded wallet provider not available');
+        }
+        
+        walletClient = createWalletClient({
+          account: embeddedWallet.address,
+          chain: {
+            id: chainId,
+            name: config.name,
+            network: config.name.toLowerCase().replace(/\s+/g, '-'),
+            nativeCurrency: {
+              name: 'Ether',
+              symbol: 'ETH',
+              decimals: 18,
+            },
+            rpcUrls: {
+              default: { http: [config.rpcUrl] },
+              public: { http: [config.rpcUrl] },
+            },
+          },
+          transport: custom(provider),
+        });
+      } catch (providerError) {
+        console.error('Error creating wallet client:', providerError);
+        // Fallback to HTTP transport for wallet client
+        walletClient = createWalletClient({
+          account: embeddedWallet.address,
+          chain: {
+            id: chainId,
+            name: config.name,
+            network: config.name.toLowerCase().replace(/\s+/g, '-'),
+            nativeCurrency: {
+              name: 'Ether',
+              symbol: 'ETH',
+              decimals: 18,
+            },
+            rpcUrls: {
+              default: { http: [config.rpcUrl] },
+              public: { http: [config.rpcUrl] },
+            },
+          },
+          transport: http(config.rpcUrl),
+        });
+      }
 
-    const clients = { publicClient, walletClient, config };
-    clientCache.current[cacheKey] = clients;
-    return clients;
+      const clients = { publicClient, walletClient, config };
+      clientCache.current[cacheKey] = clients;
+      return clients;
+    } catch (error) {
+      console.error('Error creating clients:', error);
+      throw new Error(`Failed to create blockchain clients: ${error.message}`);
+    }
   };
 
   // Получение газовых параметров
@@ -292,7 +357,10 @@ export const useBlockchainUtils = () => {
       const { publicClient } = await createClients(chainId);
       const embeddedWallet = getEmbeddedWallet();
       
-      if (!embeddedWallet) return '0';
+      if (!embeddedWallet) {
+        console.error('No embedded wallet available for balance check');
+        return '0';
+      }
       
       const balance = await publicClient.getBalance({
         address: embeddedWallet.address
@@ -300,9 +368,12 @@ export const useBlockchainUtils = () => {
       
       const balanceEth = (Number(balance) / 10**18).toFixed(4);
       setBalance(balanceEth);
+      console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
       return balanceEth;
     } catch (error) {
       console.error('Error checking balance:', error);
+      // Return 0 balance and let the system continue
+      setBalance('0');
       return '0';
     }
   };
@@ -320,17 +391,35 @@ export const useBlockchainUtils = () => {
         body: JSON.stringify({ address, chainId }),
       });
 
-      const result = await response.json();
-      
       if (!response.ok) {
-        throw new Error(result.error || 'Faucet request failed');
+        let errorMessage = 'Faucet request failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
+      const result = await response.json();
       console.log('Faucet success:', result);
       return result;
     } catch (error) {
       console.error('Faucet error:', error);
-      throw error;
+      
+      // Provide specific error messages based on common issues
+      if (error.message.includes('405')) {
+        throw new Error('Faucet service is temporarily unavailable. Please try again later.');
+      } else if (error.message.includes('insufficient balance')) {
+        throw new Error('Faucet is empty. Please contact support.');
+      } else if (error.message.includes('already has sufficient balance')) {
+        console.log('User already has sufficient balance, continuing...');
+        return { success: true, message: 'Sufficient balance already available' };
+      } else {
+        throw new Error(`Faucet error: ${error.message}`);
+      }
     }
   };
 
@@ -509,11 +598,19 @@ export const useBlockchainUtils = () => {
       // Если баланс равен 0, вызываем faucet
       if (parseFloat(currentBalance) === 0) {
         console.log('Balance is 0, calling faucet...');
-        await callFaucet(embeddedWallet.address, chainId);
-        
-        // Ждём немного и проверяем баланс снова
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        await checkBalance(chainId);
+        try {
+          await callFaucet(embeddedWallet.address, chainId);
+          
+          // Ждём немного и проверяем баланс снова
+          console.log('Waiting for faucet transaction to complete...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          const newBalance = await checkBalance(chainId);
+          console.log('Balance after faucet:', newBalance);
+        } catch (faucetError) {
+          console.error('Faucet failed, but continuing with initialization:', faucetError);
+          // Don't throw - continue with initialization even if faucet fails
+          // Users can manually add funds or try faucet later
+        }
       }
 
       // Получаем текущий nonce

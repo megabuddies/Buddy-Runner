@@ -23,7 +23,9 @@ const GameComponent = ({ selectedNetwork }) => {
     sendUpdate,
     checkBalance,
     getContractNumber,
-    isReady
+    isReady,
+    getEmbeddedWallet,
+    callFaucet
   } = useBlockchainUtils();
 
   const [blockchainStatus, setBlockchainStatus] = useState({
@@ -38,6 +40,7 @@ const GameComponent = ({ selectedNetwork }) => {
   const [showToast, setShowToast] = useState(false);
   const transactionPendingRef = useRef(false);
   const pendingJumpRef = useRef(null);
+  const [manualFaucetLoading, setManualFaucetLoading] = useState(false);
 
   // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
@@ -166,6 +169,37 @@ const GameComponent = ({ selectedNetwork }) => {
     } finally {
       transactionPendingRef.current = false;
       setShowToast(false);
+    }
+  };
+
+  // Manual faucet call function
+  const handleManualFaucet = async () => {
+    if (!selectedNetwork || selectedNetwork.isWeb2 || !isReady) {
+      return;
+    }
+
+    try {
+      setManualFaucetLoading(true);
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        alert('Please connect your wallet first');
+        return;
+      }
+
+      console.log('Manual faucet request for:', embeddedWallet.address);
+      await callFaucet(embeddedWallet.address, selectedNetwork.id);
+      
+      // Wait and refresh balance
+      setTimeout(async () => {
+        await checkBalance(selectedNetwork.id);
+      }, 3000);
+
+      alert('Faucet request successful! Funds should arrive shortly.');
+    } catch (error) {
+      console.error('Manual faucet error:', error);
+      alert(`Faucet request failed: ${error.message}`);
+    } finally {
+      setManualFaucetLoading(false);
     }
   };
 
@@ -676,6 +710,17 @@ const GameComponent = ({ selectedNetwork }) => {
                 <span className="label">Jumps:</span>
                 <span className="value">{blockchainStatus.totalMovements}</span>
               </div>
+              {parseFloat(balance) < 0.01 && (
+                <div className="status-item">
+                  <button 
+                    className="faucet-button" 
+                    onClick={handleManualFaucet}
+                    disabled={manualFaucetLoading}
+                  >
+                    {manualFaucetLoading ? 'Requesting...' : 'Get Test ETH'}
+                  </button>
+                </div>
+              )}
               {transactionPending && (
                 <div className="status-item">
                   <span className="label">Status:</span>
