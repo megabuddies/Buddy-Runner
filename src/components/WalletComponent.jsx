@@ -21,7 +21,31 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       if (authenticated && wallets && wallets.length > 0 && selectedNetwork && !isNetworkSwitching) {
         try {
           const wallet = wallets[0];
-          const currentChainId = await wallet.getChainId();
+          
+          // Safely get chain ID with error handling
+          let currentChainId;
+          try {
+            // Check if wallet has getChainId method
+            if (typeof wallet.getChainId === 'function') {
+              currentChainId = await wallet.getChainId();
+            } else if (wallet.chainId) {
+              // Fallback to chainId property
+              currentChainId = wallet.chainId;
+            } else {
+              // Try to get chain ID from provider
+              const provider = await wallet.getEthereumProvider?.();
+              if (provider && provider.request) {
+                const chainIdHex = await provider.request({ method: 'eth_chainId' });
+                currentChainId = parseInt(chainIdHex, 16);
+              } else {
+                console.warn('Cannot determine current chain ID, skipping auto-switch');
+                return;
+              }
+            }
+          } catch (chainIdError) {
+            console.warn('Failed to get current chain ID:', chainIdError);
+            return;
+          }
           
           if (currentChainId !== selectedNetwork.id) {
             console.log(`Auto-switching to ${selectedNetwork.name}...`);
@@ -59,6 +83,13 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     try {
       const wallet = wallets[0];
       const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
+      
+      // Safely check if wallet supports switchChain method
+      if (typeof wallet.switchChain !== 'function') {
+        console.warn('Wallet does not support network switching');
+        alert('This wallet does not support automatic network switching. Please switch manually.');
+        return;
+      }
       
       // First try to switch to the network
       try {
