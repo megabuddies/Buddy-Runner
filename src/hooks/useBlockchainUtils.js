@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useSendTransaction } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
 
 // Конфигурация сетей
@@ -64,7 +64,7 @@ const UPDATER_ABI = [
 ];
 
 export const useBlockchainUtils = () => {
-  const { authenticated, user, login, logout, isReady } = usePrivy();
+  const { authenticated, user, login, logout, isReady, signTransaction } = usePrivy();
   const { wallets } = useWallets();
   
   // Состояние
@@ -153,17 +153,13 @@ export const useBlockchainUtils = () => {
         throw new Error('No embedded wallet available');
       }
       
-      // Get the provider from the embedded wallet
-      const provider = await embeddedWallet.getProvider();
-      if (!provider) {
-        throw new Error('Failed to get provider from embedded wallet');
+      // Use signTransaction from usePrivy hook
+      if (!signTransaction) {
+        throw new Error('signTransaction not available from Privy');
       }
       
-      // Sign the transaction using the provider
-      const signedTx = await provider.request({
-        method: 'eth_signTransaction',
-        params: [txData]
-      });
+      // Sign the transaction using Privy's signTransaction
+      const signedTx = await signTransaction(txData);
       
       return signedTx;
     } catch (error) {
