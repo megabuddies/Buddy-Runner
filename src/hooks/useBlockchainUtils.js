@@ -224,8 +224,8 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // Предварительная подпись пакета транзакций
-  const preSignBatch = async (chainId, startNonce, batchSize = 10) => {
+  // Предварительная подпись пакета транзакций с защитой от rate limiting
+  const preSignBatch = async (chainId, startNonce, batchSize = 5) => {
     try {
       console.log(`Pre-signing ${batchSize} transactions starting from nonce ${startNonce}`);
       
@@ -238,7 +238,9 @@ export const useBlockchainUtils = () => {
         maxPriorityFeePerGasGwei: Number(gas.maxPriorityFeePerGas) / 1e9
       });
 
-      const signingPromises = Array.from({ length: batchSize }, async (_, i) => {
+      // Sign transactions sequentially to avoid rate limiting
+      const results = [];
+      for (let i = 0; i < batchSize; i++) {
         const txData = {
           account: embeddedWallet.address,
           to: config.contractAddress,
@@ -257,10 +259,37 @@ export const useBlockchainUtils = () => {
           txData.maxPriorityFeePerGas = gas.maxFeePerGas / 2n;
         }
 
-        return await walletClient.signTransaction(txData);
-      });
-
-      const results = await Promise.all(signingPromises);
+        try {
+          const signedTx = await walletClient.signTransaction(txData);
+          results.push(signedTx);
+          console.log(`Signed transaction ${i + 1}/${batchSize}`);
+          
+          // Add delay between signings to avoid rate limiting
+          if (i < batchSize - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500)); // 500ms delay
+          }
+        } catch (signError) {
+          console.error(`Error signing transaction ${i + 1}:`, signError);
+          
+          // If we hit rate limits, wait longer and retry
+          if (signError.message.includes('Too many requests') || signError.message.includes('429')) {
+            console.log('Rate limited, waiting 3 seconds before retry...');
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // Retry this transaction
+            try {
+              const signedTx = await walletClient.signTransaction(txData);
+              results.push(signedTx);
+              console.log(`Signed transaction ${i + 1}/${batchSize} (after retry)`);
+            } catch (retryError) {
+              console.error(`Failed to sign transaction ${i + 1} after retry:`, retryError);
+              throw retryError;
+            }
+          } else {
+            throw signError;
+          }
+        }
+      }
       
       const chainKey = chainId.toString();
       preSignedPool.current[chainKey] = {
@@ -279,7 +308,7 @@ export const useBlockchainUtils = () => {
       if (error.message.includes('TipAboveFeeCapError') || error.message.includes('maxPriorityFeePerGas')) {
         console.log('Retrying with legacy transaction type...');
         try {
-          return await preSignBatchLegacy(chainId, startNonce, batchSize);
+          return await preSignBatchLegacy(chainId, startNonce, Math.min(batchSize, 3)); // Smaller batch for legacy
         } catch (legacyError) {
           console.error('Legacy transaction also failed:', legacyError);
         }
@@ -289,8 +318,8 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // Fallback function for legacy (type 0) transactions
-  const preSignBatchLegacy = async (chainId, startNonce, batchSize = 10) => {
+  // Fallback function for legacy (type 0) transactions with rate limiting protection
+  const preSignBatchLegacy = async (chainId, startNonce, batchSize = 3) => {
     const { walletClient, config } = await createClients(chainId);
     const { publicClient } = await createClients(chainId);
     const embeddedWallet = getEmbeddedWallet();
@@ -301,7 +330,9 @@ export const useBlockchainUtils = () => {
 
     console.log(`Using legacy transactions with gas price: ${Number(adjustedGasPrice) / 1e9} gwei`);
 
-    const signingPromises = Array.from({ length: batchSize }, async (_, i) => {
+    // Sign transactions sequentially to avoid rate limiting
+    const results = [];
+    for (let i = 0; i < batchSize; i++) {
       const txData = {
         account: embeddedWallet.address,
         to: config.contractAddress,
@@ -313,10 +344,35 @@ export const useBlockchainUtils = () => {
         gas: 100000n,
       };
 
-      return await walletClient.signTransaction(txData);
-    });
-
-    const results = await Promise.all(signingPromises);
+      try {
+        const signedTx = await walletClient.signTransaction(txData);
+        results.push(signedTx);
+        console.log(`Signed legacy transaction ${i + 1}/${batchSize}`);
+        
+        // Add delay between signings
+        if (i < batchSize - 1) {
+          await new Promise(resolve => setTimeout(resolve, 800)); // Longer delay for legacy
+        }
+      } catch (signError) {
+        console.error(`Error signing legacy transaction ${i + 1}:`, signError);
+        
+        if (signError.message.includes('Too many requests') || signError.message.includes('429')) {
+          console.log('Rate limited on legacy transaction, waiting 5 seconds...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          try {
+            const signedTx = await walletClient.signTransaction(txData);
+            results.push(signedTx);
+            console.log(`Signed legacy transaction ${i + 1}/${batchSize} (after retry)`);
+          } catch (retryError) {
+            console.error(`Failed to sign legacy transaction ${i + 1} after retry:`, retryError);
+            throw retryError;
+          }
+        } else {
+          throw signError;
+        }
+      }
+    }
     
     const chainKey = chainId.toString();
     preSignedPool.current[chainKey] = {
@@ -330,12 +386,11 @@ export const useBlockchainUtils = () => {
     return results;
   };
 
-  // Умное пополнение пула
-  const extendPool = async (chainId, nextNonce, batchSize = 10) => {
+  // Умное пополнение пула с защитой от rate limiting
+  const extendPool = async (chainId, nextNonce, batchSize = 3) => {
     try {
       console.log(`Extending pool with ${batchSize} more transactions from nonce ${nextNonce}`);
       
-      // Try to extend using the same method that was successful in preSignBatch
       const chainKey = chainId.toString();
       const pool = preSignedPool.current[chainKey];
       
@@ -343,35 +398,49 @@ export const useBlockchainUtils = () => {
       const useEIP1559 = pool && pool.transactions.length > 0 && 
                          pool.transactions[0].includes('"type":"0x2"'); // EIP-1559 indicator
       
-      let newTransactions;
+      let newTransactions = [];
       
       if (useEIP1559) {
         const { walletClient, config } = await createClients(chainId);
         const gas = await getGasParams(chainId);
         const embeddedWallet = getEmbeddedWallet();
 
-        newTransactions = await Promise.all(
-          Array.from({ length: batchSize }, async (_, i) => {
-            const txData = {
-              account: embeddedWallet.address,
-              to: config.contractAddress,
-              data: '0xa2e62045',
-              nonce: nextNonce + i,
-              maxFeePerGas: gas.maxFeePerGas,
-              maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
-              value: 0n,
-              type: 'eip1559',
-              gas: 100000n,
-            };
+        // Sign sequentially to avoid rate limits
+        for (let i = 0; i < batchSize; i++) {
+          const txData = {
+            account: embeddedWallet.address,
+            to: config.contractAddress,
+            data: '0xa2e62045',
+            nonce: nextNonce + i,
+            maxFeePerGas: gas.maxFeePerGas,
+            maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
+            value: 0n,
+            type: 'eip1559',
+            gas: 100000n,
+          };
 
-            // Validate gas values
-            if (gas.maxPriorityFeePerGas > gas.maxFeePerGas) {
-              txData.maxPriorityFeePerGas = gas.maxFeePerGas / 2n;
+          // Validate gas values
+          if (gas.maxPriorityFeePerGas > gas.maxFeePerGas) {
+            txData.maxPriorityFeePerGas = gas.maxFeePerGas / 2n;
+          }
+
+          try {
+            const signedTx = await walletClient.signTransaction(txData);
+            newTransactions.push(signedTx);
+            
+            // Delay between signings
+            if (i < batchSize - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1000)); // 1 second delay
             }
-
-            return await walletClient.signTransaction(txData);
-          })
-        );
+          } catch (signError) {
+            console.error(`Error extending pool (EIP1559) transaction ${i + 1}:`, signError);
+            if (signError.message.includes('Too many requests')) {
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              continue; // Skip this transaction
+            }
+            break; // Stop trying if other error
+          }
+        }
       } else {
         // Use legacy transactions
         const { walletClient, config, publicClient } = await createClients(chainId);
@@ -379,30 +448,45 @@ export const useBlockchainUtils = () => {
         const gasPrice = await publicClient.getGasPrice();
         const adjustedGasPrice = gasPrice * 120n / 100n;
 
-        newTransactions = await Promise.all(
-          Array.from({ length: batchSize }, async (_, i) => {
-            const txData = {
-              account: embeddedWallet.address,
-              to: config.contractAddress,
-              data: '0xa2e62045',
-              nonce: nextNonce + i,
-              gasPrice: adjustedGasPrice,
-              value: 0n,
-              type: 'legacy',
-              gas: 100000n,
-            };
+        // Sign sequentially to avoid rate limits
+        for (let i = 0; i < batchSize; i++) {
+          const txData = {
+            account: embeddedWallet.address,
+            to: config.contractAddress,
+            data: '0xa2e62045',
+            nonce: nextNonce + i,
+            gasPrice: adjustedGasPrice,
+            value: 0n,
+            type: 'legacy',
+            gas: 100000n,
+          };
 
-            return await walletClient.signTransaction(txData);
-          })
-        );
+          try {
+            const signedTx = await walletClient.signTransaction(txData);
+            newTransactions.push(signedTx);
+            
+            // Delay between signings
+            if (i < batchSize - 1) {
+              await new Promise(resolve => setTimeout(resolve, 1200)); // 1.2 second delay for legacy
+            }
+          } catch (signError) {
+            console.error(`Error extending pool (legacy) transaction ${i + 1}:`, signError);
+            if (signError.message.includes('Too many requests')) {
+              await new Promise(resolve => setTimeout(resolve, 3000));
+              continue; // Skip this transaction
+            }
+            break; // Stop trying if other error
+          }
+        }
       }
 
-      if (pool) {
+      if (pool && newTransactions.length > 0) {
         pool.transactions.push(...newTransactions);
         pool.hasTriggeredRefill = false; // Сбрасываем флаг
+        console.log(`Pool extended with ${newTransactions.length} transactions`);
+      } else {
+        console.log('No new transactions added to pool');
       }
-
-      console.log(`Pool extended with ${newTransactions.length} transactions`);
     } catch (error) {
       console.error('Error extending pool:', error);
     }
@@ -420,13 +504,13 @@ export const useBlockchainUtils = () => {
     const tx = pool.transactions[pool.currentIndex];
     pool.currentIndex++;
 
-    // Пополнение каждые 5 транзакций (50% от начального пакета)
-    if (pool.currentIndex % 5 === 0 && !pool.hasTriggeredRefill) {
+    // Пополнение каждые 2 транзакции для поддержания пула
+    if (pool.currentIndex % 2 === 0 && !pool.hasTriggeredRefill && pool.transactions.length < 10) {
       pool.hasTriggeredRefill = true;
       const nextNonce = pool.baseNonce + pool.transactions.length;
       
-      // Асинхронно подписываем ещё 10 транзакций
-      extendPool(chainId, nextNonce, 10).catch(console.error);
+      // Асинхронно подписываем ещё 3 транзакции
+      extendPool(chainId, nextNonce, 3).catch(console.error);
     }
 
     return tx;
@@ -639,8 +723,8 @@ export const useBlockchainUtils = () => {
 
       console.log('Starting nonce:', nonce);
 
-      // Предварительно подписываем пакет транзакций
-      await preSignBatch(chainId, nonce, 20); // Начинаем с 20 транзакций
+      // Предварительно подписываем пакет транзакций (начинаем с меньшего количества)
+      await preSignBatch(chainId, nonce, 5); // Начинаем с 5 транзакций
 
       isInitialized.current[chainKey] = true;
       console.log('Initialization complete for chain:', chainId);
