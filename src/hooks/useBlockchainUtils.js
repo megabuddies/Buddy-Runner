@@ -7,35 +7,66 @@ const NETWORK_CONFIGS = {
   6342: { // MegaETH Testnet
     name: 'MegaETH Testnet',
     rpcUrl: 'https://carrot.megaeth.com/rpc',
+    fallbackRpcUrls: [
+      'https://carrot.megaeth.com/rpc',
+      // Добавьте дополнительные RPC endpoints если доступны
+    ],
     wsUrl: 'wss://carrot.megaeth.com/ws',
     contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0', // Updater contract
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 6342,
     sendMethod: 'realtime_sendRawTransaction', // Специальный метод для MegaETH
+    connectionTimeouts: {
+      initial: 30000, // 30 seconds for initial connection
+      retry: 15000,   // 15 seconds for retries
+      request: 45000  // 45 seconds for individual requests
+    },
+    maxConnections: 3, // Limit concurrent connections
   },
   31337: { // Foundry Local
     name: 'Foundry Local',
     rpcUrl: 'http://127.0.0.1:8545',
+    fallbackRpcUrls: ['http://127.0.0.1:8545'],
     contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0',
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 31337,
     sendMethod: 'eth_sendRawTransaction',
+    connectionTimeouts: {
+      initial: 10000,
+      retry: 5000,
+      request: 15000
+    },
+    maxConnections: 2,
   },
   50311: { // Somnia Testnet
     name: 'Somnia Testnet',
     rpcUrl: 'https://testnet.somnia.network',
+    fallbackRpcUrls: ['https://testnet.somnia.network'],
     contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0',
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 50311,
     sendMethod: 'eth_sendRawTransaction',
+    connectionTimeouts: {
+      initial: 20000,
+      retry: 10000,
+      request: 30000
+    },
+    maxConnections: 2,
   },
   1313161556: { // RISE Testnet
     name: 'RISE Testnet',
     rpcUrl: 'https://testnet-rpc.rise.com',
+    fallbackRpcUrls: ['https://testnet-rpc.rise.com'],
     contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0',
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 1313161556,
     sendMethod: 'eth_sendRawTransactionSync', // Синхронный метод для RISE
+    connectionTimeouts: {
+      initial: 20000,
+      retry: 10000,
+      request: 30000
+    },
+    maxConnections: 2,
   }
 };
 
@@ -101,6 +132,11 @@ export const useBlockchainUtils = () => {
   const clientCache = useRef({});
   const gasParams = useRef({});
   
+  // НОВАЯ система управления соединениями
+  const connectionPool = useRef({});
+  const rpcHealthStatus = useRef({});
+  const activeConnections = useRef({});
+  
   // УЛУЧШЕННЫЙ ПУЛ ТРАНЗАКЦИЙ с большим размером и централизованным nonce
   const preSignedPool = useRef({});
   const nonceManager = useRef({}); // Централизованное управление nonce
@@ -109,28 +145,57 @@ export const useBlockchainUtils = () => {
   // Кеширование параметров сети для минимизации RPC вызовов
   const chainParamsCache = useRef({});
 
-  // УЛУЧШЕННАЯ конфигурация для разных сетей
+  // УЛУЧШЕННАЯ конфигурация для разных сетей с адаптивным поведением
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH
-      poolSize: 15, // Увеличен с 3 до 15
-      refillAt: 0.5, // Пополнять при 50% использования
-      batchSize: 5, // Размер пакета для пополнения
-      maxRetries: 2,
-      retryDelay: 500
+      poolSize: 20, // Увеличен для лучшей производительности
+      refillAt: 0.4, // Раннее пополнение для избежания простоев
+      batchSize: 8, // Больший размер пакета для эффективности
+      maxRetries: 3,
+      retryDelay: 300,
+      burstMode: true, // Поддержка burst режима
+      maxBurstSize: 3, // Максимум транзакций в burst режиме
+      burstCooldown: 1000 // Cooldown между burst'ами
     },
     31337: { // Foundry
-      poolSize: 10,
+      poolSize: 15,
+      refillAt: 0.5,
+      batchSize: 7,
+      maxRetries: 3,
+      retryDelay: 200,
+      burstMode: true,
+      maxBurstSize: 5,
+      burstCooldown: 500
+    },
+    50311: { // Somnia
+      poolSize: 12,
       refillAt: 0.6,
       batchSize: 5,
       maxRetries: 3,
-      retryDelay: 200
+      retryDelay: 400,
+      burstMode: false,
+      maxBurstSize: 2,
+      burstCooldown: 2000
+    },
+    1313161556: { // RISE
+      poolSize: 10,
+      refillAt: 0.7,
+      batchSize: 4,
+      maxRetries: 2,
+      retryDelay: 600,
+      burstMode: false,
+      maxBurstSize: 1,
+      burstCooldown: 3000
     },
     default: {
       poolSize: 10,
       refillAt: 0.5,
       batchSize: 5,
       maxRetries: 3,
-      retryDelay: 300
+      retryDelay: 300,
+      burstMode: false,
+      maxBurstSize: 2,
+      burstCooldown: 1000
     }
   };
 
@@ -147,6 +212,207 @@ export const useBlockchainUtils = () => {
   const fallbackState = useRef({
     6342: { ...MEGAETH_FALLBACK_CONFIG } // MegaETH
   });
+
+  // Система управления burst режимом и rate limiting
+  const burstState = useRef({});
+  
+  const getBurstManager = (chainId) => {
+    if (!burstState.current[chainId]) {
+      const config = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+      burstState.current[chainId] = {
+        lastBurstTime: 0,
+        burstCount: 0,
+        inCooldown: false,
+        pendingTransactions: [],
+        processingBurst: false
+      };
+    }
+    return burstState.current[chainId];
+  };
+
+  // Проверка возможности burst транзакции
+  const canExecuteBurst = (chainId) => {
+    const config = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+    if (!config.burstMode) return false;
+
+    const burstManager = getBurstManager(chainId);
+    const now = Date.now();
+
+    // Проверяем cooldown период
+    if (burstManager.inCooldown && (now - burstManager.lastBurstTime) < config.burstCooldown) {
+      return false;
+    }
+
+    // Если cooldown закончился, сбрасываем состояние
+    if (burstManager.inCooldown && (now - burstManager.lastBurstTime) >= config.burstCooldown) {
+      burstManager.inCooldown = false;
+      burstManager.burstCount = 0;
+    }
+
+    return burstManager.burstCount < config.maxBurstSize;
+  };
+
+  // Обновление состояния burst менеджера
+  const updateBurstState = (chainId, success) => {
+    const config = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+    if (!config.burstMode) return;
+
+    const burstManager = getBurstManager(chainId);
+    const now = Date.now();
+
+    if (success) {
+      burstManager.burstCount++;
+      burstManager.lastBurstTime = now;
+
+      // Если достигли лимита burst, включаем cooldown
+      if (burstManager.burstCount >= config.maxBurstSize) {
+        burstManager.inCooldown = true;
+        console.log(`Burst mode cooldown activated for chain ${chainId} (${config.burstCooldown}ms)`);
+      }
+    }
+  };
+
+  // Умная очередь транзакций для burst режима
+  const queueBurstTransaction = async (chainId, transactionFn) => {
+    const burstManager = getBurstManager(chainId);
+    
+    return new Promise((resolve, reject) => {
+      burstManager.pendingTransactions.push({
+        fn: transactionFn,
+        resolve,
+        reject,
+        timestamp: Date.now()
+      });
+      
+      // Запускаем обработку очереди если еще не запущена
+      if (!burstManager.processingBurst) {
+        processBurstQueue(chainId);
+      }
+    });
+  };
+
+  // Обработка очереди burst транзакций
+  const processBurstQueue = async (chainId) => {
+    const burstManager = getBurstManager(chainId);
+    burstManager.processingBurst = true;
+
+    while (burstManager.pendingTransactions.length > 0) {
+      const canBurst = canExecuteBurst(chainId);
+      
+      if (!canBurst) {
+        // Ждем окончания cooldown
+        const config = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+        const waitTime = Math.max(100, config.burstCooldown / 10);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+
+      const transaction = burstManager.pendingTransactions.shift();
+      if (!transaction) break;
+
+      try {
+        const result = await transaction.fn();
+        updateBurstState(chainId, true);
+        transaction.resolve(result);
+      } catch (error) {
+        updateBurstState(chainId, false);
+        transaction.reject(error);
+      }
+    }
+
+    burstManager.processingBurst = false;
+  };
+
+  // НОВАЯ система мониторинга здоровья RPC endpoints
+  const initializeRpcHealth = (chainId) => {
+    const config = NETWORK_CONFIGS[chainId];
+    if (!config) return;
+
+    if (!rpcHealthStatus.current[chainId]) {
+      rpcHealthStatus.current[chainId] = {
+        endpoints: config.fallbackRpcUrls.map(url => ({
+          url,
+          healthy: true,
+          lastChecked: 0,
+          consecutiveFailures: 0,
+          responseTime: 0
+        })),
+        currentEndpointIndex: 0,
+        lastHealthCheck: 0
+      };
+    }
+  };
+
+  // Получение следующего здорового RPC endpoint
+  const getHealthyRpcEndpoint = async (chainId) => {
+    const health = rpcHealthStatus.current[chainId];
+    if (!health) {
+      initializeRpcHealth(chainId);
+      return NETWORK_CONFIGS[chainId].rpcUrl;
+    }
+
+    // Ищем здоровый endpoint
+    for (let i = 0; i < health.endpoints.length; i++) {
+      const endpoint = health.endpoints[health.currentEndpointIndex];
+      
+      if (endpoint.healthy || endpoint.consecutiveFailures < 3) {
+        return endpoint.url;
+      }
+      
+      // Переходим к следующему endpoint
+      health.currentEndpointIndex = (health.currentEndpointIndex + 1) % health.endpoints.length;
+    }
+
+    // Если все endpoints нездоровы, возвращаем первый (возможно, проблема временная)
+    console.warn(`All RPC endpoints for chain ${chainId} appear unhealthy, using primary`);
+    return health.endpoints[0].url;
+  };
+
+  // Обновление статуса здоровья endpoint
+  const updateRpcHealth = (chainId, rpcUrl, success, responseTime = 0) => {
+    const health = rpcHealthStatus.current[chainId];
+    if (!health) return;
+
+    const endpoint = health.endpoints.find(ep => ep.url === rpcUrl);
+    if (!endpoint) return;
+
+    endpoint.lastChecked = Date.now();
+    endpoint.responseTime = responseTime;
+
+    if (success) {
+      endpoint.healthy = true;
+      endpoint.consecutiveFailures = 0;
+    } else {
+      endpoint.consecutiveFailures++;
+      if (endpoint.consecutiveFailures >= 3) {
+        endpoint.healthy = false;
+        console.warn(`Marking RPC endpoint as unhealthy: ${rpcUrl} (${endpoint.consecutiveFailures} failures)`);
+      }
+    }
+  };
+
+  // Управление пулом соединений
+  const getConnectionFromPool = (chainId, rpcUrl) => {
+    const poolKey = `${chainId}-${rpcUrl}`;
+    const config = NETWORK_CONFIGS[chainId];
+    
+    if (!activeConnections.current[poolKey]) {
+      activeConnections.current[poolKey] = 0;
+    }
+
+    if (activeConnections.current[poolKey] >= config.maxConnections) {
+      throw new Error(`Maximum connections (${config.maxConnections}) reached for ${poolKey}`);
+    }
+
+    activeConnections.current[poolKey]++;
+    
+    return () => {
+      // Cleanup function
+      if (activeConnections.current[poolKey] > 0) {
+        activeConnections.current[poolKey]--;
+      }
+    };
+  };
 
   // Управление fallback режимом
   const enableFallbackMode = (chainId) => {
@@ -197,7 +463,7 @@ export const useBlockchainUtils = () => {
     return null;
   };
 
-  // УЛУЧШЕННОЕ создание клиентов с лучшей обработкой ошибок
+  // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ создание клиентов с системой fallback endpoints
   const createClients = async (chainId) => {
     const cacheKey = `${chainId}`;
     if (clientCache.current[cacheKey]) {
@@ -210,8 +476,18 @@ export const useBlockchainUtils = () => {
     const embeddedWallet = getEmbeddedWallet();
     if (!embeddedWallet) throw new Error('No embedded wallet found');
 
+    // Инициализируем систему мониторинга RPC здоровья
+    initializeRpcHealth(chainId);
+
     try {
-      // Создаем публичный клиент с более надежной конфигурацией
+      // Получаем здоровый RPC endpoint
+      const healthyRpcUrl = await getHealthyRpcEndpoint(chainId);
+      console.log(`Using RPC endpoint for chain ${chainId}: ${healthyRpcUrl}`);
+
+      // Получаем соединение из пула
+      const releaseConnection = getConnectionFromPool(chainId, healthyRpcUrl);
+
+      // Создаем публичный клиент с адаптивными таймаутами
       const publicClient = createPublicClient({
         chain: {
           id: chainId,
@@ -223,14 +499,14 @@ export const useBlockchainUtils = () => {
             decimals: 18
           },
           rpcUrls: {
-            default: { http: [config.rpcUrl] },
-            public: { http: [config.rpcUrl] }
+            default: { http: [healthyRpcUrl] },
+            public: { http: [healthyRpcUrl] }
           }
         },
-        transport: http(config.rpcUrl, {
-          timeout: 15000, // Увеличен timeout с 10s до 15s
-          retryCount: 3, // Увеличен retry count
-          retryDelay: 1000
+        transport: http(healthyRpcUrl, {
+          timeout: config.connectionTimeouts.initial,
+          retryCount: 4, // Увеличен retry count
+          retryDelay: ({ count }) => Math.min(1000 * Math.pow(2, count), 8000) // Exponential backoff
         })
       });
 
@@ -267,23 +543,29 @@ export const useBlockchainUtils = () => {
           })
         });
       } else {
-        // Для других сетей используем стандартный подход
+        // Для других сетей используем стандартный подход с улучшенными таймаутами
         walletClient = createWalletClient({
           account: embeddedWallet.address,
           chain: publicClient.chain,
-          transport: http(config.rpcUrl, {
-            timeout: 15000,
-            retryCount: 3,
-            retryDelay: 1000
+          transport: http(healthyRpcUrl, {
+            timeout: config.connectionTimeouts.retry,
+            retryCount: 4,
+            retryDelay: ({ count }) => Math.min(1000 * Math.pow(2, count), 5000)
           })
         });
       }
 
-      const clients = { publicClient, walletClient, config };
+      const clients = { 
+        publicClient, 
+        walletClient, 
+        config,
+        rpcUrl: healthyRpcUrl,
+        releaseConnection // Функция для освобождения соединения
+      };
       clientCache.current[cacheKey] = clients;
 
       console.log(`Created clients for chain ${chainId}:`, {
-        publicRPC: config.rpcUrl,
+        publicRPC: healthyRpcUrl,
         signingMethod: chainId === 6342 ? 'Local Privy' : 'RPC'
       });
 
@@ -403,9 +685,9 @@ export const useBlockchainUtils = () => {
       const { publicClient } = await createClients(chainId);
       
       // Получаем все необходимые параметры одним запросом для оффлайн подписания
-      const [chainIdHex, blockNumber] = await Promise.all([
-        retryWithBackoff(() => publicClient.getChainId(), 2, 500),
-        retryWithBackoff(() => publicClient.getBlockNumber(), 2, 500)
+              const [chainIdHex, blockNumber] = await Promise.all([
+        retryWithBackoff(() => publicClient.getChainId(), 2, 500, chainId),
+        retryWithBackoff(() => publicClient.getBlockNumber(), 2, 500, chainId)
       ]);
 
       const params = {
@@ -507,7 +789,8 @@ export const useBlockchainUtils = () => {
               return await walletClient.signTransaction(txData);
             },
             fallbackConfig ? 1 : poolConfig.maxRetries,
-            poolConfig.retryDelay
+            poolConfig.retryDelay,
+            chainId
           );
         } else {
           // Другие сети: используем walletClient
@@ -515,7 +798,8 @@ export const useBlockchainUtils = () => {
           signedTx = await retryWithBackoff(
             () => walletClient.signTransaction(txData),
             fallbackConfig ? 1 : poolConfig.maxRetries,
-            poolConfig.retryDelay
+            poolConfig.retryDelay,
+            chainId
           );
         }
         
@@ -739,6 +1023,11 @@ export const useBlockchainUtils = () => {
     const config = NETWORK_CONFIGS[chainId];
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
     
+    // Получаем здоровый RPC endpoint для отправки
+    const rpcUrl = await getHealthyRpcEndpoint(chainId);
+    const startTime = Date.now();
+    let success = false;
+    
     try {
       let response;
       let txHash;
@@ -749,10 +1038,10 @@ export const useBlockchainUtils = () => {
         
         const sendTransaction = async () => {
           const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
+          const timeoutId = setTimeout(() => controller.abort(), config.connectionTimeouts.request); // Адаптивный timeout
           
           try {
-            const response = await fetch(config.rpcUrl, {
+            const response = await fetch(rpcUrl, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -788,7 +1077,7 @@ export const useBlockchainUtils = () => {
           }
         };
 
-        response = await retryWithBackoff(sendTransaction, poolConfig.maxRetries, poolConfig.retryDelay);
+        response = await retryWithBackoff(sendTransaction, poolConfig.maxRetries, poolConfig.retryDelay, chainId);
         
         if (response.error) {
           // Обработка специфичных ошибок nonce
@@ -804,6 +1093,7 @@ export const useBlockchainUtils = () => {
         
         txHash = response.result;
         console.log('MegaETH transaction hash:', txHash);
+        success = true;
         
         // For MegaETH, the realtime method returns receipt immediately
         return { hash: txHash, receipt: response.result };
@@ -811,10 +1101,10 @@ export const useBlockchainUtils = () => {
       } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
         // RISE синхронный метод
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+        const timeoutId = setTimeout(() => controller.abort(), config.connectionTimeouts.retry); // Адаптивный timeout
         
         try {
-          response = await fetch(config.rpcUrl, {
+          response = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -846,6 +1136,7 @@ export const useBlockchainUtils = () => {
             throw new Error(result.error.message || 'RISE transaction failed');
           }
 
+          success = true;
           return { hash: result.result, receipt: result.result };
         } catch (error) {
           clearTimeout(timeoutId);
@@ -858,10 +1149,10 @@ export const useBlockchainUtils = () => {
       } else {
         // Стандартная отправка с улучшенной обработкой ошибок
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 seconds timeout
+        const timeoutId = setTimeout(() => controller.abort(), config.connectionTimeouts.retry); // Адаптивный timeout
         
         try {
-          response = await fetch(config.rpcUrl, {
+          response = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -893,6 +1184,7 @@ export const useBlockchainUtils = () => {
             throw new Error(result.error.message || 'Transaction failed');
           }
 
+          success = true;
           return { hash: result.result };
         } catch (error) {
           clearTimeout(timeoutId);
@@ -905,10 +1197,14 @@ export const useBlockchainUtils = () => {
     } catch (error) {
       console.error('Send transaction error:', error);
       throw error;
+    } finally {
+      // Обновляем статус здоровья RPC endpoint
+      const responseTime = Date.now() - startTime;
+      updateRpcHealth(chainId, rpcUrl, success, responseTime);
     }
   };
 
-  // ЗНАЧИТЕЛЬНО УЛУЧШЕННЫЙ основной метод отправки обновления
+  // ЗНАЧИТЕЛЬНО УЛУЧШЕННЫЙ основной метод отправки обновления с burst поддержкой
   const sendUpdate = async (chainId) => {
     if (transactionPending) {
       throw new Error('Transaction already pending, blocking jump');
@@ -919,6 +1215,21 @@ export const useBlockchainUtils = () => {
       throw new Error('No embedded wallet available');
     }
 
+    const config = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+    
+    // Проверяем, можем ли использовать burst режим
+    if (config.burstMode && canExecuteBurst(chainId)) {
+      console.log('Using burst mode for transaction');
+      return await queueBurstTransaction(chainId, async () => {
+        return await executeTransaction(chainId);
+      });
+    } else {
+      return await executeTransaction(chainId);
+    }
+  };
+
+  // Отдельная функция для выполнения транзакции
+  const executeTransaction = async (chainId) => {
     let signedTx = null;
     
     try {
@@ -1040,7 +1351,7 @@ export const useBlockchainUtils = () => {
       const nonceManager = getNonceManager(chainId, embeddedWallet.address);
       
       // Проверяем баланс и получаем начальный nonce одновременно
-      const [currentBalance, initialNonce] = await Promise.all([
+              const [currentBalance, initialNonce] = await Promise.all([
         checkBalance(chainId),
         retryWithBackoff(async () => {
           const { publicClient } = await createClients(chainId);
@@ -1048,7 +1359,7 @@ export const useBlockchainUtils = () => {
             address: embeddedWallet.address,
             blockTag: 'pending'
           });
-        }, 3, 1000)
+        }, 3, 1000, chainId)
       ]);
 
       // Инициализируем nonce manager с текущим nonce
@@ -1145,16 +1456,69 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // УЛУЧШЕННАЯ retry функция с exponential backoff и лучшей обработкой ошибок
-  const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
+  // ЗНАЧИТЕЛЬНО УЛУЧШЕННАЯ retry функция с circuit breaker и умной обработкой ошибок
+  const circuitBreakers = useRef({});
+
+  const getCircuitBreaker = (chainId) => {
+    if (!circuitBreakers.current[chainId]) {
+      circuitBreakers.current[chainId] = {
+        failures: 0,
+        lastFailureTime: 0,
+        state: 'CLOSED', // CLOSED, OPEN, HALF_OPEN
+        threshold: 5, // Открываем circuit после 5 неудач
+        timeout: 60000 // 60 секунд до попытки перехода в HALF_OPEN
+      };
+    }
+    return circuitBreakers.current[chainId];
+  };
+
+  const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000, chainId = null) => {
     let lastError;
+    let circuitBreaker = null;
+    
+    // Используем circuit breaker если указан chainId
+    if (chainId) {
+      circuitBreaker = getCircuitBreaker(chainId);
+      
+      // Проверяем состояние circuit breaker
+      if (circuitBreaker.state === 'OPEN') {
+        const timeSinceLastFailure = Date.now() - circuitBreaker.lastFailureTime;
+        if (timeSinceLastFailure < circuitBreaker.timeout) {
+          throw new Error(`Circuit breaker is OPEN for chain ${chainId}. Try again in ${Math.round((circuitBreaker.timeout - timeSinceLastFailure) / 1000)} seconds.`);
+        } else {
+          // Переходим в состояние HALF_OPEN для тестирования
+          circuitBreaker.state = 'HALF_OPEN';
+          console.log(`Circuit breaker for chain ${chainId} entering HALF_OPEN state`);
+        }
+      }
+    }
     
     for (let i = 0; i < maxRetries; i++) {
       try {
-        return await fn();
+        const result = await fn();
+        
+        // Успех - сбрасываем circuit breaker
+        if (circuitBreaker) {
+          circuitBreaker.failures = 0;
+          circuitBreaker.state = 'CLOSED';
+        }
+        
+        return result;
       } catch (error) {
         lastError = error;
         const isLastRetry = i === maxRetries - 1;
+        
+        // Обновляем circuit breaker при ошибке
+        if (circuitBreaker) {
+          circuitBreaker.failures++;
+          circuitBreaker.lastFailureTime = Date.now();
+          
+          // Переводим в OPEN состояние если превышен порог
+          if (circuitBreaker.failures >= circuitBreaker.threshold) {
+            circuitBreaker.state = 'OPEN';
+            console.warn(`Circuit breaker OPENED for chain ${chainId} after ${circuitBreaker.failures} failures`);
+          }
+        }
         
         // Проверяем, стоит ли повторять попытку
         const isRetryableError = 
@@ -1168,14 +1532,18 @@ export const useBlockchainUtils = () => {
           error.message?.includes('timeout') ||
           error.message?.includes('context deadline exceeded') ||
           error.message?.includes('connection') ||
-          error.name === 'AbortError';
+          error.message?.includes('network') ||
+          error.message?.includes('fetch') ||
+          error.name === 'AbortError' ||
+          error.name === 'TypeError'; // Network errors
 
         // Специальные ошибки, которые не стоит повторять
         const isNonRetryableError = 
           error.message?.includes('nonce too low') ||
           error.message?.includes('insufficient funds') ||
           error.message?.includes('gas too low') ||
-          error.message?.includes('invalid signature');
+          error.message?.includes('invalid signature') ||
+          error.message?.includes('execution reverted');
 
         if (isLastRetry || isNonRetryableError || !isRetryableError) {
           if (isNonRetryableError) {
@@ -1184,8 +1552,16 @@ export const useBlockchainUtils = () => {
           throw error;
         }
 
+        // Circuit breaker может заставить нас остановиться раньше
+        if (circuitBreaker && circuitBreaker.state === 'OPEN') {
+          console.log(`Circuit breaker is OPEN, stopping retries for chain ${chainId}`);
+          break;
+        }
+
         // Exponential backoff с jitter для избежания thundering herd
-        const delay = baseDelay * Math.pow(2, i) + Math.random() * 1000;
+        const jitter = Math.random() * 1000;
+        const delay = Math.min(baseDelay * Math.pow(2, i) + jitter, 30000); // Максимум 30 секунд
+        
         console.log(`Retry attempt ${i + 1}/${maxRetries} after ${Math.round(delay)}ms delay due to:`, error.message);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
@@ -1193,6 +1569,72 @@ export const useBlockchainUtils = () => {
     
     throw lastError;
   };
+
+  // Debug утилиты для мониторинга (только в development)
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
+      window.blockchainDebug = {
+        getRPCHealth: (chainId) => rpcHealthStatus.current[chainId],
+        getCircuitBreaker: (chainId) => circuitBreakers.current[chainId],
+        getTransactionPool: (chainId) => preSignedPool.current[chainId],
+        getBurstState: (chainId) => burstState.current[chainId],
+        getConnectionPool: () => activeConnections.current,
+        getNonceManager: (chainId, address) => nonceManager.current[`${chainId}-${address}`],
+        
+        // Утилиты для тестирования
+        forceCircuitBreakerOpen: (chainId) => {
+          const cb = getCircuitBreaker(chainId);
+          cb.state = 'OPEN';
+          cb.failures = cb.threshold;
+          cb.lastFailureTime = Date.now();
+          console.log(`Force opened circuit breaker for chain ${chainId}`);
+        },
+        
+        resetCircuitBreaker: (chainId) => {
+          const cb = getCircuitBreaker(chainId);
+          cb.state = 'CLOSED';
+          cb.failures = 0;
+          console.log(`Reset circuit breaker for chain ${chainId}`);
+        },
+        
+        clearTransactionPool: (chainId) => {
+          const chainKey = chainId.toString();
+          if (preSignedPool.current[chainKey]) {
+            preSignedPool.current[chainKey].transactions = [];
+            preSignedPool.current[chainKey].currentIndex = 0;
+            console.log(`Cleared transaction pool for chain ${chainId}`);
+          }
+        },
+        
+        generateHealthReport: (chainId) => {
+          const rpcHealth = rpcHealthStatus.current[chainId];
+          const poolStatus = preSignedPool.current[chainId?.toString()];
+          const circuitBreakerState = circuitBreakers.current[chainId];
+          
+          const report = {
+            timestamp: new Date().toISOString(),
+            chainId,
+            rpcEndpoints: rpcHealth,
+            transactionPool: poolStatus ? {
+              totalTransactions: poolStatus.transactions.length,
+              currentIndex: poolStatus.currentIndex,
+              availableTransactions: poolStatus.transactions.length - poolStatus.currentIndex,
+              isRefilling: poolStatus.isRefilling
+            } : null,
+            circuitBreaker: circuitBreakerState,
+            connections: activeConnections.current,
+            burstState: burstState.current[chainId]
+          };
+          
+          console.table(report);
+          return report;
+        }
+      };
+      
+      console.log('🔧 Blockchain debug utilities loaded. Use window.blockchainDebug for monitoring.');
+      console.log('📊 Example: window.blockchainDebug.generateHealthReport(6342)');
+    }
+  }, []);
 
   return {
     // Состояние
@@ -1211,6 +1653,13 @@ export const useBlockchainUtils = () => {
     // Утилиты
     getEmbeddedWallet,
     isAuthenticated: authenticated,
-    isReady: authenticated && wallets.length > 0
+    isReady: authenticated && wallets.length > 0,
+    
+    // Debug методы (только для разработки)
+    ...(process.env.NODE_ENV === 'development' && {
+      debugGetRPCHealth: (chainId) => rpcHealthStatus.current[chainId],
+      debugGetCircuitBreaker: (chainId) => circuitBreakers.current[chainId],
+      debugGenerateReport: (chainId) => window.blockchainDebug?.generateHealthReport(chainId)
+    })
   };
 };
