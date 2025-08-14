@@ -1,16 +1,30 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
-import blockchainService from '../services/blockchainService.js';
 
 const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
+  
+  // Используем новый blockchain utils hook
+  const {
+    isInitializing,
+    transactionPending,
+    balance,
+    contractNumber,
+    initData,
+    sendUpdate,
+    checkBalance,
+    getContractNumber,
+    isReady
+  } = useBlockchainUtils();
+
   const [blockchainStatus, setBlockchainStatus] = useState({
     initialized: false,
     networkName: selectedNetwork?.name || 'Unknown',
@@ -19,6 +33,10 @@ const GameComponent = ({ selectedNetwork }) => {
     totalMovements: 0,
     onChainScore: 0
   });
+
+  const [showToast, setShowToast] = useState(false);
+  const transactionPendingRef = useRef(false);
+  const pendingJumpRef = useRef(null);
 
   // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
@@ -39,73 +57,94 @@ const GameComponent = ({ selectedNetwork }) => {
     { width: 68 / 1.5, height: 70 / 1.5, imageSrc: "assets/carrot_3.png" },
   ];
 
-  // Initialize blockchain service
+  // Инициализация блокчейн данных
   const initializeBlockchain = async () => {
-    if (!authenticated || !wallets || wallets.length === 0 || !selectedNetwork) {
-      setBlockchainStatus(prev => ({ ...prev, initialized: false }));
+    if (!isReady || !selectedNetwork || selectedNetwork.isWeb2) {
+      console.log('Skipping blockchain initialization - Web2 mode or not ready');
+      setBlockchainStatus(prev => ({ 
+        ...prev, 
+        initialized: false,
+        networkName: selectedNetwork?.name || 'Web2 Mode'
+      }));
       return;
     }
 
     try {
-      const wallet = wallets[0]; // Use first available wallet
+      console.log('Initializing blockchain for network:', selectedNetwork.name);
       
-      // First, ensure the wallet is on the correct network
-      try {
-        await wallet.switchChain(selectedNetwork.id);
-        console.log(`Switched to ${selectedNetwork.name}`);
-      } catch (switchError) {
-        console.warn(`Failed to switch to ${selectedNetwork.name}:`, switchError);
-        // Continue anyway, blockchain service will handle the network mismatch
-      }
+      await initData(selectedNetwork.id);
       
-      const success = await blockchainService.initialize(wallet);
+      // Получаем текущее состояние контракта
+      const currentNumber = await getContractNumber(selectedNetwork.id);
       
       setBlockchainStatus({
-        initialized: success,
+        initialized: true,
         networkName: selectedNetwork.name,
-        contractAvailable: blockchainService.isContractAvailable(),
+        contractAvailable: true,
         pendingTransactions: 0,
-        totalMovements: 0,
-        onChainScore: 0
+        totalMovements: currentNumber,
+        onChainScore: currentNumber
       });
 
-      // Start game session on blockchain if contract is available
-      if (success && blockchainService.isContractAvailable()) {
-        await blockchainService.startGame();
-      }
+      console.log('Blockchain initialization complete');
     } catch (error) {
       console.error('Failed to initialize blockchain:', error);
       setBlockchainStatus(prev => ({ 
         ...prev, 
-        initialized: false, 
-        networkName: selectedNetwork.name 
+        initialized: false,
+        contractAvailable: false
       }));
     }
   };
 
-  // Handle on-chain movement
+  // Обработка ончейн прыжка
   const handleOnChainMovement = async () => {
-    if (!blockchainStatus.initialized) return;
+    // Проверяем, поддерживает ли сеть ончейн функциональность
+    if (!selectedNetwork || selectedNetwork.isWeb2 || !blockchainStatus.initialized) {
+      console.log('Skipping on-chain movement - Web2 mode or not initialized');
+      return;
+    }
+
+    // Блокируем новые прыжки пока транзакция не завершится
+    if (transactionPendingRef.current) {
+      console.log('Transaction already pending, blocking jump');
+      return;
+    }
 
     try {
-      const result = await blockchainService.makeMovement();
+      transactionPendingRef.current = true;
+      setShowToast(true);
       
+      console.log('Sending on-chain jump transaction...');
+      
+      // Отправляем транзакцию
+      const txHash = await sendUpdate(selectedNetwork.id);
+      
+      console.log('Jump transaction confirmed:', txHash);
+      
+      // Обновляем статистику
       setBlockchainStatus(prev => ({
         ...prev,
         totalMovements: prev.totalMovements + 1,
-        pendingTransactions: blockchainService.getPendingTransactions()
+        onChainScore: prev.onChainScore + 1
       }));
 
-      // Update on-chain score if available
-      if (result.success && !result.simulated) {
-        const walletAddress = getWalletAddress();
-        if (walletAddress) {
-          const score = await blockchainService.getPlayerScore(walletAddress);
-          setBlockchainStatus(prev => ({ ...prev, onChainScore: score }));
+      // Обновляем номер из контракта
+      setTimeout(async () => {
+        try {
+          await getContractNumber(selectedNetwork.id);
+        } catch (error) {
+          console.error('Error updating contract number:', error);
         }
-      }
+      }, 1000);
+
     } catch (error) {
-      console.error('On-chain movement failed:', error);
+      console.error('Error sending on-chain movement:', error);
+      // Показываем ошибку пользователю
+      alert(`Transaction failed: ${error.message}`);
+    } finally {
+      transactionPendingRef.current = false;
+      setShowToast(false);
     }
   };
 
@@ -146,9 +185,11 @@ const GameComponent = ({ selectedNetwork }) => {
     return wallets[0]?.address || null;
   };
 
+  // Initialize blockchain when component mounts or network changes
   useEffect(() => {
     // Skip blockchain initialization for web2 mode
     if (selectedNetwork && selectedNetwork.isWeb2) {
+      console.log('Web2 mode selected, skipping blockchain initialization');
       setBlockchainStatus({
         initialized: false,
         networkName: selectedNetwork.name,
@@ -159,9 +200,22 @@ const GameComponent = ({ selectedNetwork }) => {
       });
       return;
     }
-    
-    initializeBlockchain();
-  }, [authenticated, user, selectedNetwork]);
+
+    if (selectedNetwork && isReady) {
+      console.log('Initializing blockchain for:', selectedNetwork.name);
+      initializeBlockchain();
+    }
+  }, [selectedNetwork, isReady]);
+
+  // Update blockchain status from hook
+  useEffect(() => {
+    if (selectedNetwork && !selectedNetwork.isWeb2) {
+      setBlockchainStatus(prev => ({
+        ...prev,
+        pendingTransactions: transactionPending ? 1 : 0
+      }));
+    }
+  }, [transactionPending, selectedNetwork]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -538,17 +592,63 @@ const GameComponent = ({ selectedNetwork }) => {
       document.removeEventListener("keyup", initialKeyHandler);
       document.removeEventListener("touchstart", initialKeyHandler);
     };
-  }, [authenticated, user, selectedNetwork]);
+  }, [selectedNetwork, handleOnChainMovement, blockchainStatus, isInitializing, balance, contractNumber]);
 
   return (
-    <div className="game-canvas-container">
-      <canvas 
-        ref={canvasRef} 
-        id="game"
-        className="game-canvas"
-      />
-      <div className="game-ui-overlay">
-      </div>
+    <div className="game-container">
+      <canvas ref={canvasRef} />
+      
+      {/* Transaction Status Toast */}
+      {showToast && (
+        <div className="transaction-toast">
+          <div className="toast-content">
+            <div className="loading-spinner"></div>
+            <span>Sending on-chain jump...</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Blockchain Status Panel */}
+      {selectedNetwork && !selectedNetwork.isWeb2 && (
+        <div className="blockchain-status-panel">
+          <div className="status-header">
+            <span className="network-name">{blockchainStatus.networkName}</span>
+            <span className={`status-indicator ${blockchainStatus.initialized ? 'connected' : 'disconnected'}`}>
+              {blockchainStatus.initialized ? '🟢' : '🔴'}
+            </span>
+          </div>
+          
+          {blockchainStatus.initialized && (
+            <div className="status-details">
+              <div className="status-item">
+                <span className="label">Balance:</span>
+                <span className="value">{balance} ETH</span>
+              </div>
+              <div className="status-item">
+                <span className="label">Contract #:</span>
+                <span className="value">{contractNumber}</span>
+              </div>
+              <div className="status-item">
+                <span className="label">Jumps:</span>
+                <span className="value">{blockchainStatus.totalMovements}</span>
+              </div>
+              {transactionPending && (
+                <div className="status-item">
+                  <span className="label">Status:</span>
+                  <span className="value pending">Pending TX...</span>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {isInitializing && (
+            <div className="initialization-status">
+              <div className="loading-spinner"></div>
+              <span>Initializing blockchain...</span>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

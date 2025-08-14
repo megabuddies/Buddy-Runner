@@ -11,40 +11,95 @@ const App = () => {
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
 
+  // Конфигурация сетей для ончейн системы
+  const megaethTestnet = {
+    id: 6342,
+    name: 'MegaETH Testnet',
+    network: 'megaeth-testnet',
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: {
+        http: ['https://carrot.megaeth.com/rpc'],
+        webSocket: ['wss://carrot.megaeth.com/ws'],
+      },
+    },
+    blockExplorers: {
+      default: {
+        name: 'MegaETH Explorer',
+        url: 'https://carrot.megaeth.com',
+      },
+    },
+  };
+
+  const foundryNetwork = {
+    id: 31337,
+    name: 'Foundry Local',
+    network: 'foundry',
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: {
+        http: ['http://127.0.0.1:8545'],
+      },
+    },
+  };
+
+  const somniaTestnet = {
+    id: 50311,
+    name: 'Somnia Testnet',
+    network: 'somnia-testnet',
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: {
+        http: ['https://testnet.somnia.network'],
+      },
+    },
+  };
+
+  const riseTestnet = {
+    id: 1313161556,
+    name: 'RISE Testnet',
+    network: 'rise-testnet',
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: {
+        http: ['https://testnet-rpc.rise.com'],
+      },
+    },
+  };
+
   const privyConfig = {
     appearance: {
       theme: 'light',
       accentColor: '#7FBC7F',
-      logo: 'https://your-logo-url.com/logo.png', // Можете заменить на свой логотип
+      logo: 'https://your-logo-url.com/logo.png',
     },
+    // Создаём встроенные кошельки для всех пользователей
     embeddedWallets: {
-      createOnLogin: 'users-without-wallets',
-      noPromptOnSignature: false,
+      createOnLogin: 'all-users',
     },
     loginMethods: ['email', 'wallet'],
+    defaultChain: megaethTestnet,
     supportedChains: [
-      {
-        id: 6342, // MegaETH Testnet
-        name: 'MegaETH Testnet',
-        network: 'megaeth-testnet',
-        nativeCurrency: {
-          name: 'Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        rpcUrls: {
-          default: {
-            http: ['https://carrot.megaeth.com/rpc'],
-            webSocket: ['wss://carrot.megaeth.com/ws'],
-          },
-        },
-        blockExplorers: {
-          default: {
-            name: 'MegaETH Explorer',
-            url: 'https://carrot.megaeth.com',
-          },
-        },
-      },
+      megaethTestnet,
+      foundryNetwork, 
+      somniaTestnet,
+      riseTestnet,
       {
         id: 84532, // Base Sepolia
         name: 'Base Sepolia',
