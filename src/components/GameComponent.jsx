@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
 import Player from '../game/Player.js';
@@ -102,7 +102,7 @@ const GameComponent = ({ selectedNetwork }) => {
   };
 
   // Обработка ончейн прыжка
-  const handleOnChainMovement = async () => {
+  const handleOnChainMovement = useCallback(async () => {
     // Проверяем, поддерживает ли сеть ончейн функциональность
     if (!selectedNetwork || selectedNetwork.isWeb2 || !blockchainStatus.initialized) {
       console.log('Skipping on-chain movement - Web2 mode or not initialized');
@@ -170,7 +170,7 @@ const GameComponent = ({ selectedNetwork }) => {
       transactionPendingRef.current = false;
       setShowToast(false);
     }
-  };
+  }, [selectedNetwork, blockchainStatus.initialized, sendUpdate, getContractNumber]);
 
   // Manual faucet call function
   const handleManualFaucet = async () => {
@@ -654,7 +654,7 @@ const GameComponent = ({ selectedNetwork }) => {
       document.removeEventListener("keyup", initialKeyHandler);
       document.removeEventListener("touchstart", initialKeyHandler);
     };
-  }, [selectedNetwork, handleOnChainMovement, blockchainStatus, isInitializing, balance, contractNumber]);
+  }, [selectedNetwork, handleOnChainMovement]);
 
   return (
     <div className="game-container">
