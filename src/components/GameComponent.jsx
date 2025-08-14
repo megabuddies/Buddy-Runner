@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
@@ -11,6 +11,7 @@ const GameComponent = ({ selectedNetwork }) => {
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
+  const { login } = useLogin();
   
   // Используем новый blockchain utils hook
   const {
@@ -221,11 +222,20 @@ const GameComponent = ({ selectedNetwork }) => {
       return;
     }
 
-    if (selectedNetwork && isReady) {
+    // Only initialize if we have proper authentication and embedded wallet
+    if (selectedNetwork && isReady && authenticated && wallets.length > 0) {
       console.log('Initializing blockchain for:', selectedNetwork.name);
+      console.log('Authentication status:', { authenticated, wallets: wallets.length, isReady });
       initializeBlockchain();
+    } else {
+      console.log('Waiting for authentication and embedded wallet creation...', {
+        selectedNetwork: !!selectedNetwork,
+        isReady,
+        authenticated,
+        wallets: wallets.length
+      });
     }
-  }, [selectedNetwork, isReady]);
+  }, [selectedNetwork, isReady, authenticated, wallets]);
 
   // Update blockchain status from hook
   useEffect(() => {
@@ -614,6 +624,22 @@ const GameComponent = ({ selectedNetwork }) => {
 
   return (
     <div className="game-container">
+      {/* Show login prompt if blockchain network selected but not authenticated */}
+      {selectedNetwork && !selectedNetwork.isWeb2 && !authenticated && (
+        <div className="login-prompt-overlay">
+          <div className="login-prompt-container">
+            <div className="login-prompt-content">
+              <h2>🔐 Authentication Required</h2>
+              <p>You need to connect your wallet to play on <strong>{selectedNetwork.name}</strong></p>
+              <p>This will create an embedded wallet for seamless blockchain gaming.</p>
+              <button className="login-prompt-button" onClick={login}>
+                Connect Wallet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <canvas ref={canvasRef} />
       
       {/* Transaction Status Toast */}

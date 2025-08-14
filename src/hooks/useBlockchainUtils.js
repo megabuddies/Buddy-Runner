@@ -81,8 +81,37 @@ export const useBlockchainUtils = () => {
 
   // Получение embedded wallet
   const getEmbeddedWallet = () => {
-    if (!authenticated || !wallets.length) return null;
-    return wallets.find(wallet => wallet.walletClientType === 'privy');
+    if (!authenticated || !wallets.length) {
+      console.log('Not authenticated or no wallets available');
+      return null;
+    }
+    
+    console.log('Available wallets:', wallets.map(w => ({ 
+      address: w.address, 
+      walletClientType: w.walletClientType, 
+      connectorType: w.connectorType 
+    })));
+    
+    // Look for embedded wallet - Privy creates embedded wallets with specific types
+    const embeddedWallet = wallets.find(wallet => 
+      wallet.walletClientType === 'privy' || 
+      wallet.connectorType === 'embedded' ||
+      wallet.connectorType === 'privy'
+    );
+    
+    if (embeddedWallet) {
+      console.log('Found embedded wallet:', embeddedWallet.address);
+      return embeddedWallet;
+    }
+    
+    // If no embedded wallet found, use the first available wallet
+    if (wallets.length > 0) {
+      console.log('No embedded wallet found, using first available wallet:', wallets[0].address);
+      return wallets[0];
+    }
+    
+    console.log('No wallets available');
+    return null;
   };
 
   // Создание клиентов с кэшированием
@@ -453,10 +482,25 @@ export const useBlockchainUtils = () => {
       setIsInitializing(true);
       console.log('Initializing blockchain data for chain:', chainId);
 
-      const embeddedWallet = getEmbeddedWallet();
-      if (!embeddedWallet) {
-        throw new Error('No embedded wallet available');
+      // Wait for embedded wallet to be created (with retry)
+      let embeddedWallet = null;
+      let retries = 0;
+      const maxRetries = 10;
+      
+      while (!embeddedWallet && retries < maxRetries) {
+        embeddedWallet = getEmbeddedWallet();
+        if (!embeddedWallet) {
+          console.log(`Waiting for embedded wallet creation... (attempt ${retries + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          retries++;
+        }
       }
+
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet available after waiting');
+      }
+
+      console.log('Using embedded wallet address:', embeddedWallet.address);
 
       // Проверяем баланс
       const currentBalance = await checkBalance(chainId);

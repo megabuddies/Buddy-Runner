@@ -193,7 +193,12 @@ const App = () => {
 
   const handleStartGame = (network) => {
     setSelectedNetwork(network);
-    setGameState('game'); // Skip wallet-connection state
+    // For blockchain networks, require authentication first
+    if (!network.isWeb2) {
+      setGameState('wallet-connection');
+    } else {
+      setGameState('game');
+    }
   };
 
   const handleWalletConnected = () => {
