@@ -710,7 +710,7 @@ const GameComponent = ({ selectedNetwork }) => {
                 <span className="label">Jumps:</span>
                 <span className="value">{blockchainStatus.totalMovements}</span>
               </div>
-              {parseFloat(balance) < 0.01 && (
+              {parseFloat(balance) <= 0 && (
                 <div className="status-item">
                   <button 
                     className="faucet-button" 
