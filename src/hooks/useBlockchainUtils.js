@@ -64,7 +64,7 @@ const UPDATER_ABI = [
 ];
 
 export const useBlockchainUtils = () => {
-  const { authenticated } = usePrivy();
+  const { authenticated, user, login, logout, isReady } = usePrivy();
   const { wallets } = useWallets();
   
   // Состояние
@@ -79,10 +79,70 @@ export const useBlockchainUtils = () => {
   const preSignedPool = useRef({});
   const isInitialized = useRef({});
 
+  // Кеширование параметров сети для минимизации RPC вызовов
+  const chainParamsCache = useRef({});
+
+  // Fallback конфигурация для MegaETH
+  const MEGAETH_FALLBACK_CONFIG = {
+    // Уменьшаем batch size при проблемах с RPC
+    reducedBatchSize: 1,
+    // Увеличиваем задержки
+    increasedDelay: 1000,
+    // Режим graceful degradation
+    degradedMode: false
+  };
+
+  const fallbackState = useRef({
+    6342: { ...MEGAETH_FALLBACK_CONFIG } // MegaETH
+  });
+
+  // Управление fallback режимом
+  const enableFallbackMode = (chainId) => {
+    const state = fallbackState.current[chainId];
+    if (state) {
+      state.degradedMode = true;
+      console.log(`Enabled fallback mode for chain ${chainId}`);
+    }
+  };
+
+  const getFallbackConfig = (chainId) => {
+    const state = fallbackState.current[chainId];
+    return state?.degradedMode ? state : null;
+  };
+
   // Получение embedded wallet
   const getEmbeddedWallet = () => {
-    if (!authenticated || !wallets.length) return null;
-    return wallets.find(wallet => wallet.walletClientType === 'privy');
+    if (!authenticated || !wallets.length) {
+      console.log('Not authenticated or no wallets available');
+      return null;
+    }
+    
+    console.log('Available wallets:', wallets.map(w => ({ 
+      address: w.address, 
+      walletClientType: w.walletClientType, 
+      connectorType: w.connectorType 
+    })));
+    
+    // Look for embedded wallet - Privy creates embedded wallets with specific types
+    const embeddedWallet = wallets.find(wallet => 
+      wallet.walletClientType === 'privy' || 
+      wallet.connectorType === 'embedded' ||
+      wallet.connectorType === 'privy'
+    );
+    
+    if (embeddedWallet) {
+      console.log('Found embedded wallet:', embeddedWallet.address);
+      return embeddedWallet;
+    }
+    
+    // If no embedded wallet found, use the first available wallet
+    if (wallets.length > 0) {
+      console.log('No embedded wallet found, using first available wallet:', wallets[0].address);
+      return wallets[0];
+    }
+    
+    console.log('No wallets available');
+    return null;
   };
 
   // Создание клиентов с кэшированием
@@ -98,20 +158,83 @@ export const useBlockchainUtils = () => {
     const embeddedWallet = getEmbeddedWallet();
     if (!embeddedWallet) throw new Error('No embedded wallet found');
 
-    // Создаем публичный клиент
-    const publicClient = createPublicClient({
-      transport: http(config.rpcUrl),
-    });
+    try {
+      // Создаем публичный клиент с более надежной конфигурацией
+      const publicClient = createPublicClient({
+        chain: {
+          id: chainId,
+          name: config.name,
+          network: config.name.toLowerCase().replace(/\s+/g, '-'),
+          nativeCurrency: {
+            name: 'Ether',
+            symbol: 'ETH',
+            decimals: 18
+          },
+          rpcUrls: {
+            default: { http: [config.rpcUrl] },
+            public: { http: [config.rpcUrl] }
+          }
+        },
+        transport: http(config.rpcUrl, {
+          timeout: 10000,
+          retryCount: 2
+        })
+      });
 
-    // Создаем клиент кошелька
-    const walletClient = createWalletClient({
-      account: embeddedWallet.address,
-      transport: custom(embeddedWallet.getEthereumProvider()),
-    });
+      // Для MegaETH используем локальное подписание (не RPC)
+      let walletClient;
+      if (chainId === 6342) {
+        // MegaETH: локальное подписание с Privy account
+        walletClient = createWalletClient({
+          account: embeddedWallet.address,
+          chain: publicClient.chain,
+          transport: custom({
+            async request({ method, params }) {
+              if (method === 'eth_signTransaction') {
+                // Локальное подписание через embedded wallet
+                const embeddedWallet = getEmbeddedWallet();
+                if (!embeddedWallet) {
+                  throw new Error('No embedded wallet found for signing');
+                }
+                
+                // Создаем walletClient с embedded wallet
+                const provider = await embeddedWallet.getProvider?.() || 
+                                await embeddedWallet.getEthereumProvider?.() ||
+                                embeddedWallet;
+                
+                if (provider?.request) {
+                  return await provider.request({ method, params });
+                }
+                
+                throw new Error('Unable to get provider for signing');
+              }
+              // Остальные методы идут через публичный RPC
+              return await publicClient.request({ method, params });
+            }
+          })
+        });
+      } else {
+        // Для других сетей используем стандартный подход
+        walletClient = createWalletClient({
+          account: embeddedWallet.address,
+          chain: publicClient.chain,
+          transport: http(config.rpcUrl)
+        });
+      }
 
-    const clients = { publicClient, walletClient, config };
-    clientCache.current[cacheKey] = clients;
-    return clients;
+      const clients = { publicClient, walletClient, config };
+      clientCache.current[cacheKey] = clients;
+
+      console.log(`Created clients for chain ${chainId}:`, {
+        publicRPC: config.rpcUrl,
+        signingMethod: chainId === 6342 ? 'Local Privy' : 'RPC'
+      });
+
+      return clients;
+    } catch (error) {
+      console.error(`Error creating clients for chain ${chainId}:`, error);
+      throw error;
+    }
   };
 
   // Получение газовых параметров
@@ -122,120 +245,289 @@ export const useBlockchainUtils = () => {
 
     const { publicClient } = await createClients(chainId);
     
-    const gasPrice = await publicClient.getGasPrice();
-    const maxFeePerGas = gasPrice * 2n; // 2x для запаса
-    const maxPriorityFeePerGas = parseGwei('2'); // 2 gwei
+    let maxFeePerGas, maxPriorityFeePerGas;
+    
+    // Специальные параметры для разных сетей
+    if (chainId === 6342) {
+      // MegaETH Testnet - оптимизированные параметры
+      console.log('Using optimized gas parameters for MegaETH Testnet');
+      maxFeePerGas = parseGwei('0.0012'); // 1.2 mwei как в логах
+      maxPriorityFeePerGas = parseGwei('0.0006'); // 0.6 mwei как в логах
+      
+      console.log(`Gas params for chain ${chainId}: {maxFeePerGas: '${maxFeePerGas}', maxPriorityFeePerGas: '${maxPriorityFeePerGas}', maxFeePerGasGwei: ${Number(maxFeePerGas) / 1e9}, maxPriorityFeePerGasGwei: ${Number(maxPriorityFeePerGas) / 1e9}}`);
+      
+    } else {
+      // Для остальных сетей используем динамические параметры
+      const gasPrice = await publicClient.getGasPrice();
+      maxFeePerGas = gasPrice * 2n; // 2x для запаса
+      maxPriorityFeePerGas = parseGwei('2'); // 2 gwei
+      
+      console.log(`Dynamic gas params for chain ${chainId}: {maxFeePerGas: '${maxFeePerGas}', maxPriorityFeePerGas: '${maxPriorityFeePerGas}'}`);
+    }
 
     const params = { maxFeePerGas, maxPriorityFeePerGas };
     gasParams.current[chainId] = params;
+    
+    console.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(maxFeePerGas) / 1e9}, maxPriorityFeePerGasGwei: ${Number(maxPriorityFeePerGas) / 1e9}}`);
+    
     return params;
   };
 
-  // Предварительная подпись пакета транзакций
-  const preSignBatch = async (chainId, startNonce, batchSize = 10) => {
-    try {
-      console.log(`Pre-signing ${batchSize} transactions starting from nonce ${startNonce}`);
-      
-      const { walletClient, config } = await createClients(chainId);
-      const gas = await getGasParams(chainId);
-      const embeddedWallet = getEmbeddedWallet();
+  // Получение параметров сети с кешированием
+  const getCachedChainParams = async (chainId) => {
+    const cacheKey = chainId.toString();
+    
+    if (chainParamsCache.current[cacheKey]) {
+      return chainParamsCache.current[cacheKey];
+    }
 
-      const signingPromises = Array.from({ length: batchSize }, async (_, i) => {
+    try {
+      const { publicClient } = await createClients(chainId);
+      
+      // Получаем все необходимые параметры одним запросом для оффлайн подписания
+      const [chainIdHex, blockNumber] = await Promise.all([
+        retryWithBackoff(() => publicClient.getChainId(), 2, 500),
+        retryWithBackoff(() => publicClient.getBlockNumber(), 2, 500)
+      ]);
+
+      const params = {
+        chainId: chainIdHex,
+        blockNumber: Number(blockNumber)
+      };
+
+      // Кешируем на 30 секунд для MegaETH, дольше для других сетей
+      const cacheTime = chainId === 6342 ? 30000 : 60000;
+      chainParamsCache.current[cacheKey] = params;
+      
+      setTimeout(() => {
+        delete chainParamsCache.current[cacheKey];
+      }, cacheTime);
+
+      console.log(`Cached chain params for ${chainId}:`, params);
+      return params;
+    } catch (error) {
+      console.error('Error getting chain params:', error);
+      // Возвращаем базовые параметры если RPC недоступен
+      return {
+        chainId: chainId,
+        blockNumber: 0
+      };
+    }
+  };
+
+  // Предварительное подписание пакета транзакций
+  const preSignBatch = async (chainId, startNonce, count) => {
+    const chainKey = chainId.toString();
+    
+    // Проверяем fallback режим
+    const fallbackConfig = getFallbackConfig(chainId);
+    
+    // Уменьшенные размеры пакетов для разных сетей
+    let batchSize = chainId === 6342 ? 3 : (chainId === 1234 ? 5 : count);
+    
+    // Применяем fallback конфигурацию если активна
+    if (fallbackConfig) {
+      batchSize = fallbackConfig.reducedBatchSize;
+      console.log(`Using fallback mode for chain ${chainId}: batch size ${batchSize}`);
+    }
+    
+    const actualCount = Math.min(count, batchSize);
+    
+    console.log(`Pre-signing ${actualCount} transactions for chain ${chainId} starting from nonce ${startNonce}`);
+    
+    if (!preSignedPool.current[chainKey]) {
+      preSignedPool.current[chainKey] = {
+        transactions: [],
+        currentIndex: 0,
+        baseNonce: startNonce,
+        hasTriggeredRefill: false
+      };
+    }
+
+    const pool = preSignedPool.current[chainKey];
+    const { walletClient } = await createClients(chainId);
+    const gasParams = await getGasParams(chainId);
+
+    console.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(gasParams.maxFeePerGas) / 10**9}, maxPriorityFeePerGasGwei: ${Number(gasParams.maxPriorityFeePerGas) / 10**9}}`);
+
+    const config = NETWORK_CONFIGS[chainId];
+    const embeddedWallet = getEmbeddedWallet();
+    
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 3;
+
+    for (let i = 0; i < actualCount; i++) {
+      try {
+        // Добавляем задержку между подписаниями
+        const delay = fallbackConfig ? fallbackConfig.increasedDelay : (chainId === 6342 ? 200 : 0);
+        if (delay > 0 && i > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        const nonce = startNonce + pool.transactions.length;
+        
         const txData = {
           account: embeddedWallet.address,
           to: config.contractAddress,
-          data: '0xa2e62045', // update() function selector
-          nonce: startNonce + i,
-          maxFeePerGas: gas.maxFeePerGas,
-          maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
+          data: '0xa2e62045',
+          nonce,
+          maxFeePerGas: gasParams.maxFeePerGas,
+          maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
           value: 0n,
           type: 'eip1559',
           gas: 100000n,
         };
 
-        return await walletClient.signTransaction(txData);
-      });
+        let signedTx;
+        
+        // Разные методы подписания для разных сетей
+        if (chainId === 6342) {
+          // MegaETH: используем прямое подписание через Privy
+          console.log(`Signing transaction ${i + 1} locally for MegaETH`);
+          signedTx = await retryWithBackoff(
+            async () => {
+              // Прямое подписание через embedded wallet
+              return await walletClient.signTransaction(txData);
+            },
+            fallbackConfig ? 1 : 2, // Меньше retry в fallback режиме
+            500
+          );
+        } else {
+          // Другие сети: используем walletClient
+          console.log(`Signing transaction ${i + 1} via RPC for chain ${chainId}`);
+          signedTx = await retryWithBackoff(
+            () => walletClient.signTransaction(txData),
+            fallbackConfig ? 1 : 3,
+            500
+          );
+        }
+        
+        pool.transactions.push(signedTx);
+        
+        consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
+        console.log(`Signed transaction ${pool.transactions.length}/${actualCount}`);
+      } catch (error) {
+        console.error(`Error signing transaction ${i + 1}:`, error);
+        consecutiveErrors++;
+        
+        // Для rate limiting ошибок, активируем fallback режим
+        if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403 || error.message?.includes('not whitelisted')) {
+          console.log('Rate limit/403/not whitelisted detected, enabling fallback mode');
+          enableFallbackMode(chainId);
+          
+          // Прерываем дальнейшее подписание
+          break;
+        }
+        
+        // Если слишком много ошибок подряд, прерываем
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          console.log(`Too many consecutive errors (${consecutiveErrors}), stopping batch signing`);
+          enableFallbackMode(chainId);
+          break;
+        }
+        
+        // Для других ошибок, продолжаем со следующей транзакцией
+        continue;
+      }
+    }
 
-      const results = await Promise.all(signingPromises);
-      
-      const chainKey = chainId.toString();
-      preSignedPool.current[chainKey] = {
-        transactions: results,
-        currentIndex: 0,
-        baseNonce: startNonce,
-        hasTriggeredRefill: false
-      };
-
-      console.log(`Successfully pre-signed ${results.length} transactions`);
-      return results;
-    } catch (error) {
-      console.error('Error pre-signing transactions:', error);
-      throw error;
+    console.log(`Successfully pre-signed ${pool.transactions.length} transactions`);
+    
+    // Если мы в fallback режиме и у нас есть хотя бы одна транзакция, это успех
+    if (fallbackConfig && pool.transactions.length > 0) {
+      console.log('Fallback mode: minimum transactions ready for gaming');
     }
   };
 
   // Умное пополнение пула
-  const extendPool = async (chainId, nextNonce, batchSize = 10) => {
+  const extendPool = async (chainId, startNonce, count) => {
     try {
-      console.log(`Extending pool with ${batchSize} more transactions from nonce ${nextNonce}`);
+      console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
       
-      const { walletClient, config } = await createClients(chainId);
-      const gas = await getGasParams(chainId);
-      const embeddedWallet = getEmbeddedWallet();
-
-      const newTransactions = await Promise.all(
-        Array.from({ length: batchSize }, async (_, i) => {
-          const txData = {
-            account: embeddedWallet.address,
-            to: config.contractAddress,
-            data: '0xa2e62045',
-            nonce: nextNonce + i,
-            maxFeePerGas: gas.maxFeePerGas,
-            maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
-            value: 0n,
-            type: 'eip1559',
-            gas: 100000n,
-          };
-
-          return await walletClient.signTransaction(txData);
-        })
-      );
-
+      // Используем существующую функцию preSignBatch для пополнения
+      await preSignBatch(chainId, startNonce, count);
+      
       const chainKey = chainId.toString();
       const pool = preSignedPool.current[chainKey];
       if (pool) {
-        pool.transactions.push(...newTransactions);
-        pool.hasTriggeredRefill = false; // Сбрасываем флаг
+        pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
+        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
       }
-
-      console.log(`Pool extended with ${newTransactions.length} transactions`);
     } catch (error) {
-      console.error('Error extending pool:', error);
+      console.error('Error extending transaction pool:', error);
+      // Не бросаем ошибку, просто логируем - игра может продолжаться в realtime режиме
     }
   };
 
-  // Получение следующей транзакции из пула
-  const getNextTransaction = (chainId) => {
+  // Получение следующей транзакции из пула или создание новой
+  const getNextTransaction = async (chainId) => {
     const chainKey = chainId.toString();
     const pool = preSignedPool.current[chainKey];
-    
-    if (!pool || pool.currentIndex >= pool.transactions.length) {
-      throw new Error('No pre-signed transactions available');
+
+    // Если есть предподписанные транзакции, используем их
+    if (pool && pool.transactions.length > pool.currentIndex) {
+      const tx = pool.transactions[pool.currentIndex];
+      pool.currentIndex++;
+
+      // Автодозаправка пула при 50% использовании
+      if (pool.currentIndex >= pool.transactions.length / 2 && !pool.hasTriggeredRefill) {
+        pool.hasTriggeredRefill = true;
+        console.log('Pool half empty, extending with new transactions...');
+        try {
+          const nextNonce = pool.baseNonce + pool.transactions.length;
+          await extendPool(chainId, nextNonce, 3); // Небольшой batch для дозаправки
+        } catch (error) {
+          console.error('Error extending pool:', error);
+        }
+      }
+
+      return tx;
     }
 
-    const tx = pool.transactions[pool.currentIndex];
-    pool.currentIndex++;
+    // Если нет предподписанных транзакций, создаем и подписываем realtime
+    console.log('No pre-signed transactions available, signing realtime...');
+    return await createRealtimeTransaction(chainId);
+  };
 
-    // Пополнение каждые 5 транзакций (50% от начального пакета)
-    if (pool.currentIndex % 5 === 0 && !pool.hasTriggeredRefill) {
-      pool.hasTriggeredRefill = true;
-      const nextNonce = pool.baseNonce + pool.transactions.length;
-      
-      // Асинхронно подписываем ещё 10 транзакций
-      extendPool(chainId, nextNonce, 10).catch(console.error);
+  // Создание и подписание транзакции в реальном времени
+  const createRealtimeTransaction = async (chainId) => {
+    try {
+      const { publicClient } = await createClients(chainId);
+      const config = NETWORK_CONFIGS[chainId];
+      const embeddedWallet = getEmbeddedWallet();
+      const gasParams = await getGasParams(chainId);
+
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet available for realtime signing');
+      }
+
+      // Получаем текущий nonce
+      const nonce = await publicClient.getTransactionCount({
+        address: embeddedWallet.address,
+        blockTag: 'pending'
+      });
+
+      const txData = {
+        account: embeddedWallet.address,
+        to: config.contractAddress,
+        data: '0xa2e62045',
+        nonce,
+        maxFeePerGas: gasParams.maxFeePerGas,
+        maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+        value: 0n,
+        type: 'eip1559',
+        gas: 100000n,
+      };
+
+      console.log(`Creating realtime transaction for chain ${chainId} with nonce ${nonce}`);
+
+              // Подписываем транзакцию
+        const { walletClient } = await createClients(chainId);
+        return await walletClient.signTransaction(txData);
+    } catch (error) {
+      console.error('Error creating realtime transaction:', error);
+      throw error;
     }
-
-    return tx;
   };
 
   // Проверка баланса
@@ -244,7 +536,10 @@ export const useBlockchainUtils = () => {
       const { publicClient } = await createClients(chainId);
       const embeddedWallet = getEmbeddedWallet();
       
-      if (!embeddedWallet) return '0';
+      if (!embeddedWallet) {
+        console.error('No embedded wallet available for balance check');
+        return '0';
+      }
       
       const balance = await publicClient.getBalance({
         address: embeddedWallet.address
@@ -252,9 +547,12 @@ export const useBlockchainUtils = () => {
       
       const balanceEth = (Number(balance) / 10**18).toFixed(4);
       setBalance(balanceEth);
+      console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
       return balanceEth;
     } catch (error) {
       console.error('Error checking balance:', error);
+      // Return 0 balance and let the system continue
+      setBalance('0');
       return '0';
     }
   };
@@ -272,17 +570,35 @@ export const useBlockchainUtils = () => {
         body: JSON.stringify({ address, chainId }),
       });
 
-      const result = await response.json();
-      
       if (!response.ok) {
-        throw new Error(result.error || 'Faucet request failed');
+        let errorMessage = 'Faucet request failed';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        throw new Error(errorMessage);
       }
 
+      const result = await response.json();
       console.log('Faucet success:', result);
       return result;
     } catch (error) {
       console.error('Faucet error:', error);
-      throw error;
+      
+      // Provide specific error messages based on common issues
+      if (error.message.includes('405')) {
+        throw new Error('Faucet service is temporarily unavailable. Please try again later.');
+      } else if (error.message.includes('insufficient balance')) {
+        throw new Error('Faucet is empty. Please contact support.');
+      } else if (error.message.includes('already has sufficient balance')) {
+        console.log('User already has sufficient balance, continuing...');
+        return { success: true, message: 'Sufficient balance already available' };
+      } else {
+        throw new Error(`Faucet error: ${error.message}`);
+      }
     }
   };
 
@@ -292,19 +608,44 @@ export const useBlockchainUtils = () => {
     
     try {
       let response;
+      let txHash;
       
       if (config.sendMethod === 'realtime_sendRawTransaction') {
-        // MegaETH реалтайм метод
-        response = await fetch(config.rpcUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            jsonrpc: '2.0',
-            method: 'realtime_sendRawTransaction',
-            params: [signedTx],
-            id: Date.now()
-          })
-        });
+        // MegaETH реалтайм метод - специальная обработка с retry
+        console.log('Using MegaETH realtime_sendRawTransaction...');
+        
+        const sendTransaction = async () => {
+          const response = await fetch(config.rpcUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              method: 'realtime_sendRawTransaction',
+              params: [signedTx],
+              id: Date.now()
+            })
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+          }
+
+          return await response.json();
+        };
+
+        response = await retryWithBackoff(sendTransaction, 3, 1000);
+        
+        if (response.error) {
+          throw new Error(`RPC Error: ${response.error.message}`);
+        }
+        
+        txHash = response.result;
+        console.log('MegaETH transaction hash:', txHash);
+        
+        // For MegaETH, the realtime method returns receipt immediately
+        return { hash: txHash, receipt: response.result };
+        
       } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
         // RISE синхронный метод
         response = await fetch(config.rpcUrl, {
@@ -317,6 +658,15 @@ export const useBlockchainUtils = () => {
             id: Date.now()
           })
         });
+
+        const result = await response.json();
+        
+        if (result.error) {
+          throw new Error(result.error.message || 'RISE transaction failed');
+        }
+
+        return { hash: result.result, receipt: result.result };
+        
       } else {
         // Стандартная отправка
         response = await fetch(config.rpcUrl, {
@@ -329,15 +679,15 @@ export const useBlockchainUtils = () => {
             id: Date.now()
           })
         });
-      }
 
-      const result = await response.json();
-      
-      if (result.error) {
-        throw new Error(result.error.message || 'Transaction failed');
-      }
+        const result = await response.json();
+        
+        if (result.error) {
+          throw new Error(result.error.message || 'Transaction failed');
+        }
 
-      return result.result; // Transaction hash
+        return { hash: result.result };
+      }
     } catch (error) {
       console.error('Send transaction error:', error);
       throw error;
@@ -354,22 +704,43 @@ export const useBlockchainUtils = () => {
       setTransactionPending(true);
       
       // Получаем предподписанную транзакцию
-      const signedTx = getNextTransaction(chainId);
+      const signedTx = await getNextTransaction(chainId);
+      
+      console.log('Sending on-chain jump transaction...');
       
       // Отправляем транзакцию
-      const txHash = await sendRawTransaction(chainId, signedTx);
-      console.log('Transaction sent:', txHash);
+      const txResult = await sendRawTransaction(chainId, signedTx);
+      console.log('Transaction sent:', txResult);
 
-      // Для некоторых сетей ждём подтверждения
       const config = NETWORK_CONFIGS[chainId];
-      if (config.sendMethod === 'eth_sendRawTransaction') {
-        // Ждём подтверждения для стандартных сетей
+      let finalResult = txResult;
+      
+      // Обработка подтверждения в зависимости от сети
+      if (config.sendMethod === 'realtime_sendRawTransaction') {
+        // MegaETH: realtime метод уже возвращает подтверждение
+        console.log('Transaction confirmed:', txResult);
+        finalResult = txResult.receipt || txResult;
+        
+      } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
+        // RISE: синхронный метод уже подтвержден
+        console.log('Transaction confirmed:', txResult);
+        finalResult = txResult.receipt || txResult;
+        
+      } else {
+        // Стандартные сети: ждём подтверждения
+        console.log('Waiting for transaction confirmation...');
         const { publicClient } = await createClients(chainId);
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        const receipt = await publicClient.waitForTransactionReceipt({ 
+          hash: txResult.hash,
+          timeout: 30000 // 30 seconds timeout
+        });
+        console.log('Transaction confirmed:', receipt);
+        finalResult = receipt;
       }
 
-      console.log('Transaction confirmed:', txHash);
-      return txHash;
+      console.log('Jump transaction confirmed:', finalResult);
+      return finalResult;
+      
     } catch (error) {
       console.error('Error sending update:', error);
       throw error;
@@ -389,38 +760,94 @@ export const useBlockchainUtils = () => {
       setIsInitializing(true);
       console.log('Initializing blockchain data for chain:', chainId);
 
-      const embeddedWallet = getEmbeddedWallet();
+      // Wait for embedded wallet to be created (with retry)
+      let embeddedWallet = null;
+      let retries = 0;
+      const maxRetries = 10;
+      
+      while (!embeddedWallet && retries < maxRetries) {
+        embeddedWallet = getEmbeddedWallet();
+        if (!embeddedWallet) {
+          console.log(`Waiting for embedded wallet creation... (attempt ${retries + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          retries++;
+        }
+      }
+
       if (!embeddedWallet) {
         throw new Error('No embedded wallet available');
       }
 
-      // Проверяем баланс
-      const currentBalance = await checkBalance(chainId);
+      console.log('Using embedded wallet address:', embeddedWallet.address);
+
+      // Получаем кешированные параметры сети (минимизируем RPC вызовы)
+      await getCachedChainParams(chainId);
+
+      // Проверяем баланс и получаем nonce одновременно
+      const [currentBalance, currentNonce] = await Promise.all([
+        checkBalance(chainId),
+        retryWithBackoff(async () => {
+          const { publicClient } = await createClients(chainId);
+          return await publicClient.getTransactionCount({
+            address: embeddedWallet.address,
+            blockTag: 'pending'
+          });
+        }, 2, 500)
+      ]);
+
       console.log('Current balance:', currentBalance);
+      console.log('Starting nonce:', currentNonce);
 
       // Если баланс равен 0, вызываем faucet
       if (parseFloat(currentBalance) === 0) {
         console.log('Balance is 0, calling faucet...');
-        await callFaucet(embeddedWallet.address, chainId);
-        
-        // Ждём немного и проверяем баланс снова
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        await checkBalance(chainId);
+        try {
+          await callFaucet(embeddedWallet.address, chainId);
+          
+          // Ждём немного и проверяем баланс снова
+          console.log('Waiting for faucet transaction to complete...');
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          const newBalance = await checkBalance(chainId);
+          console.log('Balance after faucet:', newBalance);
+        } catch (faucetError) {
+          console.error('Faucet failed, but continuing with initialization:', faucetError);
+          // Don't throw - continue with initialization even if faucet fails
+          // Users can manually add funds or try faucet later
+        }
       }
 
-      // Получаем текущий nonce
-      const { publicClient } = await createClients(chainId);
-      const nonce = await publicClient.getTransactionCount({
-        address: embeddedWallet.address
-      });
-
-      console.log('Starting nonce:', nonce);
-
-      // Предварительно подписываем пакет транзакций
-      await preSignBatch(chainId, nonce, 20); // Начинаем с 20 транзакций
+      // Предподписание пакета транзакций
+      const fallbackConfig = getFallbackConfig(chainId);
+      let batchSize = chainId === 6342 ? 3 : (chainId === 1234 ? 5 : 10);
+      
+      if (fallbackConfig) {
+        batchSize = fallbackConfig.reducedBatchSize;
+        console.log(`Using fallback batch size: ${batchSize}`);
+      }
+      
+      console.log(`Pre-signing ${batchSize} transactions starting from nonce ${currentNonce}`);
+      
+      try {
+        await preSignBatch(chainId, currentNonce, batchSize);
+        
+        // Проверяем, есть ли хотя бы одна подписанная транзакция
+        const pool = preSignedPool.current[chainKey];
+        if (!pool || pool.transactions.length === 0) {
+          console.warn('No transactions were pre-signed, but continuing with manual signing mode');
+          // Не бросаем ошибку, продолжаем работу в режиме ручного подписания
+        }
+      } catch (error) {
+        console.error('Pre-signing failed, enabling fallback mode:', error);
+        enableFallbackMode(chainId);
+        // Продолжаем инициализацию в fallback режиме
+      }
 
       isInitialized.current[chainKey] = true;
       console.log('Initialization complete for chain:', chainId);
+      
+      if (fallbackConfig) {
+        console.log('⚠️ Running in fallback mode - reduced performance expected');
+      }
       
     } catch (error) {
       console.error('Initialization error:', error);
@@ -446,6 +873,33 @@ export const useBlockchainUtils = () => {
     } catch (error) {
       console.error('Error reading contract number:', error);
       return 0;
+    }
+  };
+
+  // Retry функция с exponential backoff
+  const retryWithBackoff = async (fn, maxRetries = 3, baseDelay = 1000) => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (error) {
+        const isLastRetry = i === maxRetries - 1;
+        const isRetryableError = 
+          error.status === 429 || // Too Many Requests
+          error.status === 403 || // Forbidden (может быть временно)
+          error.status === 500 || // Internal Server Error
+          error.status === 502 || // Bad Gateway
+          error.status === 503 || // Service Unavailable
+          error.message?.includes('rate limit') ||
+          error.message?.includes('timeout');
+
+        if (isLastRetry || !isRetryableError) {
+          throw error;
+        }
+
+        const delay = baseDelay * Math.pow(2, i); // Exponential backoff
+        console.log(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms delay due to:`, error.message);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   };
 

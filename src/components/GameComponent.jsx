@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
@@ -11,6 +11,7 @@ const GameComponent = ({ selectedNetwork }) => {
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
+  const { login } = useLogin();
   
   // Используем новый blockchain utils hook
   const {
@@ -22,7 +23,9 @@ const GameComponent = ({ selectedNetwork }) => {
     sendUpdate,
     checkBalance,
     getContractNumber,
-    isReady
+    isReady,
+    getEmbeddedWallet,
+    callFaucet
   } = useBlockchainUtils();
 
   const [blockchainStatus, setBlockchainStatus] = useState({
@@ -37,6 +40,7 @@ const GameComponent = ({ selectedNetwork }) => {
   const [showToast, setShowToast] = useState(false);
   const transactionPendingRef = useRef(false);
   const pendingJumpRef = useRef(null);
+  const [manualFaucetLoading, setManualFaucetLoading] = useState(false);
 
   // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
@@ -118,9 +122,9 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log('Sending on-chain jump transaction...');
       
       // Отправляем транзакцию
-      const txHash = await sendUpdate(selectedNetwork.id);
+      const txResult = await sendUpdate(selectedNetwork.id);
       
-      console.log('Jump transaction confirmed:', txHash);
+      console.log('Jump transaction confirmed:', txResult);
       
       // Обновляем статистику
       setBlockchainStatus(prev => ({
@@ -140,11 +144,62 @@ const GameComponent = ({ selectedNetwork }) => {
 
     } catch (error) {
       console.error('Error sending on-chain movement:', error);
-      // Показываем ошибку пользователю
-      alert(`Transaction failed: ${error.message}`);
+      
+      // Более детальная обработка ошибок
+      let errorMessage = 'Transaction failed';
+      
+      if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds for transaction. Please check your balance.';
+      } else if (error.message.includes('nonce')) {
+        errorMessage = 'Transaction nonce error. Please try again.';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Transaction timeout. Please try again.';
+      } else if (error.message.includes('rejected')) {
+        errorMessage = 'Transaction was rejected by the network.';
+      } else {
+        errorMessage = `Transaction failed: ${error.message}`;
+      }
+      
+      // Показываем ошибку в консоли и в toast
+      console.error('Blockchain transaction error:', errorMessage);
+      
+      // Опционально можно показать toast с ошибкой
+      // setShowErrorToast(errorMessage);
+      
     } finally {
       transactionPendingRef.current = false;
       setShowToast(false);
+    }
+  };
+
+  // Manual faucet call function
+  const handleManualFaucet = async () => {
+    if (!selectedNetwork || selectedNetwork.isWeb2 || !isReady) {
+      return;
+    }
+
+    try {
+      setManualFaucetLoading(true);
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        alert('Please connect your wallet first');
+        return;
+      }
+
+      console.log('Manual faucet request for:', embeddedWallet.address);
+      await callFaucet(embeddedWallet.address, selectedNetwork.id);
+      
+      // Wait and refresh balance
+      setTimeout(async () => {
+        await checkBalance(selectedNetwork.id);
+      }, 3000);
+
+      alert('Faucet request successful! Funds should arrive shortly.');
+    } catch (error) {
+      console.error('Manual faucet error:', error);
+      alert(`Faucet request failed: ${error.message}`);
+    } finally {
+      setManualFaucetLoading(false);
     }
   };
 
@@ -201,11 +256,20 @@ const GameComponent = ({ selectedNetwork }) => {
       return;
     }
 
-    if (selectedNetwork && isReady) {
+    // Only initialize if we have proper authentication and embedded wallet
+    if (selectedNetwork && isReady && authenticated && wallets.length > 0) {
       console.log('Initializing blockchain for:', selectedNetwork.name);
+      console.log('Authentication status:', { authenticated, wallets: wallets.length, isReady });
       initializeBlockchain();
+    } else {
+      console.log('Waiting for authentication and embedded wallet creation...', {
+        selectedNetwork: !!selectedNetwork,
+        isReady,
+        authenticated,
+        wallets: wallets.length
+      });
     }
-  }, [selectedNetwork, isReady]);
+  }, [selectedNetwork, isReady, authenticated, wallets]);
 
   // Update blockchain status from hook
   useEffect(() => {
@@ -534,10 +598,8 @@ const GameComponent = ({ selectedNetwork }) => {
           setupGameReset();
         }
 
-        // Handle blockchain movement (every few frames to avoid spam)
-        if (Math.random() < 0.01) { // ~1% chance per frame
-          handleOnChainMovement();
-        }
+        // Remove random blockchain movements - these interfere with proper execution
+        // Real blockchain transactions should only happen on actual player jumps
       }
 
       // Draw
@@ -596,6 +658,22 @@ const GameComponent = ({ selectedNetwork }) => {
 
   return (
     <div className="game-container">
+      {/* Show login prompt if blockchain network selected but not authenticated */}
+      {selectedNetwork && !selectedNetwork.isWeb2 && !authenticated && (
+        <div className="login-prompt-overlay">
+          <div className="login-prompt-container">
+            <div className="login-prompt-content">
+              <h2>🔐 Authentication Required</h2>
+              <p>You need to connect your wallet to play on <strong>{selectedNetwork.name}</strong></p>
+              <p>This will create an embedded wallet for seamless blockchain gaming.</p>
+              <button className="login-prompt-button" onClick={login}>
+                Connect Wallet
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <canvas ref={canvasRef} />
       
       {/* Transaction Status Toast */}
@@ -632,6 +710,17 @@ const GameComponent = ({ selectedNetwork }) => {
                 <span className="label">Jumps:</span>
                 <span className="value">{blockchainStatus.totalMovements}</span>
               </div>
+              {parseFloat(balance) <= 0 && (
+                <div className="status-item">
+                  <button 
+                    className="faucet-button" 
+                    onClick={handleManualFaucet}
+                    disabled={manualFaucetLoading}
+                  >
+                    {manualFaucetLoading ? 'Requesting...' : 'Get Test ETH'}
+                  </button>
+                </div>
+              )}
               {transactionPending && (
                 <div className="status-item">
                   <span className="label">Status:</span>
