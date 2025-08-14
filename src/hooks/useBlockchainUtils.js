@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usePrivy, useWallets, useSendTransaction } from '@privy-io/react-auth';
+import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
 
 // Конфигурация сетей
@@ -64,7 +64,7 @@ const UPDATER_ABI = [
 ];
 
 export const useBlockchainUtils = () => {
-  const { authenticated, user, login, logout, isReady, signTransaction } = usePrivy();
+  const { authenticated, user, login, logout, isReady } = usePrivy();
   const { wallets } = useWallets();
   
   // Состояние
@@ -145,29 +145,6 @@ export const useBlockchainUtils = () => {
     return null;
   };
 
-  // Helper function to sign transaction using Privy embedded wallet
-  const signTransactionWithPrivy = async (txData) => {
-    try {
-      const embeddedWallet = getEmbeddedWallet();
-      if (!embeddedWallet) {
-        throw new Error('No embedded wallet available');
-      }
-      
-      // Use signTransaction from usePrivy hook
-      if (!signTransaction) {
-        throw new Error('signTransaction not available from Privy');
-      }
-      
-      // Sign the transaction using Privy's signTransaction
-      const signedTx = await signTransaction(txData);
-      
-      return signedTx;
-    } catch (error) {
-      console.error('Error signing transaction with Privy:', error);
-      throw error;
-    }
-  };
-
   // Создание клиентов с кэшированием
   const createClients = async (chainId) => {
     const cacheKey = `${chainId}`;
@@ -214,9 +191,22 @@ export const useBlockchainUtils = () => {
           transport: custom({
             async request({ method, params }) {
               if (method === 'eth_signTransaction') {
-                // Локальное подписание через Privy
-                const tx = params[0];
-                return await signTransactionWithPrivy(tx);
+                // Локальное подписание через embedded wallet
+                const embeddedWallet = getEmbeddedWallet();
+                if (!embeddedWallet) {
+                  throw new Error('No embedded wallet found for signing');
+                }
+                
+                // Создаем walletClient с embedded wallet
+                const provider = await embeddedWallet.getProvider?.() || 
+                                await embeddedWallet.getEthereumProvider?.() ||
+                                embeddedWallet;
+                
+                if (provider?.request) {
+                  return await provider.request({ method, params });
+                }
+                
+                throw new Error('Unable to get provider for signing');
               }
               // Остальные методы идут через публичный RPC
               return await publicClient.request({ method, params });
@@ -397,7 +387,7 @@ export const useBlockchainUtils = () => {
           signedTx = await retryWithBackoff(
             async () => {
               // Прямое подписание через embedded wallet
-              return await signTransactionWithPrivy(txData);
+              return await walletClient.signTransaction(txData);
             },
             fallbackConfig ? 1 : 2, // Меньше retry в fallback режиме
             500
@@ -531,15 +521,9 @@ export const useBlockchainUtils = () => {
 
       console.log(`Creating realtime transaction for chain ${chainId} with nonce ${nonce}`);
 
-      // Подписываем транзакцию
-      if (chainId === 6342) {
-        // MegaETH: локальное подписание
-        return await signTransactionWithPrivy(txData);
-      } else {
-        // Другие сети: через walletClient
+              // Подписываем транзакцию
         const { walletClient } = await createClients(chainId);
         return await walletClient.signTransaction(txData);
-      }
     } catch (error) {
       console.error('Error creating realtime transaction:', error);
       throw error;
