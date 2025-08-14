@@ -36,6 +36,22 @@ const NETWORK_CONFIGS = {
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 1313161556,
     sendMethod: 'eth_sendRawTransactionSync', // Синхронный метод для RISE
+  },
+  84532: { // Base Sepolia
+    name: 'Base Sepolia',
+    rpcUrl: 'https://sepolia.base.org',
+    contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0',
+    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
+    chainId: 84532,
+    sendMethod: 'eth_sendRawTransaction',
+  },
+  10143: { // Monad Testnet
+    name: 'Monad Testnet',
+    rpcUrl: 'https://testnet-rpc.monad.xyz',
+    contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0',
+    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
+    chainId: 10143,
+    sendMethod: 'eth_sendRawTransaction',
   }
 };
 
@@ -101,12 +117,43 @@ export const useBlockchainUtils = () => {
     // Создаем публичный клиент
     const publicClient = createPublicClient({
       transport: http(config.rpcUrl),
+      chain: {
+        id: chainId,
+        name: config.name,
+        network: config.name.toLowerCase().replace(/\s+/g, '-'),
+        nativeCurrency: {
+          name: 'Ether',
+          symbol: 'ETH',
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: {
+            http: [config.rpcUrl],
+          },
+        },
+      },
     });
 
-    // Создаем клиент кошелька
+    // Создаем клиент кошелька 
+    const ethereumProvider = await embeddedWallet.getEthereumProvider();
     const walletClient = createWalletClient({
       account: embeddedWallet.address,
-      transport: custom(embeddedWallet.getEthereumProvider()),
+      transport: custom(ethereumProvider),
+      chain: {
+        id: chainId,
+        name: config.name,
+        network: config.name.toLowerCase().replace(/\s+/g, '-'),
+        nativeCurrency: {
+          name: 'Ether',
+          symbol: 'ETH',
+          decimals: 18,
+        },
+        rpcUrls: {
+          default: {
+            http: [config.rpcUrl],
+          },
+        },
+      },
     });
 
     const clients = { publicClient, walletClient, config };
@@ -272,10 +319,30 @@ export const useBlockchainUtils = () => {
         body: JSON.stringify({ address, chainId }),
       });
 
-      const result = await response.json();
-      
+      // Check if response is OK before trying to parse JSON
       if (!response.ok) {
-        throw new Error(result.error || 'Faucet request failed');
+        console.error(`Faucet API error: ${response.status} ${response.statusText}`);
+        
+        // Try to get error text, fallback to status if JSON parsing fails
+        let errorMessage;
+        try {
+          const errorResult = await response.json();
+          errorMessage = errorResult.error || `HTTP ${response.status}: ${response.statusText}`;
+        } catch (jsonError) {
+          console.error('Failed to parse error response as JSON:', jsonError);
+          errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        }
+        
+        throw new Error(errorMessage);
+      }
+
+      // Parse successful response
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError) {
+        console.error('Failed to parse success response as JSON:', jsonError);
+        throw new Error('Invalid response from faucet API');
       }
 
       console.log('Faucet success:', result);
@@ -389,10 +456,19 @@ export const useBlockchainUtils = () => {
       setIsInitializing(true);
       console.log('Initializing blockchain data for chain:', chainId);
 
+      // Check if we have a supported network
+      const config = NETWORK_CONFIGS[chainId];
+      if (!config) {
+        throw new Error(`Unsupported network: ${chainId}`);
+      }
+
       const embeddedWallet = getEmbeddedWallet();
       if (!embeddedWallet) {
         throw new Error('No embedded wallet available');
       }
+
+      console.log('Using embedded wallet address:', embeddedWallet.address);
+      console.log('Network configuration:', config.name);
 
       // Проверяем баланс
       const currentBalance = await checkBalance(chainId);

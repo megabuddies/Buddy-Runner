@@ -11,6 +11,26 @@ const NETWORKS = {
     rpcUrl: process.env.FOUNDRY_RPC_URL || 'http://127.0.0.1:8545',
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 31337
+  },
+  50311: { // Somnia Testnet
+    rpcUrl: 'https://testnet.somnia.network',
+    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
+    chainId: 50311
+  },
+  1313161556: { // RISE Testnet
+    rpcUrl: 'https://testnet-rpc.rise.com',
+    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
+    chainId: 1313161556
+  },
+  84532: { // Base Sepolia
+    rpcUrl: 'https://sepolia.base.org',
+    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
+    chainId: 84532
+  },
+  10143: { // Monad Testnet
+    rpcUrl: 'https://testnet-rpc.monad.xyz',
+    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
+    chainId: 10143
   }
 };
 
@@ -64,8 +84,13 @@ export default async function handler(req, res) {
     // Получаем приватный ключ владельца из переменных окружения
     const ownerPrivateKey = process.env.FAUCET_OWNER_PRIVATE_KEY;
     if (!ownerPrivateKey) {
+      console.error('FAUCET_OWNER_PRIVATE_KEY environment variable not set');
       return res.status(500).json({ error: 'Faucet owner private key not configured' });
     }
+
+    console.log('Faucet configuration check passed');
+    console.log('Network:', network.rpcUrl);
+    console.log('Faucet address:', network.faucetAddress);
 
     // Создаем провайдер и кошелёк владельца
     const provider = new ethers.JsonRpcProvider(network.rpcUrl);

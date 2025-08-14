@@ -21,7 +21,8 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       if (authenticated && wallets && wallets.length > 0 && selectedNetwork && !isNetworkSwitching) {
         try {
           const wallet = wallets[0];
-          const currentChainId = await wallet.getChainId();
+          // Use wallet.chainId property instead of getChainId() method
+          const currentChainId = wallet.chainId;
           
           if (currentChainId !== selectedNetwork.id) {
             console.log(`Auto-switching to ${selectedNetwork.name}...`);
