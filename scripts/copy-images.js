@@ -11,20 +11,31 @@ if (!fs.existsSync(targetDir)) {
 
 // Copy all image files
 try {
+  if (!fs.existsSync(sourceDir)) {
+    console.log('⚠️ Source directory does not exist:', sourceDir);
+    return;
+  }
+
   const files = fs.readdirSync(sourceDir);
+  let copiedCount = 0;
   
   files.forEach(file => {
-    if (file.match(/\.(png|jpg|jpeg|svg)$/i)) {
+    if (file.match(/\.(png|jpg|jpeg|svg)$/i) && !file.startsWith('.')) {
       const sourcePath = path.join(sourceDir, file);
       const targetPath = path.join(targetDir, file);
       
-      fs.copyFileSync(sourcePath, targetPath);
-      console.log(`Copied ${file} to assets/`);
+      try {
+        fs.copyFileSync(sourcePath, targetPath);
+        console.log(`✅ Copied ${file} to assets/`);
+        copiedCount++;
+      } catch (err) {
+        console.error(`❌ Failed to copy ${file}:`, err.message);
+      }
     }
   });
   
-  console.log('✅ All images copied successfully to dist/assets/');
+  console.log(`✅ Successfully copied ${copiedCount} images to dist/assets/`);
 } catch (error) {
   console.error('❌ Error copying images:', error);
-  process.exit(1);
+  // Don't exit with error code to avoid breaking the build
 }

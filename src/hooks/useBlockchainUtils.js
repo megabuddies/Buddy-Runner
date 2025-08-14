@@ -169,13 +169,59 @@ export const useBlockchainUtils = () => {
 
     const { publicClient } = await createClients(chainId);
     
-    const gasPrice = await publicClient.getGasPrice();
-    const maxFeePerGas = gasPrice * 2n; // 2x для запаса
-    const maxPriorityFeePerGas = parseGwei('2'); // 2 gwei
+    try {
+      // Try to get EIP-1559 fee data first
+      const feeData = await publicClient.estimateFeesPerGas();
+      
+      let maxFeePerGas, maxPriorityFeePerGas;
+      
+      if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+        // EIP-1559 network
+        maxFeePerGas = feeData.maxFeePerGas * 120n / 100n; // 20% buffer
+        maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+        
+        // Ensure priority fee doesn't exceed max fee
+        if (maxPriorityFeePerGas > maxFeePerGas) {
+          maxPriorityFeePerGas = maxFeePerGas / 2n; // Use half of max fee as priority
+        }
+      } else {
+        // Legacy network - fallback to gas price
+        const gasPrice = await publicClient.getGasPrice();
+        maxFeePerGas = gasPrice * 120n / 100n; // 20% buffer
+        maxPriorityFeePerGas = gasPrice / 10n; // 10% of gas price as tip
+        
+        // Ensure minimum values
+        if (maxPriorityFeePerGas < parseGwei('0.1')) {
+          maxPriorityFeePerGas = parseGwei('0.1'); // Minimum 0.1 gwei
+        }
+        
+        // Ensure priority fee doesn't exceed max fee
+        if (maxPriorityFeePerGas > maxFeePerGas) {
+          maxPriorityFeePerGas = maxFeePerGas / 2n;
+        }
+      }
 
-    const params = { maxFeePerGas, maxPriorityFeePerGas };
-    gasParams.current[chainId] = params;
-    return params;
+      console.log(`Gas params for chain ${chainId}:`, {
+        maxFeePerGas: maxFeePerGas.toString(),
+        maxPriorityFeePerGas: maxPriorityFeePerGas.toString(),
+        maxFeePerGasGwei: Number(maxFeePerGas) / 1e9,
+        maxPriorityFeePerGasGwei: Number(maxPriorityFeePerGas) / 1e9
+      });
+
+      const params = { maxFeePerGas, maxPriorityFeePerGas };
+      gasParams.current[chainId] = params;
+      return params;
+    } catch (error) {
+      console.error('Error getting gas params:', error);
+      // Fallback to simple values
+      const gasPrice = await publicClient.getGasPrice();
+      const maxFeePerGas = gasPrice * 2n;
+      const maxPriorityFeePerGas = gasPrice / 10n;
+      
+      const params = { maxFeePerGas, maxPriorityFeePerGas };
+      gasParams.current[chainId] = params;
+      return params;
+    }
   };
 
   // Предварительная подпись пакета транзакций
@@ -186,6 +232,11 @@ export const useBlockchainUtils = () => {
       const { walletClient, config } = await createClients(chainId);
       const gas = await getGasParams(chainId);
       const embeddedWallet = getEmbeddedWallet();
+
+      console.log('Using gas parameters:', {
+        maxFeePerGasGwei: Number(gas.maxFeePerGas) / 1e9,
+        maxPriorityFeePerGasGwei: Number(gas.maxPriorityFeePerGas) / 1e9
+      });
 
       const signingPromises = Array.from({ length: batchSize }, async (_, i) => {
         const txData = {
@@ -199,6 +250,12 @@ export const useBlockchainUtils = () => {
           type: 'eip1559',
           gas: 100000n,
         };
+
+        // Validate gas values before signing
+        if (gas.maxPriorityFeePerGas > gas.maxFeePerGas) {
+          console.warn(`Invalid gas params: priority fee (${gas.maxPriorityFeePerGas}) > max fee (${gas.maxFeePerGas})`);
+          txData.maxPriorityFeePerGas = gas.maxFeePerGas / 2n;
+        }
 
         return await walletClient.signTransaction(txData);
       });
@@ -217,8 +274,60 @@ export const useBlockchainUtils = () => {
       return results;
     } catch (error) {
       console.error('Error pre-signing transactions:', error);
+      
+      // If gas estimation failed, try with legacy transaction
+      if (error.message.includes('TipAboveFeeCapError') || error.message.includes('maxPriorityFeePerGas')) {
+        console.log('Retrying with legacy transaction type...');
+        try {
+          return await preSignBatchLegacy(chainId, startNonce, batchSize);
+        } catch (legacyError) {
+          console.error('Legacy transaction also failed:', legacyError);
+        }
+      }
+      
       throw error;
     }
+  };
+
+  // Fallback function for legacy (type 0) transactions
+  const preSignBatchLegacy = async (chainId, startNonce, batchSize = 10) => {
+    const { walletClient, config } = await createClients(chainId);
+    const { publicClient } = await createClients(chainId);
+    const embeddedWallet = getEmbeddedWallet();
+
+    // Get simple gas price for legacy transactions
+    const gasPrice = await publicClient.getGasPrice();
+    const adjustedGasPrice = gasPrice * 120n / 100n; // 20% buffer
+
+    console.log(`Using legacy transactions with gas price: ${Number(adjustedGasPrice) / 1e9} gwei`);
+
+    const signingPromises = Array.from({ length: batchSize }, async (_, i) => {
+      const txData = {
+        account: embeddedWallet.address,
+        to: config.contractAddress,
+        data: '0xa2e62045',
+        nonce: startNonce + i,
+        gasPrice: adjustedGasPrice,
+        value: 0n,
+        type: 'legacy',
+        gas: 100000n,
+      };
+
+      return await walletClient.signTransaction(txData);
+    });
+
+    const results = await Promise.all(signingPromises);
+    
+    const chainKey = chainId.toString();
+    preSignedPool.current[chainKey] = {
+      transactions: results,
+      currentIndex: 0,
+      baseNonce: startNonce,
+      hasTriggeredRefill: false
+    };
+
+    console.log(`Successfully pre-signed ${results.length} legacy transactions`);
+    return results;
   };
 
   // Умное пополнение пула
@@ -226,30 +335,68 @@ export const useBlockchainUtils = () => {
     try {
       console.log(`Extending pool with ${batchSize} more transactions from nonce ${nextNonce}`);
       
-      const { walletClient, config } = await createClients(chainId);
-      const gas = await getGasParams(chainId);
-      const embeddedWallet = getEmbeddedWallet();
-
-      const newTransactions = await Promise.all(
-        Array.from({ length: batchSize }, async (_, i) => {
-          const txData = {
-            account: embeddedWallet.address,
-            to: config.contractAddress,
-            data: '0xa2e62045',
-            nonce: nextNonce + i,
-            maxFeePerGas: gas.maxFeePerGas,
-            maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
-            value: 0n,
-            type: 'eip1559',
-            gas: 100000n,
-          };
-
-          return await walletClient.signTransaction(txData);
-        })
-      );
-
+      // Try to extend using the same method that was successful in preSignBatch
       const chainKey = chainId.toString();
       const pool = preSignedPool.current[chainKey];
+      
+      // Check if we need legacy transactions by looking at the existing pool
+      const useEIP1559 = pool && pool.transactions.length > 0 && 
+                         pool.transactions[0].includes('"type":"0x2"'); // EIP-1559 indicator
+      
+      let newTransactions;
+      
+      if (useEIP1559) {
+        const { walletClient, config } = await createClients(chainId);
+        const gas = await getGasParams(chainId);
+        const embeddedWallet = getEmbeddedWallet();
+
+        newTransactions = await Promise.all(
+          Array.from({ length: batchSize }, async (_, i) => {
+            const txData = {
+              account: embeddedWallet.address,
+              to: config.contractAddress,
+              data: '0xa2e62045',
+              nonce: nextNonce + i,
+              maxFeePerGas: gas.maxFeePerGas,
+              maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
+              value: 0n,
+              type: 'eip1559',
+              gas: 100000n,
+            };
+
+            // Validate gas values
+            if (gas.maxPriorityFeePerGas > gas.maxFeePerGas) {
+              txData.maxPriorityFeePerGas = gas.maxFeePerGas / 2n;
+            }
+
+            return await walletClient.signTransaction(txData);
+          })
+        );
+      } else {
+        // Use legacy transactions
+        const { walletClient, config, publicClient } = await createClients(chainId);
+        const embeddedWallet = getEmbeddedWallet();
+        const gasPrice = await publicClient.getGasPrice();
+        const adjustedGasPrice = gasPrice * 120n / 100n;
+
+        newTransactions = await Promise.all(
+          Array.from({ length: batchSize }, async (_, i) => {
+            const txData = {
+              account: embeddedWallet.address,
+              to: config.contractAddress,
+              data: '0xa2e62045',
+              nonce: nextNonce + i,
+              gasPrice: adjustedGasPrice,
+              value: 0n,
+              type: 'legacy',
+              gas: 100000n,
+            };
+
+            return await walletClient.signTransaction(txData);
+          })
+        );
+      }
+
       if (pool) {
         pool.transactions.push(...newTransactions);
         pool.hasTriggeredRefill = false; // Сбрасываем флаг
