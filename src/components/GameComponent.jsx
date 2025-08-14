@@ -118,9 +118,9 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log('Sending on-chain jump transaction...');
       
       // Отправляем транзакцию
-      const txHash = await sendUpdate(selectedNetwork.id);
+      const txResult = await sendUpdate(selectedNetwork.id);
       
-      console.log('Jump transaction confirmed:', txHash);
+      console.log('Jump transaction confirmed:', txResult);
       
       // Обновляем статистику
       setBlockchainStatus(prev => ({
@@ -140,8 +140,28 @@ const GameComponent = ({ selectedNetwork }) => {
 
     } catch (error) {
       console.error('Error sending on-chain movement:', error);
-      // Показываем ошибку пользователю
-      alert(`Transaction failed: ${error.message}`);
+      
+      // Более детальная обработка ошибок
+      let errorMessage = 'Transaction failed';
+      
+      if (error.message.includes('insufficient funds')) {
+        errorMessage = 'Insufficient funds for transaction. Please check your balance.';
+      } else if (error.message.includes('nonce')) {
+        errorMessage = 'Transaction nonce error. Please try again.';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Transaction timeout. Please try again.';
+      } else if (error.message.includes('rejected')) {
+        errorMessage = 'Transaction was rejected by the network.';
+      } else {
+        errorMessage = `Transaction failed: ${error.message}`;
+      }
+      
+      // Показываем ошибку в консоли и в toast
+      console.error('Blockchain transaction error:', errorMessage);
+      
+      // Опционально можно показать toast с ошибкой
+      // setShowErrorToast(errorMessage);
+      
     } finally {
       transactionPendingRef.current = false;
       setShowToast(false);
@@ -534,10 +554,8 @@ const GameComponent = ({ selectedNetwork }) => {
           setupGameReset();
         }
 
-        // Handle blockchain movement (every few frames to avoid spam)
-        if (Math.random() < 0.01) { // ~1% chance per frame
-          handleOnChainMovement();
-        }
+        // Remove random blockchain movements - these interfere with proper execution
+        // Real blockchain transactions should only happen on actual player jumps
       }
 
       // Draw

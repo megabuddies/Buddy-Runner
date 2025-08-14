@@ -122,12 +122,31 @@ export const useBlockchainUtils = () => {
 
     const { publicClient } = await createClients(chainId);
     
-    const gasPrice = await publicClient.getGasPrice();
-    const maxFeePerGas = gasPrice * 2n; // 2x для запаса
-    const maxPriorityFeePerGas = parseGwei('2'); // 2 gwei
+    let maxFeePerGas, maxPriorityFeePerGas;
+    
+    // Специальные параметры для разных сетей
+    if (chainId === 6342) {
+      // MegaETH Testnet - оптимизированные параметры
+      console.log('Using optimized gas parameters for MegaETH Testnet');
+      maxFeePerGas = parseGwei('0.0012'); // 1.2 mwei как в логах
+      maxPriorityFeePerGas = parseGwei('0.0006'); // 0.6 mwei как в логах
+      
+      console.log(`Gas params for chain ${chainId}: {maxFeePerGas: '${maxFeePerGas}', maxPriorityFeePerGas: '${maxPriorityFeePerGas}', maxFeePerGasGwei: ${Number(maxFeePerGas) / 1e9}, maxPriorityFeePerGasGwei: ${Number(maxPriorityFeePerGas) / 1e9}}`);
+      
+    } else {
+      // Для остальных сетей используем динамические параметры
+      const gasPrice = await publicClient.getGasPrice();
+      maxFeePerGas = gasPrice * 2n; // 2x для запаса
+      maxPriorityFeePerGas = parseGwei('2'); // 2 gwei
+      
+      console.log(`Dynamic gas params for chain ${chainId}: {maxFeePerGas: '${maxFeePerGas}', maxPriorityFeePerGas: '${maxPriorityFeePerGas}'}`);
+    }
 
     const params = { maxFeePerGas, maxPriorityFeePerGas };
     gasParams.current[chainId] = params;
+    
+    console.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(maxFeePerGas) / 1e9}, maxPriorityFeePerGasGwei: ${Number(maxPriorityFeePerGas) / 1e9}}`);
+    
     return params;
   };
 
@@ -292,9 +311,11 @@ export const useBlockchainUtils = () => {
     
     try {
       let response;
+      let txHash;
       
       if (config.sendMethod === 'realtime_sendRawTransaction') {
-        // MegaETH реалтайм метод
+        // MegaETH реалтайм метод - специальная обработка
+        console.log('Using MegaETH realtime_sendRawTransaction...');
         response = await fetch(config.rpcUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -305,6 +326,19 @@ export const useBlockchainUtils = () => {
             id: Date.now()
           })
         });
+
+        const result = await response.json();
+        
+        if (result.error) {
+          throw new Error(result.error.message || 'MegaETH transaction failed');
+        }
+
+        txHash = result.result;
+        console.log('MegaETH transaction sent with hash:', txHash);
+        
+        // For MegaETH, the realtime method returns receipt immediately
+        return { hash: txHash, receipt: result.result };
+        
       } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
         // RISE синхронный метод
         response = await fetch(config.rpcUrl, {
@@ -317,6 +351,15 @@ export const useBlockchainUtils = () => {
             id: Date.now()
           })
         });
+
+        const result = await response.json();
+        
+        if (result.error) {
+          throw new Error(result.error.message || 'RISE transaction failed');
+        }
+
+        return { hash: result.result, receipt: result.result };
+        
       } else {
         // Стандартная отправка
         response = await fetch(config.rpcUrl, {
@@ -329,15 +372,15 @@ export const useBlockchainUtils = () => {
             id: Date.now()
           })
         });
-      }
 
-      const result = await response.json();
-      
-      if (result.error) {
-        throw new Error(result.error.message || 'Transaction failed');
-      }
+        const result = await response.json();
+        
+        if (result.error) {
+          throw new Error(result.error.message || 'Transaction failed');
+        }
 
-      return result.result; // Transaction hash
+        return { hash: result.result };
+      }
     } catch (error) {
       console.error('Send transaction error:', error);
       throw error;
@@ -356,20 +399,41 @@ export const useBlockchainUtils = () => {
       // Получаем предподписанную транзакцию
       const signedTx = getNextTransaction(chainId);
       
+      console.log('Sending on-chain jump transaction...');
+      
       // Отправляем транзакцию
-      const txHash = await sendRawTransaction(chainId, signedTx);
-      console.log('Transaction sent:', txHash);
+      const txResult = await sendRawTransaction(chainId, signedTx);
+      console.log('Transaction sent:', txResult);
 
-      // Для некоторых сетей ждём подтверждения
       const config = NETWORK_CONFIGS[chainId];
-      if (config.sendMethod === 'eth_sendRawTransaction') {
-        // Ждём подтверждения для стандартных сетей
+      let finalResult = txResult;
+      
+      // Обработка подтверждения в зависимости от сети
+      if (config.sendMethod === 'realtime_sendRawTransaction') {
+        // MegaETH: realtime метод уже возвращает подтверждение
+        console.log('Transaction confirmed:', txResult);
+        finalResult = txResult.receipt || txResult;
+        
+      } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
+        // RISE: синхронный метод уже подтвержден
+        console.log('Transaction confirmed:', txResult);
+        finalResult = txResult.receipt || txResult;
+        
+      } else {
+        // Стандартные сети: ждём подтверждения
+        console.log('Waiting for transaction confirmation...');
         const { publicClient } = await createClients(chainId);
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        const receipt = await publicClient.waitForTransactionReceipt({ 
+          hash: txResult.hash,
+          timeout: 30000 // 30 seconds timeout
+        });
+        console.log('Transaction confirmed:', receipt);
+        finalResult = receipt;
       }
 
-      console.log('Transaction confirmed:', txHash);
-      return txHash;
+      console.log('Jump transaction confirmed:', finalResult);
+      return finalResult;
+      
     } catch (error) {
       console.error('Error sending update:', error);
       throw error;
