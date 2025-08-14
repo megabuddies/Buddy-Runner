@@ -168,74 +168,59 @@ export const useBlockchainUtils = () => {
           nativeCurrency: {
             name: 'Ether',
             symbol: 'ETH',
-            decimals: 18,
+            decimals: 18
           },
           rpcUrls: {
             default: { http: [config.rpcUrl] },
-            public: { http: [config.rpcUrl] },
-          },
+            public: { http: [config.rpcUrl] }
+          }
         },
         transport: http(config.rpcUrl, {
-          retryCount: 3,
           timeout: 10000,
-        }),
+          retryCount: 2
+        })
       });
 
-      // Создаем клиент кошелька с проверкой провайдера
+      // Для MegaETH используем локальное подписание (не RPC)
       let walletClient;
-      try {
-        const provider = embeddedWallet.getEthereumProvider();
-        if (!provider) {
-          throw new Error('Embedded wallet provider not available');
-        }
-        
+      if (chainId === 6342) {
+        // MegaETH: локальное подписание с Privy account
         walletClient = createWalletClient({
           account: embeddedWallet.address,
-          chain: {
-            id: chainId,
-            name: config.name,
-            network: config.name.toLowerCase().replace(/\s+/g, '-'),
-            nativeCurrency: {
-              name: 'Ether',
-              symbol: 'ETH',
-              decimals: 18,
-            },
-            rpcUrls: {
-              default: { http: [config.rpcUrl] },
-              public: { http: [config.rpcUrl] },
-            },
-          },
-          transport: custom(provider),
+          chain: publicClient.chain,
+          transport: custom({
+            async request({ method, params }) {
+              if (method === 'eth_signTransaction') {
+                // Локальное подписание через Privy
+                const tx = params[0];
+                return await embeddedWallet.signTransaction(tx);
+              }
+              // Остальные методы идут через публичный RPC
+              return await publicClient.request({ method, params });
+            }
+          })
         });
-      } catch (providerError) {
-        console.error('Error creating wallet client:', providerError);
-        // Fallback to HTTP transport for wallet client
+      } else {
+        // Для других сетей используем стандартный подход
         walletClient = createWalletClient({
           account: embeddedWallet.address,
-          chain: {
-            id: chainId,
-            name: config.name,
-            network: config.name.toLowerCase().replace(/\s+/g, '-'),
-            nativeCurrency: {
-              name: 'Ether',
-              symbol: 'ETH',
-              decimals: 18,
-            },
-            rpcUrls: {
-              default: { http: [config.rpcUrl] },
-              public: { http: [config.rpcUrl] },
-            },
-          },
-          transport: http(config.rpcUrl),
+          chain: publicClient.chain,
+          transport: http(config.rpcUrl)
         });
       }
 
       const clients = { publicClient, walletClient, config };
       clientCache.current[cacheKey] = clients;
+
+      console.log(`Created clients for chain ${chainId}:`, {
+        publicRPC: config.rpcUrl,
+        signingMethod: chainId === 6342 ? 'Local Privy' : 'RPC'
+      });
+
       return clients;
     } catch (error) {
-      console.error('Error creating clients:', error);
-      throw new Error(`Failed to create blockchain clients: ${error.message}`);
+      console.error(`Error creating clients for chain ${chainId}:`, error);
+      throw error;
     }
   };
 
@@ -380,11 +365,30 @@ export const useBlockchainUtils = () => {
           gas: 100000n,
         };
 
-        const signedTx = await retryWithBackoff(
-          () => walletClient.signTransaction(txData),
-          fallbackConfig ? 1 : 3, // Меньше retry в fallback режиме
-          500
-        );
+        let signedTx;
+        
+        // Разные методы подписания для разных сетей
+        if (chainId === 6342) {
+          // MegaETH: используем прямое подписание через Privy
+          console.log(`Signing transaction ${i + 1} locally for MegaETH`);
+          signedTx = await retryWithBackoff(
+            async () => {
+              // Прямое подписание через embedded wallet
+              return await embeddedWallet.signTransaction(txData);
+            },
+            fallbackConfig ? 1 : 2, // Меньше retry в fallback режиме
+            500
+          );
+        } else {
+          // Другие сети: используем walletClient
+          console.log(`Signing transaction ${i + 1} via RPC for chain ${chainId}`);
+          signedTx = await retryWithBackoff(
+            () => walletClient.signTransaction(txData),
+            fallbackConfig ? 1 : 3,
+            500
+          );
+        }
+        
         pool.transactions.push(signedTx);
         
         consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
@@ -394,8 +398,8 @@ export const useBlockchainUtils = () => {
         consecutiveErrors++;
         
         // Для rate limiting ошибок, активируем fallback режим
-        if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403) {
-          console.log('Rate limit/403 detected, enabling fallback mode');
+        if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403 || error.message?.includes('not whitelisted')) {
+          console.log('Rate limit/403/not whitelisted detected, enabling fallback mode');
           enableFallbackMode(chainId);
           
           // Прерываем дальнейшее подписание
@@ -423,67 +427,100 @@ export const useBlockchainUtils = () => {
   };
 
   // Умное пополнение пула
-  const extendPool = async (chainId, nextNonce, batchSize = 10) => {
+  const extendPool = async (chainId, startNonce, count) => {
     try {
-      console.log(`Extending pool with ${batchSize} more transactions from nonce ${nextNonce}`);
+      console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
       
-      const { walletClient, config } = await createClients(chainId);
-      const gas = await getGasParams(chainId);
-      const embeddedWallet = getEmbeddedWallet();
-
-      const newTransactions = await Promise.all(
-        Array.from({ length: batchSize }, async (_, i) => {
-          const txData = {
-            account: embeddedWallet.address,
-            to: config.contractAddress,
-            data: '0xa2e62045',
-            nonce: nextNonce + i,
-            maxFeePerGas: gas.maxFeePerGas,
-            maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
-            value: 0n,
-            type: 'eip1559',
-            gas: 100000n,
-          };
-
-          return await walletClient.signTransaction(txData);
-        })
-      );
-
+      // Используем существующую функцию preSignBatch для пополнения
+      await preSignBatch(chainId, startNonce, count);
+      
       const chainKey = chainId.toString();
       const pool = preSignedPool.current[chainKey];
       if (pool) {
-        pool.transactions.push(...newTransactions);
-        pool.hasTriggeredRefill = false; // Сбрасываем флаг
+        pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
+        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
       }
-
-      console.log(`Pool extended with ${newTransactions.length} transactions`);
     } catch (error) {
-      console.error('Error extending pool:', error);
+      console.error('Error extending transaction pool:', error);
+      // Не бросаем ошибку, просто логируем - игра может продолжаться в realtime режиме
     }
   };
 
-  // Получение следующей транзакции из пула
-  const getNextTransaction = (chainId) => {
+  // Получение следующей транзакции из пула или создание новой
+  const getNextTransaction = async (chainId) => {
     const chainKey = chainId.toString();
     const pool = preSignedPool.current[chainKey];
-    
-    if (!pool || pool.currentIndex >= pool.transactions.length) {
-      throw new Error('No pre-signed transactions available');
+
+    // Если есть предподписанные транзакции, используем их
+    if (pool && pool.transactions.length > pool.currentIndex) {
+      const tx = pool.transactions[pool.currentIndex];
+      pool.currentIndex++;
+
+      // Автодозаправка пула при 50% использовании
+      if (pool.currentIndex >= pool.transactions.length / 2 && !pool.hasTriggeredRefill) {
+        pool.hasTriggeredRefill = true;
+        console.log('Pool half empty, extending with new transactions...');
+        try {
+          const nextNonce = pool.baseNonce + pool.transactions.length;
+          await extendPool(chainId, nextNonce, 3); // Небольшой batch для дозаправки
+        } catch (error) {
+          console.error('Error extending pool:', error);
+        }
+      }
+
+      return tx;
     }
 
-    const tx = pool.transactions[pool.currentIndex];
-    pool.currentIndex++;
+    // Если нет предподписанных транзакций, создаем и подписываем realtime
+    console.log('No pre-signed transactions available, signing realtime...');
+    return await createRealtimeTransaction(chainId);
+  };
 
-    // Пополнение каждые 5 транзакций (50% от начального пакета)
-    if (pool.currentIndex % 5 === 0 && !pool.hasTriggeredRefill) {
-      pool.hasTriggeredRefill = true;
-      const nextNonce = pool.baseNonce + pool.transactions.length;
-      
-      // Асинхронно подписываем ещё 10 транзакций
-      extendPool(chainId, nextNonce, 10).catch(console.error);
+  // Создание и подписание транзакции в реальном времени
+  const createRealtimeTransaction = async (chainId) => {
+    try {
+      const { publicClient } = await createClients(chainId);
+      const config = NETWORK_CONFIGS[chainId];
+      const embeddedWallet = getEmbeddedWallet();
+      const gasParams = await getGasParams(chainId);
+
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet available for realtime signing');
+      }
+
+      // Получаем текущий nonce
+      const nonce = await publicClient.getTransactionCount({
+        address: embeddedWallet.address,
+        blockTag: 'pending'
+      });
+
+      const txData = {
+        account: embeddedWallet.address,
+        to: config.contractAddress,
+        data: '0xa2e62045',
+        nonce,
+        maxFeePerGas: gasParams.maxFeePerGas,
+        maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+        value: 0n,
+        type: 'eip1559',
+        gas: 100000n,
+      };
+
+      console.log(`Creating realtime transaction for chain ${chainId} with nonce ${nonce}`);
+
+      // Подписываем транзакцию
+      if (chainId === 6342) {
+        // MegaETH: локальное подписание
+        return await embeddedWallet.signTransaction(txData);
+      } else {
+        // Другие сети: через walletClient
+        const { walletClient } = await createClients(chainId);
+        return await walletClient.signTransaction(txData);
+      }
+    } catch (error) {
+      console.error('Error creating realtime transaction:', error);
+      throw error;
     }
-
-    return tx;
   };
 
   // Проверка баланса
@@ -660,7 +697,7 @@ export const useBlockchainUtils = () => {
       setTransactionPending(true);
       
       // Получаем предподписанную транзакцию
-      const signedTx = getNextTransaction(chainId);
+      const signedTx = await getNextTransaction(chainId);
       
       console.log('Sending on-chain jump transaction...');
       
