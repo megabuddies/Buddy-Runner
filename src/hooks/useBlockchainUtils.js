@@ -132,15 +132,37 @@ export const useBlockchainUtils = () => {
   };
 
   // Предварительная подпись пакета транзакций
-  const preSignBatch = async (chainId, startNonce, batchSize = 10) => {
+  const preSignBatch = async (chainId, startNonce, batchSize = 15) => {
     try {
-      console.log(`Pre-signing ${batchSize} transactions starting from nonce ${startNonce}`);
+      console.log(`Pre-signing ${batchSize} transactions for chain ${chainId} starting from nonce ${startNonce}`);
       
       const { walletClient, config } = await createClients(chainId);
       const gas = await getGasParams(chainId);
       const embeddedWallet = getEmbeddedWallet();
 
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet found');
+      }
+
+      console.log('Available wallets:', wallets.length);
+      console.log('Found embedded wallet:', embeddedWallet.address);
+
+      // Вычисляем газовые параметры
+      const gasParams = await getGasParams(chainId);
+      const maxFeePerGasGwei = Number(gasParams.maxFeePerGas) / 1e9;
+      const maxPriorityFeePerGasGwei = Number(gasParams.maxPriorityFeePerGas) / 1e9;
+      
+      console.log('Using gas parameters:', {
+        maxFeePerGasGwei,
+        maxPriorityFeePerGasGwei
+      });
+
       const signingPromises = Array.from({ length: batchSize }, async (_, i) => {
+        console.log(`Signing transaction ${i + 1} locally for MegaETH`);
+        
+        console.log('Available wallets:', wallets.length);
+        console.log('Found embedded wallet:', embeddedWallet.address);
+        
         const txData = {
           account: embeddedWallet.address,
           to: config.contractAddress,
@@ -153,7 +175,9 @@ export const useBlockchainUtils = () => {
           gas: 100000n,
         };
 
-        return await walletClient.signTransaction(txData);
+        const signedTx = await walletClient.signTransaction(txData);
+        console.log(`Signed transaction ${i + 1}/${batchSize}`);
+        return signedTx;
       });
 
       const results = await Promise.all(signingPromises);
@@ -177,14 +201,29 @@ export const useBlockchainUtils = () => {
   // Умное пополнение пула
   const extendPool = async (chainId, nextNonce, batchSize = 10) => {
     try {
-      console.log(`Extending pool with ${batchSize} more transactions from nonce ${nextNonce}`);
+      console.log(`Extending pool for chain ${chainId} from nonce ${nextNonce} with ${batchSize} transactions`);
       
       const { walletClient, config } = await createClients(chainId);
       const gas = await getGasParams(chainId);
       const embeddedWallet = getEmbeddedWallet();
 
+      // Вычисляем газовые параметры
+      const gasParams = await getGasParams(chainId);
+      const maxFeePerGasGwei = Number(gasParams.maxFeePerGas) / 1e9;
+      const maxPriorityFeePerGasGwei = Number(gasParams.maxPriorityFeePerGas) / 1e9;
+      
+      console.log('Using gas parameters:', {
+        maxFeePerGasGwei,
+        maxPriorityFeePerGasGwei
+      });
+
       const newTransactions = await Promise.all(
         Array.from({ length: batchSize }, async (_, i) => {
+          console.log(`Signing transaction ${i + 1} locally for MegaETH`);
+          
+          console.log('Available wallets:', wallets.length);
+          console.log('Found embedded wallet:', embeddedWallet.address);
+          
           const txData = {
             account: embeddedWallet.address,
             to: config.contractAddress,
@@ -197,7 +236,9 @@ export const useBlockchainUtils = () => {
             gas: 100000n,
           };
 
-          return await walletClient.signTransaction(txData);
+          const signedTx = await walletClient.signTransaction(txData);
+          console.log(`Signed transaction ${i + 1 + (preSignedPool.current[chainId.toString()]?.transactions.length || 0)}/${batchSize}`);
+          return signedTx;
         })
       );
 
@@ -208,9 +249,44 @@ export const useBlockchainUtils = () => {
         pool.hasTriggeredRefill = false; // Сбрасываем флаг
       }
 
-      console.log(`Pool extended with ${newTransactions.length} transactions`);
+      console.log(`Successfully pre-signed ${pool ? pool.transactions.length : newTransactions.length} transactions`);
+      console.log(`Pool extended successfully. Total transactions: ${pool ? pool.transactions.length : newTransactions.length}`);
     } catch (error) {
       console.error('Error extending pool:', error);
+    }
+  };
+
+  // Восстановление пула при ошибках nonce
+  const recoverPool = async (chainId) => {
+    try {
+      console.log(`Recovering transaction pool for chain ${chainId} due to nonce error`);
+      
+      const chainKey = chainId.toString();
+      const embeddedWallet = getEmbeddedWallet();
+      
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet found');
+      }
+
+      // Получаем актуальный nonce из сети
+      const { publicClient } = await createClients(chainId);
+      const currentNonce = await publicClient.getTransactionCount({
+        address: embeddedWallet.address
+      });
+
+      console.log(`Recovered nonce: ${currentNonce}`);
+
+      // Очищаем старый пул
+      delete preSignedPool.current[chainKey];
+
+      // Создаем новый пул с актуальным nonce
+      await preSignBatch(chainId, currentNonce, 15);
+      
+      console.log(`Pool recovered successfully for chain ${chainId}`);
+      return true;
+    } catch (error) {
+      console.error('Error recovering pool:', error);
+      return false;
     }
   };
 
@@ -220,14 +296,18 @@ export const useBlockchainUtils = () => {
     const pool = preSignedPool.current[chainKey];
     
     if (!pool || pool.currentIndex >= pool.transactions.length) {
+      console.log('Pool half empty, extending with new transactions...');
       throw new Error('No pre-signed transactions available');
     }
 
     const tx = pool.transactions[pool.currentIndex];
     pool.currentIndex++;
 
-    // Пополнение каждые 5 транзакций (50% от начального пакета)
-    if (pool.currentIndex % 5 === 0 && !pool.hasTriggeredRefill) {
+    // Пополнение при использовании 5 транзакций (30% от 15)
+    const triggerRefillAt = 5;
+    if (pool.currentIndex === triggerRefillAt && !pool.hasTriggeredRefill) {
+      console.log('Pool half empty, extending with new transactions...');
+      console.log(`Extending pool for chain ${chainId} from nonce ${pool.baseNonce + pool.transactions.length} with 10 transactions`);
       pool.hasTriggeredRefill = true;
       const nextNonce = pool.baseNonce + pool.transactions.length;
       
@@ -334,47 +414,102 @@ export const useBlockchainUtils = () => {
       const result = await response.json();
       
       if (result.error) {
+        // Специальная обработка ошибок nonce
+        if (result.error.message && result.error.message.includes('nonce too low')) {
+          throw new Error(`RPC Error: nonce too low`);
+        }
         throw new Error(result.error.message || 'Transaction failed');
       }
 
       return result.result; // Transaction hash
     } catch (error) {
       console.error('Send transaction error:', error);
+      
+      // Переброс ошибки с сохранением типа
+      if (error.message.includes('nonce too low')) {
+        throw new Error(`RPC Error: nonce too low`);
+      }
+      
       throw error;
     }
   };
 
   // Основной метод отправки обновления
-  const sendUpdate = async (chainId) => {
+  const sendUpdate = async (chainId, retryCount = 0) => {
     if (transactionPending) {
+      console.log('Transaction already pending, blocking jump');
       throw new Error('Transaction already pending');
     }
 
+    let shouldResetPending = true;
+
     try {
       setTransactionPending(true);
+      console.log('Sending on-chain jump transaction...');
       
       // Получаем предподписанную транзакцию
       const signedTx = getNextTransaction(chainId);
       
       // Отправляем транзакцию
+      const config = NETWORK_CONFIGS[chainId];
+      if (config.sendMethod === 'realtime_sendRawTransaction') {
+        console.log('Using MegaETH realtime_sendRawTransaction...');
+      }
+      
       const txHash = await sendRawTransaction(chainId, signedTx);
-      console.log('Transaction sent:', txHash);
+      console.log('MegaETH transaction hash:', txHash);
+      console.log('Transaction sent:', { hash: txHash, receipt: txHash });
 
       // Для некоторых сетей ждём подтверждения
-      const config = NETWORK_CONFIGS[chainId];
       if (config.sendMethod === 'eth_sendRawTransaction') {
         // Ждём подтверждения для стандартных сетей
         const { publicClient } = await createClients(chainId);
-        await publicClient.waitForTransactionReceipt({ hash: txHash });
+        const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash });
+        console.log('Transaction confirmed:', { hash: txHash, receipt });
+        return { hash: txHash, receipt };
       }
 
-      console.log('Transaction confirmed:', txHash);
-      return txHash;
+      console.log('Transaction confirmed:', { hash: txHash, receipt: txHash });
+      console.log('Jump transaction confirmed:', txHash);
+      return { hash: txHash, receipt: txHash };
     } catch (error) {
+      console.error('Send transaction error:', error);
+      
+      // Специальная обработка ошибок nonce с восстановлением
+      if (error.message && error.message.includes('nonce too low') && retryCount === 0) {
+        console.error('Error sending update:', error);
+        console.error('Error sending on-chain movement:', error);
+        console.error('Blockchain transaction error: Transaction nonce error. Attempting recovery...');
+        
+        shouldResetPending = false; // Не сбрасываем состояние, так как будем делать retry
+        setTransactionPending(false); // Освобождаем блокировку для восстановления
+        
+        // Пытаемся восстановить пул
+        const recovered = await recoverPool(chainId);
+        
+        if (recovered) {
+          console.log('Pool recovered, retrying transaction...');
+          return await sendUpdate(chainId, 1); // Повторяем с флагом retry
+        } else {
+          shouldResetPending = true; // Сбрасываем состояние при неудаче
+          throw new Error('Transaction nonce error. Pool recovery failed.');
+        }
+      }
+      
+      if (error.message && error.message.includes('nonce too low')) {
+        console.error('Error sending update:', error);
+        console.error('Error sending on-chain movement:', error);
+        console.error('Blockchain transaction error: Transaction nonce error. Please try again.');
+        throw new Error('Transaction nonce error. Please try again.');
+      }
+      
       console.error('Error sending update:', error);
+      console.error('Error sending on-chain movement:', error);
       throw error;
     } finally {
-      setTransactionPending(false);
+      if (shouldResetPending) {
+        setTransactionPending(false);
+      }
     }
   };
 
@@ -410,14 +545,21 @@ export const useBlockchainUtils = () => {
 
       // Получаем текущий nonce
       const { publicClient } = await createClients(chainId);
-      const nonce = await publicClient.getTransactionCount({
+      const currentNonce = await publicClient.getTransactionCount({
         address: embeddedWallet.address
       });
 
-      console.log('Starting nonce:', nonce);
+      console.log('Starting nonce:', currentNonce);
 
       // Предварительно подписываем пакет транзакций
-      await preSignBatch(chainId, nonce, 20); // Начинаем с 20 транзакций
+      await preSignBatch(chainId, currentNonce, 15); // Начинаем с 15 транзакций
+
+      // Кешируем параметры цепи
+      const chainParams = {
+        chainId: chainId,
+        blockNumber: await publicClient.getBlockNumber()
+      };
+      console.log(`Cached chain params for ${chainId}:`, chainParams);
 
       isInitialized.current[chainKey] = true;
       console.log('Initialization complete for chain:', chainId);
@@ -462,6 +604,7 @@ export const useBlockchainUtils = () => {
     checkBalance,
     callFaucet,
     getContractNumber,
+    recoverPool,
     
     // Утилиты
     getEmbeddedWallet,
