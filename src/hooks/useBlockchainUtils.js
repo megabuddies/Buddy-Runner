@@ -103,11 +103,23 @@ export const useBlockchainUtils = () => {
       transport: http(config.rpcUrl),
     });
 
-    // Создаем клиент кошелька
-    const walletClient = createWalletClient({
-      account: embeddedWallet.address,
-      transport: custom(embeddedWallet.getEthereumProvider()),
-    });
+    let walletClient = null;
+    
+    // Проверяем, доступен ли provider и создаем wallet client только если он готов
+    try {
+      const provider = embeddedWallet.getEthereumProvider();
+      if (provider && typeof provider.request === 'function') {
+        walletClient = createWalletClient({
+          account: embeddedWallet.address,
+          transport: custom(provider),
+        });
+      } else {
+        console.warn('Embedded wallet provider not ready, using public client only');
+      }
+    } catch (error) {
+      console.warn('Failed to create wallet client:', error.message);
+      // Продолжаем с только публичным клиентом
+    }
 
     const clients = { publicClient, walletClient, config };
     clientCache.current[cacheKey] = clients;
@@ -137,6 +149,11 @@ export const useBlockchainUtils = () => {
       console.log(`Pre-signing ${batchSize} transactions for chain ${chainId} starting from nonce ${startNonce}`);
       
       const { walletClient, config } = await createClients(chainId);
+      
+      if (!walletClient) {
+        throw new Error('Wallet client not available. Embedded wallet may not be ready yet.');
+      }
+      
       const gas = await getGasParams(chainId);
       const embeddedWallet = getEmbeddedWallet();
 
@@ -204,6 +221,12 @@ export const useBlockchainUtils = () => {
       console.log(`Extending pool for chain ${chainId} from nonce ${nextNonce} with ${batchSize} transactions`);
       
       const { walletClient, config } = await createClients(chainId);
+      
+      if (!walletClient) {
+        console.warn('Wallet client not available for pool extension, skipping');
+        return;
+      }
+      
       const gas = await getGasParams(chainId);
       const embeddedWallet = getEmbeddedWallet();
 
@@ -533,18 +556,31 @@ export const useBlockchainUtils = () => {
       const currentBalance = await checkBalance(chainId);
       console.log('Current balance:', currentBalance);
 
-      // Если баланс равен 0, вызываем faucet
+      // Если баланс равен 0, пытаемся вызвать faucet (но не блокируем инициализацию при ошибке)
       if (parseFloat(currentBalance) === 0) {
         console.log('Balance is 0, calling faucet...');
-        await callFaucet(embeddedWallet.address, chainId);
-        
-        // Ждём немного и проверяем баланс снова
-        await new Promise(resolve => setTimeout(resolve, 5000));
-        await checkBalance(chainId);
+        try {
+          await callFaucet(embeddedWallet.address, chainId);
+          
+          // Ждём немного и проверяем баланс снова
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          await checkBalance(chainId);
+        } catch (faucetError) {
+          console.warn('Faucet failed, but continuing with initialization:', faucetError.message);
+          // Продолжаем инициализацию даже если faucet не работает
+        }
       }
 
+      // Ждём несколько секунд, чтобы wallet provider был готов
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       // Получаем текущий nonce
-      const { publicClient } = await createClients(chainId);
+      const { publicClient, walletClient } = await createClients(chainId);
+      
+      if (!walletClient) {
+        throw new Error('Wallet client not ready. Please try again in a few seconds.');
+      }
+      
       const currentNonce = await publicClient.getTransactionCount({
         address: embeddedWallet.address
       });

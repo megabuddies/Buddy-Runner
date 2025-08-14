@@ -21,12 +21,18 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       if (authenticated && wallets && wallets.length > 0 && selectedNetwork && !isNetworkSwitching) {
         try {
           const wallet = wallets[0];
-          const currentChainId = await wallet.getChainId();
           
-          if (currentChainId !== selectedNetwork.id) {
-            console.log(`Auto-switching to ${selectedNetwork.name}...`);
-            setIsNetworkSwitching(true);
-            await switchNetwork(selectedNetwork.id);
+          // Проверяем, что wallet готов и имеет метод getChainId
+          if (wallet && typeof wallet.getChainId === 'function') {
+            const currentChainId = await wallet.getChainId();
+            
+            if (currentChainId !== selectedNetwork.id) {
+              console.log(`Auto-switching to ${selectedNetwork.name}...`);
+              setIsNetworkSwitching(true);
+              await switchNetwork(selectedNetwork.id);
+            }
+          } else {
+            console.warn('Wallet getChainId method not available yet');
           }
         } catch (error) {
           console.warn('Auto network switch failed:', error);
@@ -59,6 +65,12 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     try {
       const wallet = wallets[0];
       const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
+      
+      // Проверяем, что wallet имеет метод switchChain
+      if (typeof wallet.switchChain !== 'function') {
+        console.warn('Wallet switchChain method not available');
+        return;
+      }
       
       // First try to switch to the network
       try {
