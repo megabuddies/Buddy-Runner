@@ -785,6 +785,18 @@ export const useBlockchainUtils = () => {
     const manager = getNonceManager(chainId, address);
     const now = Date.now();
     
+    // ВАЖНО: Для предподписанных транзакций НЕ обновляем nonce из сети
+    // Только для первичной инициализации или при форсированном обновлении
+    const chainKey = chainId.toString();
+    const pool = preSignedPool.current[chainKey];
+    
+    // Если есть активный пул предподписанных транзакций, используем его базовый nonce
+    if (pool && pool.isReady && !forceRefresh) {
+      const poolNonce = pool.baseNonce + pool.currentIndex;
+      console.log(`🎯 Using pool-based nonce ${poolNonce} for ${address} on chain ${chainId} (pool: ${pool.currentIndex}/${pool.transactions.length})`);
+      return poolNonce;
+    }
+    
     // Обновляем nonce если прошло больше 30 секунд или принудительное обновление
     if (!manager.currentNonce || forceRefresh || (now - manager.lastUpdate) > 30000) {
       if (manager.isUpdating) {
@@ -817,8 +829,12 @@ export const useBlockchainUtils = () => {
           const networkNonce = Math.max(latestNonce, pendingNonce);
           const previousNonce = manager.currentNonce || 0;
           
-          // Обновляем только если сетевой nonce больше или форсированное обновление
-          if (networkNonce > previousNonce || forceRefresh) {
+          // При форсированном обновлении всегда используем сетевой nonce
+          if (forceRefresh) {
+            manager.currentNonce = networkNonce;
+            manager.pendingNonce = networkNonce;
+            console.log(`🔄 Force refresh: nonce updated for ${address} on chain ${chainId}: ${previousNonce} → ${networkNonce}`);
+          } else if (networkNonce > previousNonce) {
             manager.currentNonce = networkNonce;
             manager.pendingNonce = networkNonce;
             console.log(`🔄 Nonce updated for ${address} on chain ${chainId}: ${previousNonce} → ${networkNonce}`);
@@ -849,7 +865,7 @@ export const useBlockchainUtils = () => {
       }
     }
     
-    // Возвращаем следующий доступный nonce
+    // Возвращаем следующий доступный nonce (только для real-time транзакций)
     const nextNonce = manager.pendingNonce;
     manager.pendingNonce += 1;
     
@@ -1701,14 +1717,28 @@ export const useBlockchainUtils = () => {
               pool.isReady = false;
               pool.hasTriggeredRefill = false;
               
-              // Запускаем пересоздание пула в фоне
+              // Запускаем пересоздание пула в фоне с правильным nonce
               setTimeout(async () => {
                 try {
+                  // Принудительно получаем актуальный nonce из сети
+                  const { publicClient } = await createClients(chainId);
+                  const actualNonce = await publicClient.getTransactionCount({
+                    address: embeddedWallet.address,
+                    blockTag: 'pending'
+                  });
+                  
+                  console.log(`🔄 Recreating pool with actual network nonce: ${actualNonce}`);
+                  
+                  // Обновляем менеджер nonce
                   const manager = getNonceManager(chainId, embeddedWallet.address);
-                  const newStartNonce = manager.currentNonce;
+                  manager.currentNonce = actualNonce;
+                  manager.pendingNonce = actualNonce;
+                  manager.lastUpdate = Date.now();
+                  
+                  // Пересоздаем пул с правильным nonce
                   const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
-                  await preSignBatch(chainId, newStartNonce, poolConfig.batchSize);
-                  console.log('✅ Pre-signed transaction pool recreated with correct nonces');
+                  await preSignBatch(chainId, actualNonce, poolConfig.batchSize);
+                  console.log(`✅ Pre-signed transaction pool recreated with correct nonces starting from ${actualNonce}`);
                 } catch (recreateError) {
                   console.error('❌ Failed to recreate transaction pool:', recreateError);
                 }

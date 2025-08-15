@@ -240,8 +240,14 @@ const GameComponent = ({ selectedNetwork }) => {
         errorType = 'NONCE_ERROR';
         
         // Специальная обработка ошибок nonce - даем системе время на восстановление
-        console.log('🔄 Nonce error detected, applying recovery cooldown');
+        console.log('🔄 Nonce error detected, applying recovery cooldown and resetting pending count');
         lastTransactionTime.current = Date.now() + 1000; // Блокируем транзакции на 1 секунду
+        
+        // Агрессивно сбрасываем счетчик pending транзакций при ошибке nonce
+        if (pendingTransactionCount.current > 0) {
+          console.log(`🔄 Resetting pending count from ${pendingTransactionCount.current} to 0 due to nonce error`);
+          pendingTransactionCount.current = 0;
+        }
       } else if (error.message.includes('timeout')) {
         errorMessage = 'Transaction timeout. Please try again.';
         errorType = 'TIMEOUT';
