@@ -38,9 +38,10 @@ const GameComponent = ({ selectedNetwork }) => {
   });
 
   const [showToast, setShowToast] = useState(false);
+  const [manualFaucetLoading, setManualFaucetLoading] = useState(false);
   const transactionPendingRef = useRef(false);
   const pendingJumpRef = useRef(null);
-  const [manualFaucetLoading, setManualFaucetLoading] = useState(false);
+  const pendingTransactionCount = useRef(0);
   
   // Store blockchain functions in refs to avoid dependency issues
   const blockchainFunctionsRef = useRef({});
@@ -124,14 +125,28 @@ const GameComponent = ({ selectedNetwork }) => {
       return;
     }
 
-    // Блокируем новые прыжки пока транзакция не завершится
-    if (transactionPendingRef.current) {
-      console.log('Transaction already pending, blocking jump');
-      return;
+    // Менее строгая блокировка для быстрых сетей
+    // Для MegaETH позволяем высокий параллелизм
+    if (selectedNetwork?.chainId === 6342) {
+      // Для MegaETH разрешаем до 8 одновременных транзакций
+      if (pendingTransactionCount.current > 8) {
+        console.log('Maximum MegaETH transaction throughput reached');
+        return;
+      }
+    } else {
+      // Для других сетей более строгая проверка
+      if (transactionPendingRef.current) {
+        console.log('Transaction already pending, blocking jump');
+        return;
+      }
     }
 
     try {
-      transactionPendingRef.current = true;
+      // Для MegaETH не используем глобальный pending флаг
+      if (selectedNetwork?.chainId !== 6342) {
+        transactionPendingRef.current = true;
+      }
+      pendingTransactionCount.current++;
       setShowToast(true);
       
       // 🎮 НОВАЯ Real-Time Gaming архитектура с измерением производительности
@@ -241,7 +256,10 @@ const GameComponent = ({ selectedNetwork }) => {
       throw enhancedError;
       
     } finally {
-      transactionPendingRef.current = false;
+      if (selectedNetwork?.chainId !== 6342) {
+        transactionPendingRef.current = false;
+      }
+      pendingTransactionCount.current--;
       setShowToast(false);
     }
   }, []); // Empty dependency array - function is stable now
