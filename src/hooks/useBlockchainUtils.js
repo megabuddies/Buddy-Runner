@@ -769,7 +769,7 @@ export const useBlockchainUtils = () => {
     return nonceManager.current[key];
   };
 
-  // УЛУЧШЕННОЕ получение и управление nonce
+  // УЛУЧШЕННОЕ получение и управление nonce с поддержкой pre-signed пула
   const getNextNonce = async (chainId, address, forceRefresh = false) => {
     const manager = getNonceManager(chainId, address);
     const now = Date.now();
@@ -795,7 +795,7 @@ export const useBlockchainUtils = () => {
           manager.pendingNonce = manager.currentNonce;
           manager.lastUpdate = now;
           
-          console.log(`Updated nonce for ${address} on chain ${chainId}: ${manager.currentNonce}`);
+          console.log(`🎯 Updated nonce for ${address} on chain ${chainId}: ${manager.currentNonce}`);
         } catch (error) {
           console.error('Error updating nonce:', error);
           // Если не удалось получить nonce из сети, используем локальный + 1
@@ -809,10 +809,26 @@ export const useBlockchainUtils = () => {
       }
     }
     
-    // Возвращаем следующий доступный nonce
+    // КРИТИЧНО: Учитываем pre-signed транзакции для избежания конфликтов
+    const chainKey = chainId.toString();
+    const pool = preSignedPool.current[chainKey];
+    
+    if (pool && pool.isReady && pool.transactions.length > 0) {
+      // Если есть pre-signed пул, убеждаемся что не создаем конфликтующие nonces
+      const maxUsedNonce = pool.baseNonce + pool.transactions.length - 1;
+      const safeNonce = Math.max(manager.pendingNonce, maxUsedNonce + 1);
+      
+      if (safeNonce > manager.pendingNonce) {
+        console.log(`🔄 Adjusting realtime nonce from ${manager.pendingNonce} to ${safeNonce} to avoid pre-signed pool conflicts`);
+        manager.pendingNonce = safeNonce;
+      }
+    }
+    
+    // Возвращаем следующий доступный nonce с атомарным инкрементом
     const nextNonce = manager.pendingNonce;
     manager.pendingNonce += 1;
     
+    console.log(`🎯 Assigned nonce ${nextNonce} for realtime transaction on chain ${chainId}`);
     return nextNonce;
   };
 
@@ -1574,19 +1590,9 @@ export const useBlockchainUtils = () => {
                 console.log('⏱️ MegaETH rate limit hit, will retry');
                 throw new Error('rate limit exceeded');
               } else if (parsedResponse.error.message?.includes('already known')) {
-                console.log('🔄 Transaction already known by network - likely duplicate, treating as success');
-                // Для "already known" ошибок, мы считаем транзакцию успешной
-                // поскольку она уже была отправлена ранее
-                return {
-                  result: {
-                    transactionHash: 'duplicate_tx_' + Date.now(),
-                    status: '0x1',
-                    gasUsed: '0x66f9', 
-                    blockNumber: '0x' + Date.now().toString(16),
-                    from: parsedResponse.error.data?.from || '0x0',
-                    to: parsedResponse.error.data?.to || '0x0'
-                  }
-                };
+                // ИСПРАВЛЕНО: Для "already known" ошибок повторно используем nonce
+                console.log('🚫 Transaction already known - nonce conflict detected, will retry with new nonce');
+                throw new Error('transaction already known - nonce conflict');
               }
               throw new Error(`MegaETH RPC Error: ${parsedResponse.error.message}`);
             }
@@ -1738,10 +1744,10 @@ export const useBlockchainUtils = () => {
       console.error('❌ Send transaction error:', error);
       
       // Специальная обработка ошибок nonce для всех сетей
-      if (error.message?.includes('nonce too low')) {
+      if (error.message?.includes('nonce too low') || error.message?.includes('nonce conflict')) {
         const embeddedWallet = getEmbeddedWallet();
         if (embeddedWallet) {
-          console.log('🔄 Refreshing nonce due to "nonce too low" error');
+          console.log('🔄 Refreshing nonce due to nonce conflict/too low error');
           try {
             await getNextNonce(chainId, embeddedWallet.address, true);
           } catch (nonceError) {
@@ -1919,8 +1925,8 @@ export const useBlockchainUtils = () => {
       recordPerformanceMetric(chainId, blockchainTime, false);
       
       // Обработка специфичных ошибок для улучшения UX
-      if (error.message?.includes('nonce too low')) {
-        console.log('🔄 Nonce too low detected, refreshing nonce and retrying...');
+      if (error.message?.includes('nonce too low') || error.message?.includes('nonce conflict')) {
+        console.log('🔄 Nonce conflict detected, refreshing nonce and retrying...');
         try {
           // Обновляем nonce принудительно
           await getNextNonce(chainId, embeddedWallet.address, true);
@@ -2502,7 +2508,7 @@ export const useBlockchainUtils = () => {
     }
   }, []);
 
-  // НОВАЯ система непрерывного мониторинга и пополнения пула
+  // УЛУЧШЕННАЯ система непрерывного мониторинга и пополнения пула
   const startPoolMonitoring = (chainId) => {
     const chainKey = chainId.toString();
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
@@ -2516,47 +2522,79 @@ export const useBlockchainUtils = () => {
         if (!pool || !pool.isReady) return;
         
         const remainingTransactions = pool.transactions.length - pool.currentIndex;
+        const usageRatio = pool.currentIndex / pool.transactions.length;
         const targetMinimum = chainId === 6342 ? 10 : 5; // Высокий минимум для MegaETH
         
+        // УЛУЧШЕННАЯ статистика pool
+        const poolStats = {
+          total: pool.transactions.length,
+          used: pool.currentIndex,
+          remaining: remainingTransactions,
+          usagePercent: Math.round(usageRatio * 100),
+          baseNonce: pool.baseNonce,
+          lastRefill: pool.lastRefill || 'never',
+          isHealthy: remainingTransactions >= targetMinimum && !pool.isRefilling
+        };
+        
+        // Логируем подробную статистику для MegaETH каждые 10 секунд
+        if (chainId === 6342 && Date.now() % 10000 < monitoringInterval) {
+          console.log(`📊 Pool Stats [Chain ${chainId}]:`, poolStats);
+        }
+        
         // Если транзакций осталось мало и никто не пополняет
-        if (remainingTransactions < targetMinimum && !pool.isRefilling && !pool.hasTriggeredRefill) {
-          console.log(`🔔 Pool monitor: Only ${remainingTransactions} transactions left, triggering emergency refill`);
+        if (remainingTransactions < targetMinimum && !pool.isRefilling) {
+          console.log(`🔄 Pool monitor triggered refill: ${remainingTransactions} < ${targetMinimum} minimum`);
           
-          const embeddedWallet = getEmbeddedWallet();
-          if (embeddedWallet) {
-            pool.hasTriggeredRefill = true;
-            const manager = getNonceManager(chainId, embeddedWallet.address);
-            const nextNonce = manager.pendingNonce || (pool.baseNonce + pool.transactions.length);
-            
-            // Пополняем полный batch
-            extendPool(chainId, nextNonce, poolConfig.batchSize)
-              .then(() => {
-                console.log(`✅ Emergency pool refill completed by monitor`);
-              })
-              .catch(error => {
-                console.error('❌ Emergency pool refill failed:', error);
-                pool.hasTriggeredRefill = false; // Сбрасываем флаг для повторной попытки
-              });
+          pool.isRefilling = true;
+          try {
+            const embeddedWallet = getEmbeddedWallet();
+            if (embeddedWallet) {
+              const manager = getNonceManager(chainId, embeddedWallet.address);
+              const nextNonce = manager.pendingNonce || (pool.baseNonce + pool.transactions.length);
+              
+              await extendPool(chainId, nextNonce, poolConfig.batchSize);
+              console.log(`✅ Pool monitor refill completed: +${poolConfig.batchSize} transactions`);
+            }
+          } catch (error) {
+            console.error('❌ Pool monitor refill failed:', error);
+          } finally {
+            pool.isRefilling = false;
           }
         }
         
-        // Статистика для разработки
-        if (process.env.NODE_ENV === 'development') {
-          console.log(`📊 Pool status: ${remainingTransactions}/${pool.transactions.length} available, refilling: ${pool.isRefilling}`);
+        // НОВАЯ функция: Health check пула
+        if (poolStats.isHealthy) {
+          pool.lastHealthyCheck = Date.now();
+        } else if (Date.now() - (pool.lastHealthyCheck || 0) > 30000) {
+          // Если пул нездоров больше 30 секунд, экстренное восстановление
+          console.log(`🚨 Pool health degraded, attempting emergency recovery for chain ${chainId}`);
+          
+          try {
+            const embeddedWallet = getEmbeddedWallet();
+            if (embeddedWallet) {
+              // Форсированное обновление nonce и полное пополнение
+              await getNextNonce(chainId, embeddedWallet.address, true);
+              const manager = getNonceManager(chainId, embeddedWallet.address);
+              await extendPool(chainId, manager.pendingNonce, poolConfig.poolSize);
+              console.log(`✅ Pool emergency recovery completed`);
+            }
+          } catch (error) {
+            console.error(`❌ Pool emergency recovery failed:`, error);
+          }
         }
         
       } catch (error) {
-        console.error('Pool monitoring error:', error);
+        console.error('Pool monitoring error (non-critical):', error);
       }
     }, monitoringInterval);
     
-    // Сохраняем интервал для очистки
+    // Сохраняем ссылку для cleanup
     if (!activeMonitoringIntervals.current) {
       activeMonitoringIntervals.current = {};
     }
     activeMonitoringIntervals.current[chainKey] = monitorPool;
     
-    console.log(`🔄 Started continuous pool monitoring for chain ${chainId} (${monitoringInterval}ms interval)`);
+    console.log(`🔄 Started enhanced pool monitoring for chain ${chainId} (${monitoringInterval}ms interval)`);
   };
   
   // Ref для хранения активных интервалов мониторинга
