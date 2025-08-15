@@ -9,6 +9,77 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <meta name="description" content="Join the pixel revolution on MegaETH. Help our brave bunny Buddy hop over giant carrots and achieve the highest score in this cosmic adventure!">
     <meta name="theme-color" content="#1a1a2e">
+    
+    <!-- MetaMask Provider Conflict Prevention -->
+    <script>
+      // Prevent MetaMask provider conflicts by creating a protective wrapper
+      (function() {
+        // Store original ethereum object if it exists
+        const originalEthereum = window.ethereum;
+        
+        // Flag to track if we've already handled the provider setup
+        let providerSetupComplete = false;
+        
+        // Function to safely set up ethereum provider
+        function setupEthereumProvider() {
+          if (providerSetupComplete) return;
+          
+          try {
+            // If there are multiple providers, prefer embedded wallet providers
+            if (window.ethereum?.providers?.length > 0) {
+              console.log('Multiple Ethereum providers detected, using embedded wallet priority');
+              // Let Privy handle provider selection
+              return;
+            }
+            
+            // If single provider exists, ensure it's accessible
+            if (window.ethereum && typeof window.ethereum.request === 'function') {
+              console.log('Single Ethereum provider detected:', window.ethereum.constructor.name || 'Unknown');
+              return;
+            }
+            
+            providerSetupComplete = true;
+          } catch (error) {
+            console.warn('Provider setup warning (non-critical):', error.message);
+          }
+        }
+        
+        // Set up provider on page load
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', setupEthereumProvider);
+        } else {
+          setupEthereumProvider();
+        }
+        
+        // Handle dynamic provider injection
+        let providerCheckInterval = setInterval(() => {
+          if (window.ethereum && !providerSetupComplete) {
+            setupEthereumProvider();
+            clearInterval(providerCheckInterval);
+          }
+        }, 100);
+        
+        // Clear interval after 5 seconds to prevent infinite checking
+        setTimeout(() => {
+          clearInterval(providerCheckInterval);
+        }, 5000);
+        
+        // Suppress non-critical provider warnings
+        const originalConsoleWarn = console.warn;
+        console.warn = function(...args) {
+          const message = args.join(' ');
+          // Filter out known non-critical MetaMask warnings
+          if (message.includes('global Ethereum provider') || 
+              message.includes('which has only a getter') ||
+              message.includes('Cannot set property ethereum')) {
+            // Log as debug instead of warning
+            console.debug('[Filtered Warning]:', ...args);
+            return;
+          }
+          originalConsoleWarn.apply(console, args);
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -2,6 +2,41 @@ import { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
 
+// ========== GLOBAL STATE MANAGEMENT FOR ERROR FIXES ==========
+
+// 1. Global pre-signed transaction pool with improved management
+let preSignedPool = {};
+
+// 2. Cached clients and gas parameters to minimize RPC calls  
+let clientCache = {};
+let gasParams = {};
+
+// 3. Enhanced nonce management to prevent "nonce too low" errors
+let nonceManagerGlobal = {};
+
+// ========== ENHANCED WALLET DETECTION ==========
+
+// Safe embedded wallet detection with multiple fallback strategies
+const getEmbeddedWalletFromList = (wallets) => {
+  if (!wallets || wallets.length === 0) {
+    return null;
+  }
+
+  // Look for embedded wallet - Privy creates embedded wallets with specific types
+  const embeddedWallet = wallets.find(wallet => 
+    wallet.walletClientType === 'privy' || 
+    wallet.connectorType === 'embedded' ||
+    wallet.meta?.name?.includes('Embedded')
+  );
+  
+  if (embeddedWallet) {
+    return embeddedWallet;
+  }
+  
+  // Fallback: return the first available wallet
+  return wallets[0] || null;
+};
+
 // Конфигурация сетей
 const NETWORK_CONFIGS = {
   6342: { // MegaETH Testnet
@@ -121,6 +156,18 @@ const safeJsonParse = (data) => {
 export const useBlockchainUtils = () => {
   const { authenticated, user, login, logout, isReady } = usePrivy();
   const { wallets } = useWallets();
+  
+  // ========== ENHANCED WALLET MANAGEMENT ==========
+  
+  // Safe embedded wallet getter with protection against undefined
+  const getEmbeddedWallet = () => {
+    try {
+      return getEmbeddedWalletFromList(wallets);
+    } catch (error) {
+      console.error('Error getting embedded wallet:', error);
+      return null;
+    }
+  };
   
   // Состояние
   const [isInitializing, setIsInitializing] = useState(false);
@@ -400,6 +447,75 @@ export const useBlockchainUtils = () => {
     return burstState.current[chainId];
   };
 
+  // ========== ENHANCED NONCE MANAGEMENT ==========
+  
+  // Global nonce manager to prevent "nonce too low" errors
+  const getNonceManager = (chainId, address) => {
+    const key = `${chainId}-${address}`;
+    if (!nonceManagerGlobal[key]) {
+      nonceManagerGlobal[key] = {
+        baseNonce: null,
+        pendingNonce: null,
+        lastSync: 0,
+        syncInProgress: false
+      };
+    }
+    return nonceManagerGlobal[key];
+  };
+
+  // Enhanced nonce retrieval with synchronization
+  const getNextNonce = async (chainId, address, forceRefresh = false) => {
+    const manager = getNonceManager(chainId, address);
+    const now = Date.now();
+    
+    // Prevent concurrent nonce syncing
+    if (manager.syncInProgress && !forceRefresh) {
+      // Wait for sync to complete
+      let attempts = 0;
+      while (manager.syncInProgress && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+    }
+    
+    // Refresh nonce if needed or forced
+    if (!manager.baseNonce || forceRefresh || (now - manager.lastSync) > 10000) {
+      manager.syncInProgress = true;
+      try {
+        const { publicClient } = await createClients(chainId);
+        const currentNonce = await publicClient.getTransactionCount({
+          address: address,
+          blockTag: 'pending'
+        });
+        
+        manager.baseNonce = currentNonce;
+        manager.pendingNonce = currentNonce;
+        manager.lastSync = now;
+        
+        console.log(`🎯 Synchronized nonce for ${address} on chain ${chainId}: ${currentNonce}`);
+      } catch (error) {
+        console.error('Failed to sync nonce:', error);
+        throw error;
+      } finally {
+        manager.syncInProgress = false;
+      }
+    }
+    
+    // Return next available nonce
+    const nextNonce = manager.pendingNonce;
+    manager.pendingNonce++;
+    
+    return nextNonce;
+  };
+
+  // Reserve nonces for pre-signed transactions
+  const reserveNonces = (chainId, address, count) => {
+    const manager = getNonceManager(chainId, address);
+    const startNonce = manager.pendingNonce || manager.baseNonce || 0;
+    manager.pendingNonce = startNonce + count;
+    return startNonce;
+  };
+
   // Проверка возможности burst транзакции
   const canExecuteBurst = (chainId) => {
     const config = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
@@ -598,40 +714,8 @@ export const useBlockchainUtils = () => {
     return state?.degradedMode ? state : null;
   };
 
-  // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
-  const getEmbeddedWallet = () => {
-    if (!authenticated || !wallets.length) {
-      console.log('Not authenticated or no wallets available');
-      return null;
-    }
-    
-    console.log('Available wallets:', wallets.map(w => ({ 
-      address: w.address, 
-      walletClientType: w.walletClientType, 
-      connectorType: w.connectorType 
-    })));
-    
-    // Look for embedded wallet - Privy creates embedded wallets with specific types
-    const embeddedWallet = wallets.find(wallet => 
-      wallet.walletClientType === 'privy' || 
-      wallet.connectorType === 'embedded' ||
-      wallet.connectorType === 'privy'
-    );
-    
-    if (embeddedWallet) {
-      console.log('Found embedded wallet:', embeddedWallet.address);
-      return embeddedWallet;
-    }
-    
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      console.log('No embedded wallet found, using first available wallet:', wallets[0].address);
-      return wallets[0];
-    }
-    
-    console.log('No wallets available');
-    return null;
-  };
+  // UPDATED: Enhanced embedded wallet detection moved to top-level global function
+  // This prevents "embeddedWallet is not defined" errors and provides better error handling
 
   // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ создание клиентов с системой fallback endpoints
   const createClients = async (chainId) => {
@@ -2381,6 +2465,347 @@ export const useBlockchainUtils = () => {
       }, 2000); // Через 2 секунды после загрузки
     }
   }, []);
+
+  // ========== UTILITY FUNCTIONS ==========
+  
+  // Get optimized gas parameters for each network
+  const getGasParams = async (chainId) => {
+    const cacheKey = `gas-${chainId}`;
+    const cached = gasParams[cacheKey];
+    
+    // Use cached gas params if available and not expired
+    if (cached && (Date.now() - cached.timestamp) < 60000) { // 1 minute cache
+      return cached.params;
+    }
+    
+    let gasSettings;
+    
+    switch (chainId) {
+      case 6342: // MegaETH - ultra-optimized for real-time gaming
+        gasSettings = {
+          maxFeePerGas: parseGwei('0.001'),
+          maxPriorityFeePerGas: parseGwei('0.0005'),
+          gasLimit: 26329n
+        };
+        break;
+      case 31337: // Foundry Local
+        gasSettings = {
+          maxFeePerGas: parseGwei('20'),
+          maxPriorityFeePerGas: parseGwei('1'),
+          gasLimit: 26329n
+        };
+        break;
+      default:
+        gasSettings = {
+          maxFeePerGas: parseGwei('20'),
+          maxPriorityFeePerGas: parseGwei('2'),
+          gasLimit: 26329n
+        };
+    }
+    
+    // Cache the result
+    gasParams[cacheKey] = {
+      params: gasSettings,
+      timestamp: Date.now()
+    };
+    
+    return gasSettings;
+  };
+
+  // Enhanced createClients function with caching
+  const createClients = async (chainId) => {
+    const cacheKey = `clients-${chainId}`;
+    const cached = clientCache[cacheKey];
+    
+    // Return cached clients if available
+    if (cached && (Date.now() - cached.timestamp) < 30000) { // 30 second cache
+      return cached.clients;
+    }
+    
+    const config = NETWORK_CONFIGS[chainId];
+    if (!config) throw new Error(`Unsupported network: ${chainId}`);
+    
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) throw new Error('No embedded wallet found');
+    
+    // Create public client
+    const publicClient = createPublicClient({
+      chain: {
+        id: chainId,
+        name: config.name,
+        network: config.name.toLowerCase().replace(' ', '-'),
+        nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+        rpcUrls: { default: { http: [config.rpcUrl] } }
+      },
+      transport: http(config.rpcUrl)
+    });
+    
+    // Create wallet client  
+    const walletClient = createWalletClient({
+      account: embeddedWallet.address,
+      chain: publicClient.chain,
+      transport: http(config.rpcUrl)
+    });
+    
+    const clients = { publicClient, walletClient };
+    
+    // Cache the result
+    clientCache[cacheKey] = {
+      clients,
+      timestamp: Date.now()
+    };
+    
+    return clients;
+  };
+
+  // Additional utility functions for completeness
+  const checkBalance = async (chainId) => {
+    try {
+      const { publicClient } = await createClients(chainId);
+      const embeddedWallet = getEmbeddedWallet();
+      
+      if (!embeddedWallet) {
+        console.error('No embedded wallet available for balance check');
+        return '0';
+      }
+      
+      const balance = await publicClient.getBalance({
+        address: embeddedWallet.address
+      });
+      
+      const balanceEth = (Number(balance) / 10**18).toFixed(4);
+      setBalance(balanceEth);
+      console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
+      return balanceEth;
+    } catch (error) {
+      console.error('Error checking balance:', error);
+      return '0';
+    }
+  };
+
+  const getContractNumber = async (chainId) => {
+    try {
+      const { publicClient } = await createClients(chainId);
+      const config = NETWORK_CONFIGS[chainId];
+      
+      const result = await publicClient.readContract({
+        address: config.contractAddress,
+        abi: UPDATER_ABI,
+        functionName: 'number'
+      });
+      
+      const numberValue = Number(result);
+      setContractNumber(numberValue);
+      return numberValue;
+    } catch (error) {
+      console.error('Error getting contract number:', error);
+      return 0;
+    }
+  };
+
+  const callFaucet = async (address, chainId) => {
+    // Placeholder faucet function - implement based on your faucet API
+    console.log(`Faucet called for ${address} on chain ${chainId}`);
+    return Promise.resolve();
+  };
+
+  // ========== ENHANCED TRANSACTION SENDING WITH NONCE MANAGEMENT ==========
+  
+  // Enhanced initData function with pre-signed transaction pool initialization
+  const initData = async (chainId) => {
+    try {
+      console.log('Initializing blockchain for network:', NETWORK_CONFIGS[chainId]?.name);
+      
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        console.log('No embedded wallet available for initialization');
+        return;
+      }
+      
+      console.log('✅ Using embedded wallet address:', embeddedWallet.address);
+      
+      // Initialize nonce manager with current on-chain nonce
+      const initialNonce = await getNextNonce(chainId, embeddedWallet.address, true);
+      console.log('🎯 Starting nonce:', initialNonce);
+      
+      // Pre-sign initial batch of transactions for instant gaming
+      const batchSize = chainId === 6342 ? 30 : 10; // More for MegaETH
+      console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+      
+      // Initialize pool
+      const chainKey = chainId.toString();
+      preSignedPool[chainKey] = {
+        transactions: [],
+        currentIndex: 0,
+        baseNonce: initialNonce,
+        hasTriggeredRefill: false
+      };
+      
+      // Pre-sign batch in background
+      setTimeout(() => extendPool(chainId, initialNonce, batchSize), 0);
+      
+      console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
+      
+    } catch (error) {
+      console.error('❌ Failed to initialize blockchain:', error);
+      throw error;
+    }
+  };
+  
+  // Enhanced sendUpdate with pre-signed transaction pool and proper nonce management
+  const sendUpdate = async (chainId) => {
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      throw new Error('No embedded wallet available');
+    }
+
+    const startTime = performance.now();
+    
+    try {
+      // Check if we have pre-signed transactions available for MegaETH
+      const chainKey = chainId.toString();
+      const pool = preSignedPool[chainKey];
+      
+      if (chainId === 6342 && pool && pool.transactions.length > pool.currentIndex) {
+        console.log('🚀 Using pre-signed transaction for instant execution');
+        
+        // Use pre-signed transaction from global pool
+        const signedTx = pool.transactions[pool.currentIndex];
+        pool.currentIndex++;
+        
+        // Trigger pool extension if needed
+        if (pool.currentIndex >= pool.transactions.length * 0.5) {
+          // Asynchronously extend pool in background
+          setTimeout(() => extendPool(chainId, pool.baseNonce + pool.transactions.length, 10), 0);
+        }
+        
+        const config = NETWORK_CONFIGS[chainId];
+        const { publicClient } = await createClients(chainId);
+        
+        // Send the pre-signed transaction using MegaETH's special method
+        const response = await publicClient.request({
+          method: config.sendMethod,
+          params: [signedTx]
+        });
+        
+        const blockchainTime = performance.now() - startTime;
+        
+        return {
+          hash: response.transactionHash || response,
+          receipt: response,
+          blockchainTime: Math.round(blockchainTime),
+          isInstant: true,
+          network: config.name
+        };
+      }
+      
+      // Fallback to real-time signing for other networks or when pool is empty
+      console.log('⚡ Real-time transaction signing');
+      
+      const nonce = await getNextNonce(chainId, embeddedWallet.address);
+      const config = NETWORK_CONFIGS[chainId];
+      const gasParams = await getGasParams(chainId);
+      const { walletClient, publicClient } = await createClients(chainId);
+      
+      const txData = {
+        account: embeddedWallet.address,
+        to: config.contractAddress,
+        data: '0xa2e62045', // update() function signature
+        nonce: nonce,
+        ...gasParams
+      };
+      
+      // Sign and send the transaction
+      const hash = await walletClient.sendTransaction(txData);
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      
+      const blockchainTime = performance.now() - startTime;
+      
+      return {
+        hash,
+        receipt,
+        blockchainTime: Math.round(blockchainTime),
+        isInstant: false,
+        network: config.name
+      };
+      
+    } catch (error) {
+      // Enhanced error handling for nonce issues
+      if (error.message?.includes('nonce too low')) {
+        console.log('🔄 Nonce too low detected, refreshing nonce and retrying...');
+        try {
+          // Force refresh nonce
+          await getNextNonce(chainId, embeddedWallet.address, true);
+          console.log('✅ Nonce refreshed, please try again');
+        } catch (nonceError) {
+          console.error('❌ Failed to refresh nonce:', nonceError);
+        }
+        
+        const enhancedError = new Error('Transaction nonce error. Please try again.');
+        enhancedError.type = 'NONCE_ERROR';
+        throw enhancedError;
+      }
+      
+      // Re-throw with enhanced error info
+      console.error('❌ Error sending on-chain movement:', error);
+      throw error;
+    }
+  };
+
+  // Enhanced pool extension function
+  const extendPool = async (chainId, startNonce, count) => {
+    const chainKey = chainId.toString();
+    
+    if (!preSignedPool[chainKey]) {
+      preSignedPool[chainKey] = {
+        transactions: [],
+        currentIndex: 0,
+        baseNonce: startNonce,
+        hasTriggeredRefill: false
+      };
+    }
+    
+    const pool = preSignedPool[chainKey];
+    
+    try {
+      console.log(`🔄 Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
+      
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet for pool extension');
+      }
+      
+      const config = NETWORK_CONFIGS[chainId];
+      const gasParams = await getGasParams(chainId);
+      const { walletClient } = await createClients(chainId);
+      
+      // Reserve nonces for this batch
+      reserveNonces(chainId, embeddedWallet.address, count);
+      
+      // Sign transactions in batch
+      for (let i = 0; i < count; i++) {
+        const nonce = startNonce + i;
+        
+        const txData = {
+          account: embeddedWallet.address,
+          to: config.contractAddress,
+          data: '0xa2e62045', // update() function signature
+          nonce: nonce,
+          ...gasParams
+        };
+        
+        const signedTx = await walletClient.signTransaction(txData);
+        pool.transactions.push(signedTx);
+        
+        console.log(`Signed transaction ${i + 1}/${count} with nonce ${nonce}`);
+      }
+      
+      console.log(`✅ Extended pool: signed ${count} transactions`);
+      
+    } catch (error) {
+      console.error('❌ Failed to extend pool:', error);
+    }
+  };
 
   return {
     // Состояние
