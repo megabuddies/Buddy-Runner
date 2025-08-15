@@ -1025,13 +1025,18 @@ export const useBlockchainUtils = () => {
         }
         
         // Добавляем nonce к подписанной транзакции для отслеживания
-        signedTx._reservedNonce = nonce;
-        pool.transactions.push(signedTx);
+        const txWrapper = {
+          signedTx,
+          _reservedNonce: nonce,
+          timestamp: Date.now()
+        };
+        pool.transactions.push(txWrapper);
         
         // КРИТИЧНО: Делаем пул доступным сразу же после первой транзакции
         if (i === 0) {
           pool.isReady = true;
           console.log(`🎮 First transaction ready - gaming can begin!`);
+          console.log(`✅ Pre-signed transaction pool is now ACTIVE with ${pool.transactions.length} transactions`);
         }
         
         consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
@@ -1040,19 +1045,16 @@ export const useBlockchainUtils = () => {
         console.error(`Error signing transaction ${i + 1}:`, error);
         consecutiveErrors++;
         
-        // Для rate limiting ошибок, активируем fallback режим
+        // Для rate limiting ошибок, просто логируем но продолжаем
         if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403 || error.message?.includes('not whitelisted')) {
-          console.log('Rate limit/403/not whitelisted detected, enabling fallback mode');
-          enableFallbackMode(chainId);
-          
-          // Прерываем дальнейшее подписание
-          break;
+          console.log('Rate limit/403/not whitelisted detected during pre-signing, continuing with next transaction');
+          // НЕ активируем fallback режим - просто пропускаем эту транзакцию
+          continue;
         }
         
-        // Если слишком много ошибок подряд, прерываем
+        // Если слишком много ошибок подряд, прерываем batch но НЕ активируем fallback
         if (consecutiveErrors >= maxConsecutiveErrors) {
-          console.log(`Too many consecutive errors (${consecutiveErrors}), stopping batch signing`);
-          enableFallbackMode(chainId);
+          console.log(`Too many consecutive errors (${consecutiveErrors}), stopping batch signing but keeping realtime mode available`);
           break;
         }
         
@@ -1121,8 +1123,12 @@ export const useBlockchainUtils = () => {
             signedTx = await walletClient.signTransaction(txData);
           }
           
-          signedTx._reservedNonce = nonce;
-          tempTransactions.push(signedTx);
+          const txWrapper = {
+            signedTx,
+            _reservedNonce: nonce,
+            timestamp: Date.now()
+          };
+          tempTransactions.push(txWrapper);
           
           console.log(`Extended pool: signed ${tempTransactions.length}/${count}`);
         } catch (error) {
@@ -1161,10 +1167,10 @@ export const useBlockchainUtils = () => {
 
     // Если пул готов и есть предподписанные транзакции, используем их
     if (pool && pool.isReady && pool.transactions.length > pool.currentIndex) {
-      const tx = pool.transactions[pool.currentIndex];
+      const txWrapper = pool.transactions[pool.currentIndex];
       pool.currentIndex++;
 
-      console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${tx._reservedNonce})`);
+      console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
       // УЛУЧШЕННАЯ логика автодозаправки - пополняем при достижении порога
       const usageRatio = pool.currentIndex / pool.transactions.length;
@@ -1188,7 +1194,16 @@ export const useBlockchainUtils = () => {
         }, 0);
       }
 
-      return tx;
+      return txWrapper.signedTx;
+    } else {
+      // Детальное логирование для отладки
+      if (!pool) {
+        console.log(`❌ No transaction pool exists for chain ${chainId}`);
+      } else if (!pool.isReady) {
+        console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
+      } else if (pool.transactions.length <= pool.currentIndex) {
+        console.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length})`);
+      }
     }
 
     // Если нет готовых предподписанных транзакций, создаем и подписываем realtime
@@ -1652,10 +1667,23 @@ export const useBlockchainUtils = () => {
 
     // Для MegaETH (instant transactions) менее строгая проверка pending состояния
     if (chainId === 6342) {
-      // Для MegaETH используем более расслабленный подход из-за instant confirmations
-      if (transactionPending && transactionPendingCount.current > 3) {
-        console.log('Too many concurrent transactions, throttling');
-        throw new Error('Transaction throughput limit reached');
+      // Проверяем есть ли доступные pre-signed транзакции
+      const chainKey = chainId.toString();
+      const pool = preSignedPool.current[chainKey];
+      const hasPreSignedTx = pool && pool.isReady && pool.transactions.length > pool.currentIndex;
+      
+      if (hasPreSignedTx) {
+        // Если есть pre-signed транзакции, разрешаем много параллельных операций
+        if (transactionPendingCount.current > 10) {
+          console.log('🚫 Maximum MegaETH throughput reached, throttling');
+          throw new Error('Transaction throughput limit reached');
+        }
+      } else {
+        // Если нет pre-signed, более строгий лимит
+        if (transactionPendingCount.current > 2) {
+          console.log('🚫 Too many concurrent realtime transactions');
+          throw new Error('Realtime transaction limit reached');
+        }
       }
     } else {
       // Для других сетей сохраняем строгую блокировку
@@ -1688,7 +1716,10 @@ export const useBlockchainUtils = () => {
     let success = false;
     
     try {
-      setTransactionPending(true);
+      // Для MegaETH не блокируем глобально - используем только счетчик
+      if (chainId !== 6342) {
+        setTransactionPending(true);
+      }
       transactionPendingCount.current++;
       
       // Получаем предподписанную транзакцию или создаем новую
@@ -1791,7 +1822,9 @@ export const useBlockchainUtils = () => {
       
       throw new Error(`Blockchain transaction error: ${error.message}`);
     } finally {
-      setTransactionPending(false);
+      if (chainId !== 6342) {
+        setTransactionPending(false);
+      }
       transactionPendingCount.current = Math.max(0, transactionPendingCount.current - 1);
     }
   };

@@ -126,22 +126,26 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     // Менее строгая блокировка для быстрых сетей
-    if (transactionPendingRef.current) {
-      // Для MegaETH (instant transactions) позволяем больше параллелизма
-      if (selectedNetwork?.chainId === 6342) {
-        // Разрешаем 2-3 одновременные транзакции для MegaETH
-        if (pendingTransactionCount.current > 2) {
-          console.log('Too many concurrent MegaETH transactions, throttling');
-          return;
-        }
-      } else {
+    // Для MegaETH позволяем высокий параллелизм
+    if (selectedNetwork?.chainId === 6342) {
+      // Для MegaETH разрешаем до 8 одновременных транзакций
+      if (pendingTransactionCount.current > 8) {
+        console.log('Maximum MegaETH transaction throughput reached');
+        return;
+      }
+    } else {
+      // Для других сетей более строгая проверка
+      if (transactionPendingRef.current) {
         console.log('Transaction already pending, blocking jump');
         return;
       }
     }
 
     try {
-      transactionPendingRef.current = true;
+      // Для MegaETH не используем глобальный pending флаг
+      if (selectedNetwork?.chainId !== 6342) {
+        transactionPendingRef.current = true;
+      }
       pendingTransactionCount.current++;
       setShowToast(true);
       
@@ -252,7 +256,9 @@ const GameComponent = ({ selectedNetwork }) => {
       throw enhancedError;
       
     } finally {
-      transactionPendingRef.current = false;
+      if (selectedNetwork?.chainId !== 6342) {
+        transactionPendingRef.current = false;
+      }
       pendingTransactionCount.current--;
       setShowToast(false);
     }
