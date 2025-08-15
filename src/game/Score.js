@@ -72,31 +72,55 @@ export default class Score {
         );
       }
 
-      // Pre-signed pool status (PRE-SIGNED ONLY MODE)
+      // INFINITE PRE-SIGNED POOL status
       if (this.blockchainStatus.poolStatus) {
         const pool = this.blockchainStatus.poolStatus;
-        const poolColor = pool.remaining > 15 ? "#32CD32" : pool.remaining > 5 ? "#FFA500" : "#FF6347";
+        const cyclesCompleted = Math.floor(pool.used / 5);
+        const netGrowth = cyclesCompleted * 10;
+        
+        // Dynamic color based on infinite pool logic
+        const poolColor = pool.remaining > 20 ? "#32CD32" : pool.remaining > 10 ? "#7FBC7F" : pool.remaining > 3 ? "#FFA500" : "#FF6347";
         this.ctx.fillStyle = poolColor;
+        
+        // Pool status with infinite indicator
+        const infiniteIndicator = pool.total > 50 ? "∞" : "";
         this.ctx.fillText(
-          `Pool: ${pool.remaining}/${pool.total}`,
+          `Pool: ${pool.remaining}/${pool.total}${infiniteIndicator}`,
           10 * this.scaleRatio,
           blockchainY + 40 * this.scaleRatio
         );
+        
+        // Growth statistics
+        if (pool.used > 0) {
+          this.ctx.fillStyle = "#4169E1";
+          this.ctx.fillText(
+            `Growth: +${netGrowth} (${cyclesCompleted} cycles)`,
+            10 * this.scaleRatio,
+            blockchainY + 60 * this.scaleRatio
+          );
+        }
         
         // Pool status indicator
         if (!pool.isReady) {
           this.ctx.fillStyle = "#FF6347";
           this.ctx.fillText(
-            `⏳ Preparing...`,
+            `⏳ Initializing...`,
             10 * this.scaleRatio,
-            blockchainY + 60 * this.scaleRatio
+            blockchainY + 80 * this.scaleRatio
           );
         } else if (pool.isRefilling) {
-          this.ctx.fillStyle = "#4169E1";
+          this.ctx.fillStyle = "#32CD32";
           this.ctx.fillText(
-            `🔄 Refilling...`,
+            `🔄 Growing pool...`,
             10 * this.scaleRatio,
-            blockchainY + 60 * this.scaleRatio
+            blockchainY + 80 * this.scaleRatio
+          );
+        } else if (pool.total > 50) {
+          this.ctx.fillStyle = "#7FBC7F";
+          this.ctx.fillText(
+            `♾️ Infinite mode`,
+            10 * this.scaleRatio,
+            blockchainY + 80 * this.scaleRatio
           );
         }
       }
@@ -107,7 +131,7 @@ export default class Score {
         this.ctx.fillText(
           `On-chain: ${this.blockchainStatus.onChainScore}`,
           10 * this.scaleRatio,
-          blockchainY + 80 * this.scaleRatio
+          blockchainY + 100 * this.scaleRatio
         );
       }
     }

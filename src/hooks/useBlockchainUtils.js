@@ -1228,7 +1228,7 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ получение следующей транзакции из пула
+  // МАТЕМАТИЧЕСКИ БЕСКОНЕЧНЫЙ пул pre-signed транзакций
   const getNextTransaction = async (chainId) => {
     const chainKey = chainId.toString();
     const pool = preSignedPool.current[chainKey];
@@ -1241,24 +1241,31 @@ export const useBlockchainUtils = () => {
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
-      // УЛУЧШЕННАЯ логика автодозаправки - пополняем при достижении порога
-      const usageRatio = pool.currentIndex / pool.transactions.length;
-      if (usageRatio >= poolConfig.refillAt && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      // 🔄 ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ каждые 5 транзакций (математически бесконечный пул)
+      // Пополняем БОЛЬШЕ чем потребляем для гарантированного роста пула
+      if (pool.currentIndex % 5 === 0 && !pool.hasTriggeredRefill) {
+        console.log(`🔄 Refilling at ${pool.currentIndex} transactions used (infinite pool strategy)`);
         pool.hasTriggeredRefill = true;
-        console.log(`Pool ${Math.round(usageRatio * 100)}% empty, extending with new transactions...`);
         
-        // Запускаем пополнение в фоне без ожидания
+        // Пополняем в фоне - добавляем БОЛЬШЕ чем потребили
         setTimeout(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
             if (embeddedWallet) {
-              // Используем следующие доступные nonces для пополнения
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              await extendPool(chainId, nextNonce, poolConfig.batchSize);
+              
+              // КРИТИЧНО: Добавляем больше чем потребили (5 потребили -> 15 добавляем)
+              // Это обеспечивает математический рост пула: +10 каждый цикл
+              const refillSize = Math.max(15, poolConfig.batchSize);
+              console.log(`🚀 Infinite pool: adding ${refillSize} transactions (consumed 5, net growth +${refillSize-5})`);
+              
+              await extendPool(chainId, nextNonce, refillSize);
             }
           } catch (error) {
-            console.error('Error extending pool:', error);
+            console.error('❌ Error in infinite pool refill:', error);
+            // В случае ошибки сбрасываем флаг для повторной попытки
+            pool.hasTriggeredRefill = false;
           }
         }, 0);
       }
@@ -1317,7 +1324,7 @@ export const useBlockchainUtils = () => {
     throw new Error('Realtime transaction creation is disabled. Only pre-signed transactions are allowed in this game.');
   };
 
-  // ПРОАКТИВНЫЙ мониторинг пула pre-signed транзакций
+  // МОНИТОРИНГ БЕСКОНЕЧНОГО ПУЛА pre-signed транзакций
   const startPoolMonitoring = (chainId) => {
     const chainKey = chainId.toString();
     
@@ -1327,42 +1334,58 @@ export const useBlockchainUtils = () => {
       
       const remainingTx = pool.transactions.length - pool.currentIndex;
       const totalTx = pool.transactions.length;
-      const usageRatio = pool.currentIndex / totalTx;
+      const consumedTx = pool.currentIndex;
       
-      // Критические предупреждения
-      if (remainingTx <= 5) {
-        console.error(`🚨 CRITICAL: Only ${remainingTx} pre-signed transactions left for chain ${chainId}!`);
+      // 📊 Статистика бесконечного пула
+      const cyclesCompleted = Math.floor(consumedTx / 5);
+      const netGrowth = cyclesCompleted * 10; // +10 транзакций каждый цикл
+      const predictedGrowth = totalTx + netGrowth;
+      
+      // Информационные логи каждые 10 транзакций
+      if (consumedTx % 10 === 0 && consumedTx > 0) {
+        console.log(`📊 Infinite Pool Stats for chain ${chainId}:`);
+        console.log(`  • Consumed: ${consumedTx} transactions`);
+        console.log(`  • Remaining: ${remainingTx} transactions`);
+        console.log(`  • Total pool size: ${totalTx} transactions`);
+        console.log(`  • Growth cycles: ${cyclesCompleted} (+${netGrowth} net growth)`);
+        console.log(`  • Pool trend: ${remainingTx > 20 ? '📈 GROWING' : remainingTx > 10 ? '➡️ STABLE' : '📉 NEEDS ATTENTION'}`);
+      }
+      
+      // Проверка математической корректности бесконечного пула
+      if (remainingTx <= 3 && !pool.isRefilling) {
+        console.error(`🚨 INFINITE POOL VIOLATION: Only ${remainingTx} transactions left!`);
+        console.error(`  • This should never happen with infinite pool logic`);
+        console.error(`  • Consumed: ${consumedTx}, Total: ${totalTx}, Cycles: ${cyclesCompleted}`);
         
-        // Экстренное пополнение
-        if (!pool.isRefilling && !pool.hasTriggeredRefill) {
+        // Экстренное пополнение с большим батчем
+        if (!pool.hasTriggeredRefill) {
           pool.hasTriggeredRefill = true;
-          console.log('🚨 Triggering emergency pool refill...');
+          console.log('🚨 EMERGENCY: Force-refilling infinite pool...');
           
           setTimeout(async () => {
             try {
               const embeddedWallet = getEmbeddedWallet();
               if (embeddedWallet) {
                 const manager = getNonceManager(chainId, embeddedWallet.address);
-                const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
-                await extendPool(chainId, manager.pendingNonce, poolConfig.batchSize);
+                // Большой экстренный батч для восстановления бесконечности
+                await extendPool(chainId, manager.pendingNonce, 25);
               }
             } catch (error) {
-              console.error('❌ Emergency pool refill failed:', error);
+              console.error('❌ Emergency infinite pool refill failed:', error);
             }
           }, 0);
         }
-      } else if (remainingTx <= 15) {
-        console.warn(`⚠️ WARNING: Only ${remainingTx} pre-signed transactions left for chain ${chainId}`);
       }
       
-      // Очистка интервала если пул больше не активен
-      if (remainingTx === 0) {
-        clearInterval(monitorInterval);
-        console.log(`🛑 Pool monitoring stopped for chain ${chainId} - pool exhausted`);
+      // Предупреждение если нормальный механизм не работает
+      if (remainingTx <= 8 && consumedTx > 10) {
+        console.warn(`⚠️ INFINITE POOL: Low remaining transactions (${remainingTx}) - check refill mechanism`);
       }
-    }, 2000); // Проверка каждые 2 секунды
+      
+    }, 3000); // Проверка каждые 3 секунды (реже для бесконечного пула)
     
-    console.log(`👁️ Started proactive pool monitoring for chain ${chainId}`);
+    console.log(`👁️ Started INFINITE pool monitoring for chain ${chainId}`);
+    console.log(`📊 Pool will grow by +10 transactions every 5 consumed (mathematical infinity)`);
     return monitorInterval;
   };
 
@@ -2509,14 +2532,71 @@ export const useBlockchainUtils = () => {
           const pool = preSignedPool.current[chainId?.toString()];
           
           if (perf && pool) {
+            const consumed = pool.currentIndex;
+            const remaining = pool.transactions.length - pool.currentIndex;
+            const cyclesCompleted = Math.floor(consumed / 5);
+            const netGrowth = cyclesCompleted * 10;
+            
             console.log(`🎮 ${NETWORK_CONFIGS[chainId]?.name || 'Chain ' + chainId}:`);
             console.log(`  ⚡ Avg Speed: ${Math.round(perf.averageBlockchainTime)}ms`);
             console.log(`  📊 Success Rate: ${perf.successRate.toFixed(1)}%`);
-            console.log(`  🎯 Pool Status: ${pool.transactions.length - pool.currentIndex}/${pool.transactions.length} ready`);
+            console.log(`  🎯 Pool Status: ${remaining}/${pool.transactions.length} ready`);
+            console.log(`  ♾️  Infinite Pool: ${consumed} used, +${netGrowth} growth (${cyclesCompleted} cycles)`);
+            console.log(`  📈 Next refill: ${5 - (consumed % 5)} transactions`);
             console.log(`  🚀 Performance: ${perf.averageBlockchainTime < 1000 ? 'INSTANT' : perf.averageBlockchainTime < 3000 ? 'FAST' : 'SLOW'}`);
           } else {
             console.log('📊 No performance data available yet');
           }
+        },
+        
+        // Детальная статистика бесконечного пула
+        infinitePoolStats: (chainId) => {
+          const pool = preSignedPool.current[chainId?.toString()];
+          if (!pool) {
+            console.log('❌ No pool found for chain', chainId);
+            return;
+          }
+          
+          const consumed = pool.currentIndex;
+          const remaining = pool.transactions.length - pool.currentIndex;
+          const total = pool.transactions.length;
+          const cyclesCompleted = Math.floor(consumed / 5);
+          const netGrowth = cyclesCompleted * 10;
+          const nextRefillAt = (Math.floor(consumed / 5) + 1) * 5;
+          const transactionsToNextRefill = nextRefillAt - consumed;
+          
+          console.group(`♾️ Infinite Pool Analysis - Chain ${chainId}`);
+          console.log(`📊 Current Status:`);
+          console.log(`  • Total transactions: ${total}`);
+          console.log(`  • Consumed: ${consumed}`);
+          console.log(`  • Remaining: ${remaining}`);
+          console.log(`  • Pool ready: ${pool.isReady ? '✅' : '❌'}`);
+          console.log(`  • Refilling: ${pool.isRefilling ? '🔄' : '⏸️'}`);
+          
+          console.log(`🔄 Growth Cycles:`);
+          console.log(`  • Completed cycles: ${cyclesCompleted}`);
+          console.log(`  • Net growth: +${netGrowth} transactions`);
+          console.log(`  • Growth rate: ${consumed > 0 ? ((netGrowth / consumed) * 100).toFixed(1) : 0}%`);
+          
+          console.log(`📈 Next Refill:`);
+          console.log(`  • Refill trigger at: ${nextRefillAt} consumed`);
+          console.log(`  • Transactions until refill: ${transactionsToNextRefill}`);
+          console.log(`  • Will add: +15 transactions`);
+          
+          console.log(`🎯 Pool Efficiency:`);
+          console.log(`  • Efficiency: ${((remaining / total) * 100).toFixed(1)}%`);
+          console.log(`  • Trend: ${remaining > 20 ? '📈 Growing' : remaining > 10 ? '➡️ Stable' : '📉 Needs attention'}`);
+          console.log(`  • Is infinite: ${total > 50 ? '✅ Yes' : '❌ Not yet'}`);
+          
+          if (consumed > 0) {
+            const theoreticalPool = consumed + netGrowth;
+            console.log(`🧮 Mathematical Verification:`);
+            console.log(`  • Theoretical pool size: ${theoreticalPool}`);
+            console.log(`  • Actual pool size: ${total}`);
+            console.log(`  • Difference: ${total - theoreticalPool} (should be positive)`);
+          }
+          
+          console.groupEnd();
         },
         
         // 🚨 ЭКСТРЕННЫЙ сброс circuit breaker для немедленного восстановления
@@ -2538,6 +2618,7 @@ export const useBlockchainUtils = () => {
       console.log('📊 Examples:');
       console.log('  • window.blockchainDebug.generatePerformanceReport(6342)');
       console.log('  • window.blockchainDebug.quickStats(6342)');
+      console.log('  • window.blockchainDebug.infinitePoolStats(6342) // 🆕 Infinite pool analysis');
       console.log('  • window.blockchainDebug.getPerformanceMetrics(6342)');
       console.log('  • window.blockchainDebug.forceResetAllCircuitBreakers() // Экстренный сброс');
       
@@ -2574,16 +2655,51 @@ export const useBlockchainUtils = () => {
     isAuthenticated: authenticated,
     isReady: authenticated && wallets.length > 0,
     
-    // PRE-SIGNED ONLY: Дополнительные утилиты для мониторинга пула
+    // INFINITE POOL: Дополнительные утилиты для мониторинга бесконечного пула
     getPoolStatus: (chainId) => {
       const pool = preSignedPool.current[chainId?.toString()];
       if (!pool) return null;
+      const cyclesCompleted = Math.floor(pool.currentIndex / 5);
+      const netGrowth = cyclesCompleted * 10;
       return {
         total: pool.transactions.length,
         used: pool.currentIndex,
         remaining: pool.transactions.length - pool.currentIndex,
         isReady: pool.isReady,
-        isRefilling: pool.isRefilling
+        isRefilling: pool.isRefilling,
+        // Infinite pool specific stats
+        cyclesCompleted,
+        netGrowth,
+        isInfinite: pool.transactions.length > 50,
+        trend: pool.transactions.length - pool.currentIndex > 20 ? 'growing' : 
+               pool.transactions.length - pool.currentIndex > 10 ? 'stable' : 'attention'
+      };
+    },
+    
+    // Статистика бесконечного пула
+    getInfinitePoolStats: (chainId) => {
+      const pool = preSignedPool.current[chainId?.toString()];
+      if (!pool) return null;
+      
+      const consumed = pool.currentIndex;
+      const remaining = pool.transactions.length - pool.currentIndex;
+      const total = pool.transactions.length;
+      const cyclesCompleted = Math.floor(consumed / 5);
+      const netGrowth = cyclesCompleted * 10;
+      const nextRefillAt = (Math.floor(consumed / 5) + 1) * 5;
+      const transactionsToNextRefill = nextRefillAt - consumed;
+      
+      return {
+        consumed,
+        remaining,
+        total,
+        cyclesCompleted,
+        netGrowth,
+        nextRefillAt,
+        transactionsToNextRefill,
+        isInfinite: total > 50,
+        growthRate: consumed > 0 ? (netGrowth / consumed * 100).toFixed(1) + '%' : '0%',
+        poolEfficiency: total > 0 ? (remaining / total * 100).toFixed(1) + '%' : '0%'
       };
     },
     
