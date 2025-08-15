@@ -335,12 +335,12 @@ export const useBlockchainUtils = () => {
   // Кеширование параметров сети для минимизации RPC вызовов
   const chainParamsCache = useRef({});
 
-  // РЕВОЛЮЦИОННАЯ конфигурация для разных сетей с адаптивным поведением
+  // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 30, // Увеличен для лучшей производительности как в Crossy Fluffle
-      refillAt: 0.3, // Очень раннее пополнение для избежания простоев
-      batchSize: 12, // Больший размер пакета для эффективности  
+      poolSize: 100, // ЗНАЧИТЕЛЬНО увеличен для pre-signed only режима
+      refillAt: 0.2, // Очень раннее пополнение при 20% использования
+      batchSize: 25, // Больший размер пакета для быстрого пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
@@ -348,9 +348,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 500 // Короткий cooldown для реального времени
     },
     31337: { // Foundry
-      poolSize: 20,
-      refillAt: 0.4,
-      batchSize: 10,
+      poolSize: 80, // Увеличен для pre-signed only
+      refillAt: 0.25,
+      batchSize: 20,
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
@@ -358,9 +358,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 300
     },
     50311: { // Somnia
-      poolSize: 15,
-      refillAt: 0.5,
-      batchSize: 8,
+      poolSize: 60, // Увеличен для pre-signed only
+      refillAt: 0.3,
+      batchSize: 15,
       maxRetries: 3,
       retryDelay: 300,
       burstMode: true,
@@ -368,9 +368,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 800
     },
     1313161556: { // RISE
-      poolSize: 12,
-      refillAt: 0.6,
-      batchSize: 6,
+      poolSize: 50, // Увеличен для pre-signed only
+      refillAt: 0.4,
+      batchSize: 12,
       maxRetries: 2,
       retryDelay: 400,
       burstMode: false,
@@ -378,9 +378,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 1500
     },
     default: {
-      poolSize: 15,
-      refillAt: 0.5,
-      batchSize: 8,
+      poolSize: 60, // Увеличен для pre-signed only
+      refillAt: 0.3, // Раннее пополнение
+      batchSize: 15,
       maxRetries: 3,
       retryDelay: 300,
       burstMode: false,
@@ -1103,6 +1103,9 @@ export const useBlockchainUtils = () => {
           pool.isReady = true;
           console.log(`🎮 First transaction ready - gaming can begin!`);
           console.log(`✅ Pre-signed transaction pool is now ACTIVE with ${pool.transactions.length} transactions`);
+          
+          // Запускаем проактивный мониторинг пула
+          startPoolMonitoring(chainId);
         }
         
         consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
@@ -1265,54 +1268,102 @@ export const useBlockchainUtils = () => {
       // Детальное логирование для отладки
       if (!pool) {
         console.log(`❌ No transaction pool exists for chain ${chainId}`);
+        throw new Error(`No pre-signed transaction pool available for chain ${chainId}. Only pre-signed transactions are allowed.`);
       } else if (!pool.isReady) {
         console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
+        throw new Error(`Pre-signed transaction pool not ready for chain ${chainId}. Wait for initialization to complete.`);
       } else if (pool.transactions.length <= pool.currentIndex) {
         console.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length})`);
+        throw new Error(`Pre-signed transaction pool exhausted for chain ${chainId}. Only pre-signed transactions are allowed.`);
       }
     }
 
-    // Если нет готовых предподписанных транзакций, создаем и подписываем realtime
-    console.log('No pre-signed transactions available, signing realtime...');
-    return await createRealtimeTransaction(chainId);
+    // КРИТИЧЕСКАЯ СИТУАЦИЯ: пул транзакций пуст, но игра требует транзакцию
+    // Пытаемся экстренно пополнить пул
+    try {
+      console.error('🚨 CRITICAL: Pre-signed pool empty! Attempting emergency refill...');
+      const embeddedWallet = getEmbeddedWallet();
+      if (embeddedWallet) {
+        const manager = getNonceManager(chainId, embeddedWallet.address);
+        const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+        
+        // Экстренное пополнение с минимальным размером пакета
+        const emergencyBatchSize = Math.min(5, poolConfig.batchSize);
+        const nextNonce = manager.pendingNonce;
+        
+        console.log(`🚨 Emergency pre-signing ${emergencyBatchSize} transactions from nonce ${nextNonce}`);
+        await preSignBatch(chainId, nextNonce, emergencyBatchSize);
+        
+        // Повторная попытка получить транзакцию
+        const pool = preSignedPool.current[chainId.toString()];
+        if (pool && pool.isReady && pool.transactions.length > pool.currentIndex) {
+          const txWrapper = pool.transactions[pool.currentIndex];
+          pool.currentIndex++;
+          console.log(`✅ Emergency transaction obtained: ${pool.currentIndex}/${pool.transactions.length}`);
+          return txWrapper.signedTx;
+        }
+      }
+    } catch (emergencyError) {
+      console.error('❌ Emergency refill failed:', emergencyError);
+    }
+    
+    // REALTIME ТРАНЗАКЦИИ ОТКЛЮЧЕНЫ - используем только pre-signed
+    throw new Error('CRITICAL ERROR: Pre-signed transaction pool exhausted and emergency refill failed. Only pre-signed transactions are allowed in this game.');
   };
 
-  // УЛУЧШЕННОЕ создание и подписание транзакции в реальном времени
+  // ОТКЛЮЧЕНО: создание и подписание транзакции в реальном времени
+  // В игре используются ТОЛЬКО pre-signed транзакции
   const createRealtimeTransaction = async (chainId) => {
-    try {
-      const { publicClient } = await createClients(chainId);
-      const config = NETWORK_CONFIGS[chainId];
-      const embeddedWallet = getEmbeddedWallet();
-      const gasParams = await getGasParams(chainId);
+    throw new Error('Realtime transaction creation is disabled. Only pre-signed transactions are allowed in this game.');
+  };
 
-      if (!embeddedWallet) {
-        throw new Error('No embedded wallet available for realtime signing');
+  // ПРОАКТИВНЫЙ мониторинг пула pre-signed транзакций
+  const startPoolMonitoring = (chainId) => {
+    const chainKey = chainId.toString();
+    
+    const monitorInterval = setInterval(() => {
+      const pool = preSignedPool.current[chainKey];
+      if (!pool || !pool.isReady) return;
+      
+      const remainingTx = pool.transactions.length - pool.currentIndex;
+      const totalTx = pool.transactions.length;
+      const usageRatio = pool.currentIndex / totalTx;
+      
+      // Критические предупреждения
+      if (remainingTx <= 5) {
+        console.error(`🚨 CRITICAL: Only ${remainingTx} pre-signed transactions left for chain ${chainId}!`);
+        
+        // Экстренное пополнение
+        if (!pool.isRefilling && !pool.hasTriggeredRefill) {
+          pool.hasTriggeredRefill = true;
+          console.log('🚨 Triggering emergency pool refill...');
+          
+          setTimeout(async () => {
+            try {
+              const embeddedWallet = getEmbeddedWallet();
+              if (embeddedWallet) {
+                const manager = getNonceManager(chainId, embeddedWallet.address);
+                const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+                await extendPool(chainId, manager.pendingNonce, poolConfig.batchSize);
+              }
+            } catch (error) {
+              console.error('❌ Emergency pool refill failed:', error);
+            }
+          }, 0);
+        }
+      } else if (remainingTx <= 15) {
+        console.warn(`⚠️ WARNING: Only ${remainingTx} pre-signed transactions left for chain ${chainId}`);
       }
-
-      // УЛУЧШЕННОЕ получение nonce через централизованный менеджер
-      const nonce = await getNextNonce(chainId, embeddedWallet.address);
-
-      const txData = {
-        account: embeddedWallet.address,
-        to: config.contractAddress,
-        data: '0xa2e62045',
-        nonce,
-        maxFeePerGas: gasParams.maxFeePerGas,
-        maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-        value: 0n,
-        type: 'eip1559',
-        gas: 100000n,
-      };
-
-      console.log(`Creating realtime transaction for chain ${chainId} with nonce ${nonce}`);
-
-      // Подписываем транзакцию
-      const { walletClient } = await createClients(chainId);
-      return await walletClient.signTransaction(txData);
-    } catch (error) {
-      console.error('Error creating realtime transaction:', error);
-      throw error;
-    }
+      
+      // Очистка интервала если пул больше не активен
+      if (remainingTx === 0) {
+        clearInterval(monitorInterval);
+        console.log(`🛑 Pool monitoring stopped for chain ${chainId} - pool exhausted`);
+      }
+    }, 2000); // Проверка каждые 2 секунды
+    
+    console.log(`👁️ Started proactive pool monitoring for chain ${chainId}`);
+    return monitorInterval;
   };
 
   // Проверка баланса
@@ -2522,6 +2573,21 @@ export const useBlockchainUtils = () => {
     getEmbeddedWallet,
     isAuthenticated: authenticated,
     isReady: authenticated && wallets.length > 0,
+    
+    // PRE-SIGNED ONLY: Дополнительные утилиты для мониторинга пула
+    getPoolStatus: (chainId) => {
+      const pool = preSignedPool.current[chainId?.toString()];
+      if (!pool) return null;
+      return {
+        total: pool.transactions.length,
+        used: pool.currentIndex,
+        remaining: pool.transactions.length - pool.currentIndex,
+        isReady: pool.isReady,
+        isRefilling: pool.isRefilling
+      };
+    },
+    
+    startPoolMonitoring, // Для ручного запуска мониторинга если нужно
     
     // Debug методы (только для разработки)
     ...(process.env.NODE_ENV === 'development' && {

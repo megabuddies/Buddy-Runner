@@ -72,13 +72,42 @@ export default class Score {
         );
       }
 
+      // Pre-signed pool status (PRE-SIGNED ONLY MODE)
+      if (this.blockchainStatus.poolStatus) {
+        const pool = this.blockchainStatus.poolStatus;
+        const poolColor = pool.remaining > 15 ? "#32CD32" : pool.remaining > 5 ? "#FFA500" : "#FF6347";
+        this.ctx.fillStyle = poolColor;
+        this.ctx.fillText(
+          `Pool: ${pool.remaining}/${pool.total}`,
+          10 * this.scaleRatio,
+          blockchainY + 40 * this.scaleRatio
+        );
+        
+        // Pool status indicator
+        if (!pool.isReady) {
+          this.ctx.fillStyle = "#FF6347";
+          this.ctx.fillText(
+            `⏳ Preparing...`,
+            10 * this.scaleRatio,
+            blockchainY + 60 * this.scaleRatio
+          );
+        } else if (pool.isRefilling) {
+          this.ctx.fillStyle = "#4169E1";
+          this.ctx.fillText(
+            `🔄 Refilling...`,
+            10 * this.scaleRatio,
+            blockchainY + 60 * this.scaleRatio
+          );
+        }
+      }
+
       // On-chain score (if available)
       if (this.blockchainStatus.onChainScore > 0) {
         this.ctx.fillStyle = "#32CD32";
         this.ctx.fillText(
           `On-chain: ${this.blockchainStatus.onChainScore}`,
           10 * this.scaleRatio,
-          blockchainY + 60 * this.scaleRatio
+          blockchainY + 80 * this.scaleRatio
         );
       }
     }

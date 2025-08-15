@@ -1,16 +1,5 @@
-import { ethers } from 'ethers';
-
-// Contract ABI - simplified for the game contract
-const GAME_CONTRACT_ABI = [
-  "function startGame()",
-  "function makeMovement()",
-  "function endGame()",
-  "function getPlayerSession(address player) view returns (tuple(address player, uint256 score, uint256 movements, uint256 startTime, bool isActive))",
-  "function getPlayerHighScore(address player) view returns (uint256)",
-  "event GameStarted(address indexed player, uint256 timestamp)",
-  "event MovementMade(address indexed player, uint256 movementCount, uint256 score)",
-  "event GameEnded(address indexed player, uint256 finalScore, uint256 totalMovements)"
-];
+// PRE-SIGNED TRANSACTIONS ONLY - Используем только предварительно подписанные транзакции
+// Этот сервис больше не создает транзакции через ethers.js, а использует pre-signed пул
 
 // Contract addresses for different networks
 const CONTRACT_ADDRESSES = {
@@ -21,36 +10,26 @@ const CONTRACT_ADDRESSES = {
 
 class BlockchainService {
   constructor() {
-    this.provider = null;
-    this.signer = null;
-    this.contract = null;
     this.chainId = null;
     this.transactionQueue = [];
     this.isProcessingQueue = false;
+    this.blockchainUtils = null; // Будет инициализирован через setBlockchainUtils
   }
 
-  async initialize(privyWallet) {
+  // Установка blockchain utils для использования pre-signed транзакций
+  setBlockchainUtils(utils) {
+    this.blockchainUtils = utils;
+  }
+
+  async initialize(privyWallet, chainId) {
     try {
       if (!privyWallet) {
         throw new Error('No wallet provided');
       }
 
-      // Get the provider from Privy
-      const provider = await privyWallet.getEthersProvider();
-      this.provider = provider;
-      this.signer = provider.getSigner();
-      
-      // Get current network
-      const network = await provider.getNetwork();
-      this.chainId = network.chainId;
+      this.chainId = chainId;
 
-      // Initialize contract if address exists for current network
-      const contractAddress = CONTRACT_ADDRESSES[this.chainId];
-      if (contractAddress && contractAddress !== "0x0000000000000000000000000000000000000000") {
-        this.contract = new ethers.Contract(contractAddress, GAME_CONTRACT_ABI, this.signer);
-      }
-
-      console.log(`Blockchain service initialized on chain ${this.chainId}`);
+      console.log(`Blockchain service initialized for pre-signed transactions on chain ${this.chainId}`);
       return true;
     } catch (error) {
       console.error('Failed to initialize blockchain service:', error);
@@ -59,33 +38,37 @@ class BlockchainService {
   }
 
   async startGame() {
-    if (!this.contract) {
-      console.warn('Contract not available on current network');
-      return { success: false, error: 'Contract not deployed on current network' };
+    if (!this.blockchainUtils) {
+      console.error('BlockchainUtils not set, cannot use pre-signed transactions');
+      return { success: false, error: 'Pre-signed transaction system not available' };
     }
 
     try {
-      const tx = await this.contract.startGame();
-      console.log('Game started, transaction:', tx.hash);
+      console.log('Starting game with pre-signed transaction...');
       
-      // Wait for confirmation
-      const receipt = await tx.wait();
-      console.log('Game start confirmed:', receipt.transactionHash);
+      // Используем pre-signed транзакцию через blockchainUtils
+      const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
       
-      return { success: true, txHash: receipt.transactionHash };
+      console.log('Game started with pre-signed transaction:', result);
+      
+      return { 
+        success: true, 
+        txHash: result.transactionHash || result.hash,
+        blockchainTime: result.blockchainTime
+      };
     } catch (error) {
-      console.error('Failed to start game:', error);
+      console.error('Failed to start game with pre-signed transaction:', error);
       return { success: false, error: error.message };
     }
   }
 
   async makeMovement() {
-    if (!this.contract) {
-      console.warn('Contract not available, simulating movement');
+    if (!this.blockchainUtils) {
+      console.warn('BlockchainUtils not set, simulating movement');
       return { success: true, simulated: true };
     }
 
-    // Add to queue for processing
+    // Add to queue for processing with pre-signed transactions
     return new Promise((resolve) => {
       this.transactionQueue.push({
         type: 'movement',
@@ -104,27 +87,24 @@ class BlockchainService {
     this.isProcessingQueue = true;
 
     try {
-      // Process movements in batches to avoid overwhelming the network
+      // Process movements in batches using pre-signed transactions
       const batchSize = 2; // Allow max 2 pending transactions as per Crossy Fluffle
       const currentBatch = this.transactionQueue.splice(0, batchSize);
 
       for (const item of currentBatch) {
         try {
-          const tx = await this.contract.makeMovement();
-          console.log('Movement transaction sent:', tx.hash);
-          
-          // Don't wait for confirmation to maintain game speed
-          tx.wait().then((receipt) => {
-            console.log('Movement confirmed:', receipt.transactionHash);
-          });
+          // Используем pre-signed транзакцию для движения
+          const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
+          console.log('Movement sent with pre-signed transaction:', result);
 
           item.resolve({ 
             success: true, 
-            txHash: tx.hash,
-            pending: true 
+            txHash: result.transactionHash || result.hash,
+            blockchainTime: result.blockchainTime,
+            pending: false // Pre-signed транзакции обрабатываются быстрее
           });
         } catch (error) {
-          console.error('Movement transaction failed:', error);
+          console.error('Pre-signed movement transaction failed:', error);
           item.resolve({ 
             success: false, 
             error: error.message 
@@ -132,7 +112,7 @@ class BlockchainService {
         }
       }
     } catch (error) {
-      console.error('Error processing transaction queue:', error);
+      console.error('Error processing pre-signed transaction queue:', error);
     }
 
     this.isProcessingQueue = false;
@@ -144,57 +124,42 @@ class BlockchainService {
   }
 
   async endGame() {
-    if (!this.contract) {
-      console.warn('Contract not available on current network');
-      return { success: false, error: 'Contract not deployed on current network' };
+    if (!this.blockchainUtils) {
+      console.warn('BlockchainUtils not set, cannot end game on-chain');
+      return { success: false, error: 'Pre-signed transaction system not available' };
     }
 
     try {
-      const tx = await this.contract.endGame();
-      console.log('Game ended, transaction:', tx.hash);
+      console.log('Ending game with pre-signed transaction...');
       
-      const receipt = await tx.wait();
-      console.log('Game end confirmed:', receipt.transactionHash);
+      // Используем pre-signed транзакцию для завершения игры
+      const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
       
-      return { success: true, txHash: receipt.transactionHash };
+      console.log('Game ended with pre-signed transaction:', result);
+      
+      return { 
+        success: true, 
+        txHash: result.transactionHash || result.hash,
+        blockchainTime: result.blockchainTime
+      };
     } catch (error) {
-      console.error('Failed to end game:', error);
+      console.error('Failed to end game with pre-signed transaction:', error);
       return { success: false, error: error.message };
     }
   }
 
   async getPlayerSession(address) {
-    if (!this.contract) {
-      return null;
-    }
-
-    try {
-      const session = await this.contract.getPlayerSession(address);
-      return {
-        player: session.player,
-        score: session.score.toString(),
-        movements: session.movements.toString(),
-        startTime: session.startTime.toString(),
-        isActive: session.isActive
-      };
-    } catch (error) {
-      console.error('Failed to get player session:', error);
-      return null;
-    }
+    // В режиме pre-signed транзакций данные сессии недоступны через контракт
+    // Возвращаем mock данные или получаем из локального состояния
+    console.warn('Player session data not available in pre-signed only mode');
+    return null;
   }
 
   async getPlayerHighScore(address) {
-    if (!this.contract) {
-      return 0;
-    }
-
-    try {
-      const highScore = await this.contract.getPlayerHighScore(address);
-      return highScore.toString();
-    } catch (error) {
-      console.error('Failed to get high score:', error);
-      return 0;
-    }
+    // В режиме pre-signed транзакций хай-скор недоступен через контракт
+    // Возвращаем mock данные или получаем из локального состояния
+    console.warn('High score data not available in pre-signed only mode');
+    return 0;
   }
 
   getNetworkName() {
@@ -209,7 +174,8 @@ class BlockchainService {
   }
 
   isContractAvailable() {
-    return this.contract !== null;
+    // В режиме pre-signed транзакций контракт всегда "доступен" через pre-signed пул
+    return this.blockchainUtils !== null;
   }
 
   getPendingTransactions() {
