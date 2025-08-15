@@ -4,24 +4,29 @@ import { ethers } from 'ethers';
 const NETWORKS = {
   6342: { // MegaETH Testnet
     rpcUrl: process.env.MEGAETH_RPC_URL || 'https://carrot.megaeth.com/rpc',
-    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 6342
   },
   31337: { // Foundry Local
     rpcUrl: process.env.FOUNDRY_RPC_URL || 'http://127.0.0.1:8545',
-    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 31337
+  },
+  84532: { // Base Sepolia
+    rpcUrl: 'https://sepolia.base.org',
+    chainId: 84532
+  },
+  10143: { // Monad Testnet
+    rpcUrl: 'https://testnet-rpc.monad.xyz',
+    chainId: 10143
+  },
+  50311: { // Somnia Testnet
+    rpcUrl: 'https://testnet.somnia.network',
+    chainId: 50311
+  },
+  1313161556: { // RISE Testnet
+    rpcUrl: 'https://testnet-rpc.rise.com',
+    chainId: 1313161556
   }
 };
-
-// ABI для Faucet контракта
-const FAUCET_ABI = [
-  "function drip(address payable _to) public",
-  "function owner() public view returns (address)",
-  "error NotOwner()",
-  "error FaucetEmpty()",
-  "error FailedToSend()"
-];
 
 export default async function handler(req, res) {
   // Включаем CORS
@@ -67,44 +72,40 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: 'Faucet owner private key not configured' });
     }
 
-    // Создаем провайдер и кошелёк владельца
+    // Создаем провайдер и faucet кошелёк
     const provider = new ethers.JsonRpcProvider(network.rpcUrl);
     const ownerWallet = new ethers.Wallet(ownerPrivateKey, provider);
-    
-    // Создаем экземпляр контракта
-    const faucetContract = new ethers.Contract(
-      network.faucetAddress,
-      FAUCET_ABI,
-      ownerWallet
-    );
 
     // Проверяем баланс фонда
-    const faucetBalance = await provider.getBalance(network.faucetAddress);
-    const dripAmount = ethers.parseEther('0.05');
+    const dripAmount = ethers.parseEther('0.01'); // Изменено с 0.05 на 0.01 ETH
+    const faucetBalance = await provider.getBalance(ownerWallet.address); // Проверяем баланс отдельного faucet кошелька
     
     if (faucetBalance < dripAmount) {
       return res.status(400).json({ 
-        error: 'Faucet is empty',
+        error: 'Faucet wallet is empty',
         balance: ethers.formatEther(faucetBalance)
       });
     }
 
-    // Проверяем, что у пользователя мало средств
+    // Проверяем, что у пользователя мало средств (< 0.001 ETH)
     const userBalance = await provider.getBalance(address);
-    const minBalance = ethers.parseEther('0.01');
+    const minBalance = ethers.parseEther('0.001'); // Изменено с 0.01 на 0.001 ETH
     
     if (userBalance >= minBalance) {
       return res.status(400).json({ 
         error: 'Address already has sufficient balance',
-        balance: ethers.formatEther(userBalance)
+        balance: ethers.formatEther(userBalance),
+        minimum: '0.001'
       });
     }
 
-    // Вызываем функцию drip
-    console.log(`Sending 0.05 ETH from faucet to ${address} on chain ${chainId}`);
+    // Отправляем ETH напрямую из faucet кошелька
+    console.log(`Sending 0.01 ETH from faucet wallet to ${address} on chain ${chainId}`);
     
-    const tx = await faucetContract.drip(address, {
-      gasLimit: 100000n // Явно указываем gas limit для Vercel
+    const tx = await ownerWallet.sendTransaction({
+      to: address,
+      value: dripAmount,
+      gasLimit: 21000n // Стандартный газ для простого перевода ETH
     });
     
     // Ждём подтверждения транзакции
@@ -115,7 +116,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       transactionHash: receipt.hash,
-      amount: '0.05',
+      amount: '0.01',
       recipient: address,
       blockNumber: receipt.blockNumber
     });
@@ -123,17 +124,17 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error('Faucet error:', error);
     
-    // Обработка специфичных ошибок контракта
-    if (error.message.includes('NotOwner')) {
-      return res.status(403).json({ error: 'Not authorized to use faucet' });
+    // Обработка специфичных ошибок
+    if (error.message.includes('insufficient funds')) {
+      return res.status(400).json({ error: 'Faucet wallet has insufficient funds' });
     }
     
-    if (error.message.includes('FaucetEmpty')) {
-      return res.status(400).json({ error: 'Faucet is empty' });
+    if (error.message.includes('nonce')) {
+      return res.status(500).json({ error: 'Transaction nonce error, please try again' });
     }
     
-    if (error.message.includes('FailedToSend')) {
-      return res.status(500).json({ error: 'Failed to send funds' });
+    if (error.message.includes('gas')) {
+      return res.status(500).json({ error: 'Gas estimation failed, please try again' });
     }
 
     return res.status(500).json({ 

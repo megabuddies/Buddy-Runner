@@ -97,6 +97,30 @@ Supported features:
 - `npm run preview` - Preview production build
 - `npm run serve` - Serve production build
 
+## 💰 Faucet Configuration
+
+The game includes an automatic faucet system that provides 0.01 ETH to users with low balances (< 0.001 ETH).
+
+### Setting up the Faucet Wallet
+
+1. **Create a separate wallet** specifically for the faucet
+2. **Fund this wallet** with ETH for the network you're using  
+3. **Set the environment variable** in your deployment:
+
+   **For Vercel deployment:**
+   ```bash
+   FAUCET_OWNER_PRIVATE_KEY=your_faucet_wallet_private_key_here
+   ```
+
+   ⚠️ **Security Note**: Never commit private keys to your repository! Always use environment variables.
+
+### How the Faucet Works
+
+- Automatically triggers when user balance < 0.001 ETH
+- Sends 0.01 ETH per request
+- Users can also manually request funds via the "Get Test ETH" button
+- Works across all supported networks (MegaETH, Base Sepolia, etc.)
+
 ## 🌐 Deployment
 
 To deploy this project:
@@ -106,7 +130,9 @@ To deploy this project:
    npm run build
    ```
 
-2. **Deploy the `dist` folder** to your hosting provider (Vercel, Netlify, etc.)
+2. **Set up environment variables** (especially `FAUCET_OWNER_PRIVATE_KEY`)
+
+3. **Deploy the `dist` folder** to your hosting provider (Vercel, Netlify, etc.)
 
 ## 🎯 Game Features
 
