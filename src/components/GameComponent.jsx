@@ -131,8 +131,14 @@ const GameComponent = ({ selectedNetwork }) => {
     if (selectedNetwork?.chainId === 6342) {
       // Для MegaETH разрешаем до 8 одновременных транзакций
       if (pendingTransactionCount.current > 8) {
-        console.log('🚫 Maximum MegaETH transaction throughput reached');
+        console.log('🚫 Maximum MegaETH transaction throughput reached:', pendingTransactionCount.current);
         return;
+      }
+      // Дополнительная проверка: если транзакция висит больше 10 секунд, сбрасываем счетчик
+      const now = Date.now();
+      if (lastTransactionTime.current && (now - lastTransactionTime.current) > 10000) {
+        console.log('🔄 Resetting pending count due to timeout, was:', pendingTransactionCount.current);
+        pendingTransactionCount.current = 0;
       }
     } else {
       // Для других сетей более строгая проверка
@@ -272,7 +278,7 @@ const GameComponent = ({ selectedNetwork }) => {
       if (selectedNetwork?.chainId !== 6342) {
         transactionPendingRef.current = false;
       }
-      pendingTransactionCount.current--;
+      pendingTransactionCount.current = Math.max(0, pendingTransactionCount.current - 1);
       setShowToast(false);
     }
   }, []); // Empty dependency array - function is stable now

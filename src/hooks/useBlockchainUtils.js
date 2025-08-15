@@ -17,9 +17,9 @@ const NETWORK_CONFIGS = {
     chainId: 6342,
     sendMethod: 'realtime_sendRawTransaction', // Специальный метод для MegaETH
     connectionTimeouts: {
-      initial: 30000, // 30 seconds for initial connection
-      retry: 15000,   // 15 seconds for retries
-      request: 45000  // 45 seconds for individual requests
+      initial: 10000, // 10 seconds for initial connection
+      retry: 3000,    // 3 seconds for retries (быстрые retry для gaming)
+      request: 5000   // 5 seconds for individual requests (для real-time gaming)
     },
     maxConnections: 3, // Limit concurrent connections
   },
@@ -1707,7 +1707,7 @@ export const useBlockchainUtils = () => {
                   const manager = getNonceManager(chainId, embeddedWallet.address);
                   const newStartNonce = manager.currentNonce;
                   const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
-                  await preSignBatch(chainId, newStartNonce, poolConfig.initialSize);
+                  await preSignBatch(chainId, newStartNonce, poolConfig.batchSize);
                   console.log('✅ Pre-signed transaction pool recreated with correct nonces');
                 } catch (recreateError) {
                   console.error('❌ Failed to recreate transaction pool:', recreateError);
