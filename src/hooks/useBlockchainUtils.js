@@ -257,8 +257,24 @@ export const useBlockchainUtils = () => {
   const rpcHealthStatus = useRef({});
   const activeConnections = useRef({});
   
-  // УЛУЧШЕННЫЙ ПУЛ ТРАНЗАКЦИЙ с большим размером и централизованным nonce
-  const preSignedPool = useRef({});
+  // ГЛОБАЛЬНЫЙ ПУЛ ПРЕДПОДПИСАННЫХ ТРАНЗАКЦИЙ - как в Crossy Fluffle
+  let preSignedPool = {};
+
+  // Функция для получения или создания пула для адреса
+  const getOrCreatePool = (address) => {
+    if (!preSignedPool[address]) {
+      preSignedPool[address] = {
+        transactions: [],
+        currentIndex: 0,
+        baseNonce: 0,
+        hasTriggeredRefill: false,
+        isRefilling: false,
+        isReady: false
+      };
+    }
+    return preSignedPool[address];
+  };
+
   const nonceManager = useRef({}); // Централизованное управление nonce
   const isInitialized = useRef({});
   const transactionPendingCount = useRef(0); // Счетчик одновременных транзакций
@@ -598,35 +614,41 @@ export const useBlockchainUtils = () => {
     return state?.degradedMode ? state : null;
   };
 
-  // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
+  // УЛУЧШЕННОЕ получение embedded wallet с защитой от undefined
   const getEmbeddedWallet = () => {
-    if (!authenticated || !wallets.length) {
+    if (!authenticated || !wallets || !wallets.length) {
       console.log('Not authenticated or no wallets available');
       return null;
     }
     
-    console.log('Available wallets:', wallets.map(w => ({ 
-      address: w.address, 
-      walletClientType: w.walletClientType, 
-      connectorType: w.connectorType 
-    })));
-    
-    // Look for embedded wallet - Privy creates embedded wallets with specific types
-    const embeddedWallet = wallets.find(wallet => 
-      wallet.walletClientType === 'privy' || 
-      wallet.connectorType === 'embedded' ||
-      wallet.connectorType === 'privy'
-    );
-    
-    if (embeddedWallet) {
-      console.log('Found embedded wallet:', embeddedWallet.address);
-      return embeddedWallet;
-    }
-    
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      console.log('No embedded wallet found, using first available wallet:', wallets[0].address);
-      return wallets[0];
+    try {
+      console.log('Available wallets:', wallets.map(w => ({ 
+        address: w.address, 
+        walletClientType: w.walletClientType, 
+        connectorType: w.connectorType 
+      })));
+      
+      // Look for embedded wallet - Privy creates embedded wallets with specific types
+      const embeddedWallet = wallets.find(wallet => 
+        wallet.walletClientType === 'privy' || 
+        wallet.connectorType === 'embedded' ||
+        wallet.connectorType === 'privy'
+      );
+      
+      if (embeddedWallet) {
+        console.log('Found embedded wallet:', embeddedWallet.address);
+        return embeddedWallet;
+      }
+      
+      // If no embedded wallet found, use the first available wallet
+      if (wallets.length > 0) {
+        console.log('No embedded wallet found, using first available wallet:', wallets[0].address);
+        return wallets[0];
+      }
+      
+    } catch (error) {
+      console.error('Error in getEmbeddedWallet:', error);
+      return null;
     }
     
     console.log('No wallets available');
@@ -644,7 +666,10 @@ export const useBlockchainUtils = () => {
     if (!config) throw new Error(`Unsupported network: ${chainId}`);
 
     const embeddedWallet = getEmbeddedWallet();
-    if (!embeddedWallet) throw new Error('No embedded wallet found');
+    if (!embeddedWallet) {
+      console.log("no wallet");
+      throw new Error('No embedded wallet found');
+    }
 
     // Инициализируем систему мониторинга RPC здоровья
     initializeRpcHealth(chainId);
@@ -934,9 +959,16 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ предварительное подписание пакета транзакций
+  // РЕВОЛЮЦИОННОЕ предварительное подписание пакета транзакций с глобальным пулом
   const preSignBatch = async (chainId, startNonce, count) => {
-    const chainKey = chainId.toString();
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      console.log("no wallet");
+      return;
+    }
+    
+    // Получаем или создаем пул для адреса кошелька
+    const pool = getOrCreatePool(embeddedWallet.address);
     
     // Получаем конфигурацию для данной сети
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
@@ -951,25 +983,17 @@ export const useBlockchainUtils = () => {
     
     console.log(`Pre-signing ${actualCount} transactions for chain ${chainId} starting from nonce ${startNonce}`);
     
-    if (!preSignedPool.current[chainKey]) {
-      preSignedPool.current[chainKey] = {
-        transactions: [],
-        currentIndex: 0,
-        baseNonce: startNonce,
-        hasTriggeredRefill: false,
-        isRefilling: false,
-        isReady: false // Новый флаг готовности
-      };
+    // Инициализация пула с базовым nonce (ОДНОКРАТНО)
+    if (pool.transactions.length === 0) {
+      pool.baseNonce = startNonce;
+      console.log(`Setting base nonce to ${startNonce} for address ${embeddedWallet.address}`);
     }
-
-    const pool = preSignedPool.current[chainKey];
     const { walletClient } = await createClients(chainId);
     const gasParams = await getGasParams(chainId);
 
     console.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(gasParams.maxFeePerGas) / 10**9}, maxPriorityFeePerGasGwei: ${Number(gasParams.maxPriorityFeePerGas) / 10**9}}`);
 
     const config = NETWORK_CONFIGS[chainId];
-    const embeddedWallet = getEmbeddedWallet();
     
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
@@ -983,7 +1007,7 @@ export const useBlockchainUtils = () => {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        // Используем зарезервированный nonce для пре-подписания
+        // ПОСЛЕДОВАТЕЛЬНОЕ увеличение nonce: startNonce + i
         const nonce = startNonce + i;
         
         const txData = {
@@ -1070,6 +1094,23 @@ export const useBlockchainUtils = () => {
       console.log('Fallback mode: minimum transactions ready for gaming');
     }
     
+    // АВТОМАТИЧЕСКОЕ расширение пула при достижении 50% использования
+    const usageRatio = pool.currentIndex / pool.transactions.length;
+    if (usageRatio >= 0.5 && !pool.hasTriggeredRefill) {
+      pool.hasTriggeredRefill = true;
+      console.log(`Pool 50% empty, triggering auto-expansion...`);
+      
+      // Фоновое расширение пула
+      setTimeout(async () => {
+        try {
+          const nextNonce = pool.baseNonce + pool.transactions.length;
+          await extendPool(chainId, nextNonce, poolConfig.batchSize);
+        } catch (error) {
+          console.error('Error auto-extending pool:', error);
+        }
+      }, 0);
+    }
+    
     // Обновляем nonce manager чтобы учесть использованные nonces
     const manager = getNonceManager(chainId, embeddedWallet.address);
     if (manager) {
@@ -1077,13 +1118,18 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // УЛУЧШЕННОЕ умное пополнение пула
+  // УЛУЧШЕННОЕ умное пополнение пула с глобальным управлением
   const extendPool = async (chainId, startNonce, count) => {
-    const chainKey = chainId.toString();
-    const pool = preSignedPool.current[chainKey];
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      console.log("no wallet for pool extension");
+      return;
+    }
+    
+    const pool = getOrCreatePool(embeddedWallet.address);
     
     // Предотвращаем параллельные пополнения
-    if (!pool || pool.isRefilling) {
+    if (pool.isRefilling) {
       console.log('Pool extension already in progress, skipping');
       return;
     }
@@ -1159,14 +1205,19 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ получение следующей транзакции из пула
+  // РЕВОЛЮЦИОННОЕ получение следующей транзакции из глобального пула
   const getNextTransaction = async (chainId) => {
-    const chainKey = chainId.toString();
-    const pool = preSignedPool.current[chainKey];
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      console.log("no wallet for transaction");
+      return null;
+    }
+    
+    const pool = getOrCreatePool(embeddedWallet.address);
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
 
     // Если пул готов и есть предподписанные транзакции, используем их
-    if (pool && pool.isReady && pool.transactions.length > pool.currentIndex) {
+    if (pool.isReady && pool.transactions.length > pool.currentIndex) {
       const txWrapper = pool.transactions[pool.currentIndex];
       pool.currentIndex++;
 
@@ -1181,13 +1232,9 @@ export const useBlockchainUtils = () => {
         // Запускаем пополнение в фоне без ожидания
         setTimeout(async () => {
           try {
-            const embeddedWallet = getEmbeddedWallet();
-            if (embeddedWallet) {
-              // Используем следующие доступные nonces для пополнения
-              const manager = getNonceManager(chainId, embeddedWallet.address);
-              const nextNonce = manager.pendingNonce;
-              await extendPool(chainId, nextNonce, poolConfig.batchSize);
-            }
+            // Расчет следующего nonce для расширения: pool.baseNonce + pool.transactions.length
+            const nextNonce = pool.baseNonce + pool.transactions.length;
+            await extendPool(chainId, nextNonce, poolConfig.batchSize);
           } catch (error) {
             console.error('Error extending pool:', error);
           }
@@ -1197,12 +1244,10 @@ export const useBlockchainUtils = () => {
       return txWrapper.signedTx;
     } else {
       // Детальное логирование для отладки
-      if (!pool) {
-        console.log(`❌ No transaction pool exists for chain ${chainId}`);
-      } else if (!pool.isReady) {
-        console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
+      if (!pool.isReady) {
+        console.log(`⏳ Transaction pool not ready yet for address ${embeddedWallet.address} (${pool.transactions.length} transactions in progress)`);
       } else if (pool.transactions.length <= pool.currentIndex) {
-        console.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length})`);
+        console.log(`📭 Transaction pool empty for address ${embeddedWallet.address} (used ${pool.currentIndex}/${pool.transactions.length})`);
       }
     }
 
@@ -1668,9 +1713,8 @@ export const useBlockchainUtils = () => {
     // Для MegaETH (instant transactions) менее строгая проверка pending состояния
     if (chainId === 6342) {
       // Проверяем есть ли доступные pre-signed транзакции
-      const chainKey = chainId.toString();
-      const pool = preSignedPool.current[chainKey];
-      const hasPreSignedTx = pool && pool.isReady && pool.transactions.length > pool.currentIndex;
+      const pool = getOrCreatePool(embeddedWallet.address);
+      const hasPreSignedTx = pool.isReady && pool.transactions.length > pool.currentIndex;
       
       if (hasPreSignedTx) {
         // Если есть pre-signed транзакции, разрешаем много параллельных операций
@@ -1937,7 +1981,7 @@ export const useBlockchainUtils = () => {
         
         return preSignBatch(chainId, initialNonce, batchSize)
           .then(() => {
-            const pool = preSignedPool.current[chainKey];
+            const pool = getOrCreatePool(embeddedWallet.address);
             if (pool && pool.transactions.length > 0) {
               console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
             } else {
