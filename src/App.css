@@ -1396,3 +1396,29 @@ a:hover {
   text-transform: uppercase;
   font-weight: bold;
 }
+
+/* Try Again Button для Error Recovery */
+.try-again-button {
+  background: linear-gradient(45deg, #ef5435, #ff6b4a);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 0.9em;
+  font-weight: bold;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(239, 84, 53, 0.3);
+}
+
+.try-again-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 84, 53, 0.4);
+  background: linear-gradient(45deg, #ff6b4a, #ef5435);
+}
+
+.try-again-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 6px rgba(239, 84, 53, 0.3);
+}

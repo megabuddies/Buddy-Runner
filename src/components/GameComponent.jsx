@@ -6,12 +6,24 @@ import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
 
+// Game State Management для Error Recovery
+const GameState = {
+  INITIALIZING: 'INITIALIZING',
+  PLAYING: 'PLAYING', 
+  TRANSACTION_PENDING: 'TRANSACTION_PENDING',
+  TRANSACTION_FAILED: 'TRANSACTION_FAILED',
+  PAUSED: 'PAUSED'
+};
+
 const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const { login } = useLogin();
+  
+  // Game State для Error Recovery
+  const [gameState, setGameState] = useState(GameState.INITIALIZING);
   
   // Используем новый blockchain utils hook
   const {
@@ -42,6 +54,9 @@ const GameComponent = ({ selectedNetwork }) => {
   const transactionPendingRef = useRef(false);
   const pendingJumpRef = useRef(null);
   const pendingTransactionCount = useRef(0);
+  
+  // Race Conditions Protection
+  const gameInteractionRef = useRef(false);
   
   // Store blockchain functions in refs to avoid dependency issues
   const blockchainFunctionsRef = useRef({});
@@ -103,6 +118,9 @@ const GameComponent = ({ selectedNetwork }) => {
         totalMovements: currentNumber,
         onChainScore: currentNumber
       });
+      
+      // Переводим игру в режим готовности к игре
+      setGameState(GameState.PLAYING);
 
       console.log('Blockchain initialization complete');
     } catch (error) {
@@ -112,12 +130,21 @@ const GameComponent = ({ selectedNetwork }) => {
         initialized: false,
         contractAvailable: false
       }));
+      
+      // При ошибке инициализации все равно позволяем игру (fallback режим)
+      setGameState(GameState.PLAYING);
     }
   };
 
-  // Обработка ончейн прыжка с Real-Time Gaming архитектурой
+  // Обработка ончейн прыжка с Real-Time Gaming архитектурой и Error Recovery
   const handleOnChainMovement = useCallback(async () => {
     const { sendUpdate, getContractNumber, selectedNetwork, blockchainInitialized } = blockchainFunctionsRef.current;
+    
+    // Race Conditions Protection - проверка перед каждым кликом
+    if (gameInteractionRef.current || gameState !== GameState.PLAYING) {
+      console.log('Blocking interaction - game not ready or already processing');
+      return;
+    }
     
     // Проверяем, поддерживает ли сеть ончейн функциональность
     if (!selectedNetwork || selectedNetwork.isWeb2 || !blockchainInitialized) {
@@ -142,6 +169,10 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     try {
+      // Установка флага блокировки и состояния игры
+      gameInteractionRef.current = true;
+      setGameState(GameState.TRANSACTION_PENDING);
+      
       // Для MegaETH не используем глобальный pending флаг
       if (selectedNetwork?.chainId !== 6342) {
         transactionPendingRef.current = true;
@@ -211,7 +242,11 @@ const GameComponent = ({ selectedNetwork }) => {
       return gameResult;
 
     } catch (error) {
-      console.error('❌ Error sending on-chain movement:', error);
+      console.error('Transaction failed:', error);
+      
+      // Error Recovery - переводим игру в состояние ошибки
+      setGameState(GameState.TRANSACTION_FAILED);
+      setShowToast(false);
       
       // Более детальная обработка ошибок
       let errorMessage = 'Transaction failed';
@@ -250,17 +285,32 @@ const GameComponent = ({ selectedNetwork }) => {
         }
       }));
       
-      // Бросаем ошибку для обработки выше
-      const enhancedError = new Error(errorMessage);
-      enhancedError.type = errorType;
-      throw enhancedError;
+      // Автоматическое восстановление через 3 секунды
+      setTimeout(() => {
+        if (gameState === GameState.TRANSACTION_FAILED) {
+          setGameState(GameState.PLAYING);
+          console.log('🔄 Auto-recovery: Game state restored to PLAYING');
+        }
+      }, 3000);
       
     } finally {
+      // Сброс флага блокировки 
+      gameInteractionRef.current = false;
+      
       if (selectedNetwork?.chainId !== 6342) {
         transactionPendingRef.current = false;
       }
       pendingTransactionCount.current--;
-      setShowToast(false);
+      
+      // Сброс состояния игры на PLAYING если не было ошибки
+      if (gameState === GameState.TRANSACTION_PENDING) {
+        setGameState(GameState.PLAYING);
+      }
+      
+      // Скрываем toast только если нет ошибки
+      if (gameState !== GameState.TRANSACTION_FAILED) {
+        setShowToast(false);
+      }
     }
   }, []); // Empty dependency array - function is stable now
 
@@ -337,6 +387,7 @@ const GameComponent = ({ selectedNetwork }) => {
     // Skip blockchain initialization for web2 mode
     if (selectedNetwork && selectedNetwork.isWeb2) {
       console.log('Web2 mode selected, skipping blockchain initialization');
+      setGameState(GameState.PLAYING); // Web2 mode ready to play
       setBlockchainStatus({
         initialized: false,
         networkName: selectedNetwork.name,
@@ -845,6 +896,21 @@ const GameComponent = ({ selectedNetwork }) => {
                   <span className="value error-text" title={blockchainStatus.lastError.message}>
                     {blockchainStatus.lastError.type}
                   </span>
+                </div>
+              )}
+              
+              {/* Try Again button для восстановления после ошибки */}
+              {gameState === GameState.TRANSACTION_FAILED && (
+                <div className="status-item">
+                  <button 
+                    className="try-again-button" 
+                    onClick={() => {
+                      setGameState(GameState.PLAYING);
+                      setBlockchainStatus(prev => ({ ...prev, lastError: null }));
+                    }}
+                  >
+                    Try Again
+                  </button>
                 </div>
               )}
               
