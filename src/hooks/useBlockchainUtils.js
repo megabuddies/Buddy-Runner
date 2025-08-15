@@ -326,15 +326,15 @@ export const useBlockchainUtils = () => {
 
   // РЕВОЛЮЦИОННАЯ конфигурация для разных сетей с адаптивным поведением
   const ENHANCED_POOL_CONFIG = {
-    6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 30, // Увеличен для лучшей производительности как в Crossy Fluffle
-      refillAt: 0.3, // Очень раннее пополнение для избежания простоев
-      batchSize: 12, // Больший размер пакета для эффективности  
+    6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ с rate limiting
+      poolSize: 30, // Увеличен для лучшей производительности
+      refillAt: 0.2, // Очень раннее пополнение для избежания простоев
+      batchSize: 8, // УМЕНЬШЕН с 12 до 8 для избежания rate limits
       maxRetries: 3,
-      retryDelay: 200, // Быстрые retry для MegaETH
+      retryDelay: 300, // УВЕЛИЧЕНО с 200 до 300ms для MegaETH rate limits
       burstMode: true, // Поддержка burst режима
-      maxBurstSize: 5, // Максимум транзакций в burst режиме
-      burstCooldown: 500 // Короткий cooldown для реального времени
+      maxBurstSize: 3, // УМЕНЬШЕНО с 5 до 3 для избежания rate limits
+      burstCooldown: 800 // УВЕЛИЧЕНО с 500 до 800ms для реального времени
     },
     31337: { // Foundry
       poolSize: 20,
@@ -1012,19 +1012,21 @@ export const useBlockchainUtils = () => {
         
         // Разные методы подписания для разных сетей
         if (chainId === 6342) {
-          // MegaETH: используем прямое подписание через Privy
+          // MegaETH: используем прямое подписание через Privy с rate limiting
           console.log(`Signing transaction ${i + 1} locally for MegaETH`);
           signedTx = await retryWithBackoff(
             async () => {
-              // Прямое подписание через embedded wallet
-              return await walletClient.signTransaction(txData);
+              // Прямое подписание через embedded wallet с rate limiting
+              return await executeWithRateLimit(chainId, async () => {
+                return await walletClient.signTransaction(txData);
+              });
             },
             fallbackConfig ? 1 : poolConfig.maxRetries,
             poolConfig.retryDelay,
             chainId
           );
         } else {
-          // Другие сети: используем walletClient
+          // Другие сети: используем walletClient без rate limiting
           console.log(`Signing transaction ${i + 1} via RPC for chain ${chainId}`);
           signedTx = await retryWithBackoff(
             () => walletClient.signTransaction(txData),
@@ -1143,15 +1145,17 @@ export const useBlockchainUtils = () => {
           gas: 100000n,
         };
 
-        // Создаем promise для подписания каждой транзакции
+        // Создаем promise для подписания каждой транзакции с rate limiting
         const signingPromise = (async (txIndex, txNonce) => {
           try {
             let signedTx;
             if (chainId === 6342) {
-              // MegaETH: локальное подписание
-              signedTx = await walletClient.signTransaction(txData);
+              // MegaETH: локальное подписание с rate limiting
+              signedTx = await executeWithRateLimit(chainId, async () => {
+                return await walletClient.signTransaction(txData);
+              });
             } else {
-              // Другие сети
+              // Другие сети: без rate limiting
               signedTx = await walletClient.signTransaction(txData);
             }
             
@@ -1170,7 +1174,7 @@ export const useBlockchainUtils = () => {
         
         promises.push(signingPromise);
         
-        // Для MegaETH запускаем параллельно, для других сетей последовательно
+        // Для MegaETH запускаем с rate limiting, для других сетей последовательно
         if (chainId !== 6342) {
           try {
             const result = await signingPromise;
@@ -2557,6 +2561,69 @@ export const useBlockchainUtils = () => {
   
   // Ref для хранения активных интервалов мониторинга
   const activeMonitoringIntervals = useRef({});
+
+  // НОВАЯ система rate limiting для MegaETH
+  const rateLimiter = useRef({});
+  
+  const getRateLimiter = (chainId) => {
+    if (!rateLimiter.current[chainId]) {
+      rateLimiter.current[chainId] = {
+        requestQueue: [],
+        processing: false,
+        lastRequest: 0,
+        // MegaETH имеет лимиты - добавляем задержки
+        minDelay: chainId === 6342 ? 100 : 50, // 100ms между запросами для MegaETH
+        maxConcurrent: chainId === 6342 ? 3 : 10 // Максимум 3 одновременных для MegaETH
+      };
+    }
+    return rateLimiter.current[chainId];
+  };
+  
+  const executeWithRateLimit = async (chainId, fn) => {
+    const limiter = getRateLimiter(chainId);
+    
+    return new Promise((resolve, reject) => {
+      limiter.requestQueue.push({ fn, resolve, reject });
+      processRateLimitQueue(chainId);
+    });
+  };
+  
+  const processRateLimitQueue = async (chainId) => {
+    const limiter = getRateLimiter(chainId);
+    
+    if (limiter.processing || limiter.requestQueue.length === 0) {
+      return;
+    }
+    
+    limiter.processing = true;
+    
+    while (limiter.requestQueue.length > 0) {
+      const now = Date.now();
+      const timeSinceLastRequest = now - limiter.lastRequest;
+      
+      // Добавляем задержку если нужно
+      if (timeSinceLastRequest < limiter.minDelay) {
+        await new Promise(resolve => setTimeout(resolve, limiter.minDelay - timeSinceLastRequest));
+      }
+      
+      const { fn, resolve, reject } = limiter.requestQueue.shift();
+      limiter.lastRequest = Date.now();
+      
+      try {
+        const result = await fn();
+        resolve(result);
+      } catch (error) {
+        // Если получили 429, увеличиваем задержку
+        if (error.status === 429 || error.message?.includes('429') || error.message?.includes('rate limit')) {
+          limiter.minDelay = Math.min(limiter.minDelay * 1.5, 1000); // Увеличиваем до максимум 1 секунды
+          console.log(`⏱️ Rate limit hit for chain ${chainId}, increasing delay to ${limiter.minDelay}ms`);
+        }
+        reject(error);
+      }
+    }
+    
+    limiter.processing = false;
+  };
 
   return {
     // Состояние
