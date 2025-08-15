@@ -42,6 +42,7 @@ const GameComponent = ({ selectedNetwork }) => {
   const transactionPendingRef = useRef(false);
   const pendingJumpRef = useRef(null);
   const pendingTransactionCount = useRef(0);
+  const lastTransactionTime = useRef(0);
   
   // Store blockchain functions in refs to avoid dependency issues
   const blockchainFunctionsRef = useRef({});
@@ -125,21 +126,35 @@ const GameComponent = ({ selectedNetwork }) => {
       return;
     }
 
-    // Менее строгая блокировка для быстрых сетей
+    // Улучшенная система блокировки для предотвращения состояний гонки
     // Для MegaETH позволяем высокий параллелизм
     if (selectedNetwork?.chainId === 6342) {
       // Для MegaETH разрешаем до 8 одновременных транзакций
       if (pendingTransactionCount.current > 8) {
-        console.log('Maximum MegaETH transaction throughput reached');
+        console.log('🚫 Maximum MegaETH transaction throughput reached:', pendingTransactionCount.current);
         return;
+      }
+      // Дополнительная проверка: если транзакция висит больше 10 секунд, сбрасываем счетчик
+      const now = Date.now();
+      if (lastTransactionTime.current && (now - lastTransactionTime.current) > 10000) {
+        console.log('🔄 Resetting pending count due to timeout, was:', pendingTransactionCount.current);
+        pendingTransactionCount.current = 0;
       }
     } else {
       // Для других сетей более строгая проверка
       if (transactionPendingRef.current) {
-        console.log('Transaction already pending, blocking jump');
+        console.log('🚫 Transaction already pending, blocking jump');
         return;
       }
     }
+
+    // Дополнительная проверка на минимальный интервал между транзакциями для предотвращения spam
+    const now = Date.now();
+    if (lastTransactionTime.current && (now - lastTransactionTime.current) < 100) {
+      console.log('🚫 Transaction rate limit: minimum 100ms between transactions');
+      return;
+    }
+    lastTransactionTime.current = now;
 
     try {
       // Для MegaETH не используем глобальный pending флаг
@@ -223,6 +238,16 @@ const GameComponent = ({ selectedNetwork }) => {
       } else if (error.message.includes('nonce')) {
         errorMessage = 'Transaction nonce error. Please try again.';
         errorType = 'NONCE_ERROR';
+        
+        // Специальная обработка ошибок nonce - даем системе время на восстановление
+        console.log('🔄 Nonce error detected, applying recovery cooldown and resetting pending count');
+        lastTransactionTime.current = Date.now() + 1000; // Блокируем транзакции на 1 секунду
+        
+        // Агрессивно сбрасываем счетчик pending транзакций при ошибке nonce
+        if (pendingTransactionCount.current > 0) {
+          console.log(`🔄 Resetting pending count from ${pendingTransactionCount.current} to 0 due to nonce error`);
+          pendingTransactionCount.current = 0;
+        }
       } else if (error.message.includes('timeout')) {
         errorMessage = 'Transaction timeout. Please try again.';
         errorType = 'TIMEOUT';
@@ -259,7 +284,7 @@ const GameComponent = ({ selectedNetwork }) => {
       if (selectedNetwork?.chainId !== 6342) {
         transactionPendingRef.current = false;
       }
-      pendingTransactionCount.current--;
+      pendingTransactionCount.current = Math.max(0, pendingTransactionCount.current - 1);
       setShowToast(false);
     }
   }, []); // Empty dependency array - function is stable now
