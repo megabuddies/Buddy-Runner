@@ -83,108 +83,137 @@ const App = () => {
     },
   };
 
+  // Privy configuration optimized for seamless gaming experience
   const privyConfig = {
-    appearance: {
-      theme: 'light',
-      accentColor: '#7FBC7F',
-      logo: 'https://your-logo-url.com/logo.png',
-    },
-    // Создаём встроенные кошельки для всех пользователей
-    embeddedWallets: {
-      createOnLogin: 'all-users',
-    },
-    loginMethods: ['email', 'wallet'],
-    defaultChain: megaethTestnet,
-    supportedChains: [
-      megaethTestnet,
-      foundryNetwork, 
-      somniaTestnet,
-      riseTestnet,
-      {
-        id: 84532, // Base Sepolia
-        name: 'Base Sepolia',
-        network: 'base-sepolia',
-        nativeCurrency: {
-          name: 'Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        rpcUrls: {
-          default: {
-            http: ['https://sepolia.base.org'],
-          },
-        },
-        blockExplorers: {
-          default: {
-            name: 'Base Sepolia Explorer',
-            url: 'https://sepolia.basescan.org',
-          },
-        },
+    appId: "cm25q62mj00nks8j5lxk4qyly",
+    config: {
+      // Appearance
+      appearance: {
+        theme: 'dark',
+        accentColor: '#1391ff',
+        logo: 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&h=100&fit=crop&crop=center',
+        walletChainType: 'ethereum-and-solana',
+        showWalletLoginFirst: false,
       },
-      {
-        id: 10143, // Monad Testnet
-        name: 'Monad Testnet',
-        network: 'monad-testnet',
-        nativeCurrency: {
-          name: 'Monad',
-          symbol: 'MON',
-          decimals: 18,
-        },
-        rpcUrls: {
-          default: {
-            http: ['https://testnet-rpc.monad.xyz'],
-          },
-        },
-        blockExplorers: {
-          default: {
-            name: 'Monad Explorer',
-            url: 'https://testnet.monadexplorer.com',
-          },
-        },
+      
+      // РЕВОЛЮЦИОННАЯ конфигурация Embedded Wallets для нулевого трения
+      embeddedWallets: {
+        createOnLogin: 'all-users', // Автоматическое создание для всех пользователей
+        requireUserPasswordOnCreate: false, // Убираем трение пароля
+        prependWithWalletUi: false, // Не показываем дополнительные UI элементы
+        noPromptOnSignature: true, // Отключаем промпты для подписи
       },
-      {
-        id: 1, // Ethereum Mainnet
-        name: 'Ethereum',
-        network: 'homestead',
-        nativeCurrency: {
-          name: 'Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        rpcUrls: {
-          default: {
-            http: ['https://eth-mainnet.g.alchemy.com/v2/your-api-key'],
+      
+      // Login methods optimized for gaming
+      loginMethods: ['email', 'wallet', 'google', 'discord', 'twitter'],
+      
+      // МГНОВЕННЫЕ настройки сети
+      defaultChain: megaethTestnet, // MegaETH как приоритетная сеть
+      supportedChains: [
+        megaethTestnet,
+        foundryNetwork,
+        somniaTestnet,
+        riseTestnet,
+        {
+          id: 84532, // Base Sepolia
+          name: 'Base Sepolia',
+          network: 'base-sepolia',
+          nativeCurrency: {
+            name: 'Ether',
+            symbol: 'ETH',
+            decimals: 18,
+          },
+          rpcUrls: {
+            default: {
+              http: ['https://sepolia.base.org'],
+            },
+          },
+          blockExplorers: {
+            default: {
+              name: 'Base Sepolia Explorer',
+              url: 'https://sepolia.basescan.org',
+            },
           },
         },
-        blockExplorers: {
-          default: {
-            name: 'Etherscan',
-            url: 'https://etherscan.io',
+        {
+          id: 10143, // Monad Testnet
+          name: 'Monad Testnet',
+          network: 'monad-testnet',
+          nativeCurrency: {
+            name: 'Monad',
+            symbol: 'MON',
+            decimals: 18,
+          },
+          rpcUrls: {
+            default: {
+              http: ['https://testnet-rpc.monad.xyz'],
+            },
+          },
+          blockExplorers: {
+            default: {
+              name: 'Monad Explorer',
+              url: 'https://testnet.monadexplorer.com',
+            },
           },
         },
+        {
+          id: 1, // Ethereum Mainnet
+          name: 'Ethereum',
+          network: 'homestead',
+          nativeCurrency: {
+            name: 'Ether',
+            symbol: 'ETH',
+            decimals: 18,
+          },
+          rpcUrls: {
+            default: {
+              http: ['https://eth-mainnet.g.alchemy.com/v2/your-api-key'],
+            },
+          },
+          blockExplorers: {
+            default: {
+              name: 'Etherscan',
+              url: 'https://etherscan.io',
+            },
+          },
+        },
+        {
+          id: 11155111, // Sepolia Testnet
+          name: 'Sepolia',
+          network: 'sepolia',
+          nativeCurrency: {
+            name: 'Sepolia Ether',
+            symbol: 'ETH',
+            decimals: 18,
+          },
+          rpcUrls: {
+            default: {
+              http: ['https://sepolia.infura.io/v3/your-api-key'],
+            },
+          },
+          blockExplorers: {
+            default: {
+              name: 'Etherscan',
+              url: 'https://sepolia.etherscan.io',
+            },
+          },
+        },
+      ],
+      
+      // Оптимизация для Real-Time Gaming
+      walletConnectCloudProjectId: process.env.REACT_APP_WALLETCONNECT_PROJECT_ID || "default",
+      
+      // УЛУЧШЕННЫЕ настройки для минимального трения
+      legal: {
+        termsAndConditionsUrl: '/terms',
+        privacyPolicyUrl: '/privacy',
       },
-      {
-        id: 11155111, // Sepolia Testnet
-        name: 'Sepolia',
-        network: 'sepolia',
-        nativeCurrency: {
-          name: 'Sepolia Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        rpcUrls: {
-          default: {
-            http: ['https://sepolia.infura.io/v3/your-api-key'],
-          },
-        },
-        blockExplorers: {
-          default: {
-            name: 'Etherscan',
-            url: 'https://sepolia.etherscan.io',
-          },
-        },
-      },
-    ],
+      
+      // Автоматические разрешения для игры 
+      mfa: {
+        noPromptOnMfaRequired: false
+      }
+    }
   };
 
   const handleNetworkSelect = (network) => {
