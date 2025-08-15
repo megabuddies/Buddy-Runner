@@ -25,7 +25,8 @@ const GameComponent = ({ selectedNetwork }) => {
     getContractNumber,
     isReady,
     getEmbeddedWallet,
-    callFaucet
+    callFaucet,
+    getPoolStatus // Для мониторинга pre-signed пула
   } = useBlockchainUtils();
 
   const [blockchainStatus, setBlockchainStatus] = useState({
@@ -34,7 +35,8 @@ const GameComponent = ({ selectedNetwork }) => {
     contractAvailable: false,
     pendingTransactions: 0,
     totalMovements: 0,
-    onChainScore: 0
+    onChainScore: 0,
+    poolStatus: null // Статус pre-signed пула
   });
 
   const [showToast, setShowToast] = useState(false);
@@ -391,12 +393,14 @@ const GameComponent = ({ selectedNetwork }) => {
   // Update blockchain status from hook
   useEffect(() => {
     if (selectedNetwork && !selectedNetwork.isWeb2) {
+      const poolStatus = getPoolStatus(selectedNetwork.id);
       setBlockchainStatus(prev => ({
         ...prev,
-        pendingTransactions: transactionPending ? 1 : 0
+        pendingTransactions: transactionPending ? 1 : 0,
+        poolStatus: poolStatus
       }));
     }
-  }, [transactionPending, selectedNetwork]);
+  }, [transactionPending, selectedNetwork, getPoolStatus]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
