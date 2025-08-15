@@ -753,14 +753,19 @@ export const useBlockchainUtils = () => {
         currentNonce: null,
         pendingNonce: null,
         lastUpdate: 0,
-        isUpdating: false
+        isUpdating: false,
+        // НОВОЕ: резервация nonce для pre-signed транзакций
+        reservedNonces: new Set(),
+        nextAvailableNonce: null,
+        preSignedRangeStart: null,
+        preSignedRangeEnd: null
       };
     }
     return nonceManager.current[key];
   };
 
-  // УЛУЧШЕННОЕ получение и управление nonce
-  const getNextNonce = async (chainId, address, forceRefresh = false) => {
+  // УЛУЧШЕННОЕ получение и управление nonce с резервацией
+  const getNextNonce = async (chainId, address, forceRefresh = false, isPreSigning = false) => {
     const manager = getNonceManager(chainId, address);
     const now = Date.now();
     
@@ -781,17 +786,26 @@ export const useBlockchainUtils = () => {
           });
           
           // Используем максимальное значение между сетевым nonce и нашим локальным
-          manager.currentNonce = Math.max(networkNonce, manager.currentNonce || 0);
-          manager.pendingNonce = manager.currentNonce;
+          const maxNonce = Math.max(networkNonce, manager.currentNonce || 0);
+          
+          // НОВОЕ: если есть зарезервированные nonces, учитываем их
+          if (manager.reservedNonces.size > 0) {
+            const maxReserved = Math.max(...manager.reservedNonces);
+            manager.currentNonce = Math.max(maxNonce, maxReserved + 1);
+          } else {
+            manager.currentNonce = maxNonce;
+          }
+          
+          manager.nextAvailableNonce = manager.currentNonce;
           manager.lastUpdate = now;
           
-          console.log(`Updated nonce for ${address} on chain ${chainId}: ${manager.currentNonce}`);
+          console.log(`Updated nonce for ${address} on chain ${chainId}: ${manager.currentNonce} (reserved: ${manager.reservedNonces.size})`);
         } catch (error) {
           console.error('Error updating nonce:', error);
           // Если не удалось получить nonce из сети, используем локальный + 1
           if (manager.currentNonce !== null) {
             manager.currentNonce += 1;
-            manager.pendingNonce = manager.currentNonce;
+            manager.nextAvailableNonce = manager.currentNonce;
           }
         } finally {
           manager.isUpdating = false;
@@ -799,11 +813,32 @@ export const useBlockchainUtils = () => {
       }
     }
     
-    // Возвращаем следующий доступный nonce
-    const nextNonce = manager.pendingNonce;
-    manager.pendingNonce += 1;
-    
-    return nextNonce;
+    // НОВОЕ: разная логика для pre-signing и real-time транзакций
+    if (isPreSigning) {
+      // Для pre-signing выделяем диапазон nonces
+      const nextNonce = manager.nextAvailableNonce;
+      manager.reservedNonces.add(nextNonce);
+      manager.nextAvailableNonce += 1;
+      return nextNonce;
+    } else {
+      // Для real-time транзакций используем nonces после зарезервированного диапазона
+      let nextNonce = manager.nextAvailableNonce;
+      
+      // Пропускаем зарезервированные nonces
+      while (manager.reservedNonces.has(nextNonce)) {
+        nextNonce += 1;
+      }
+      
+      manager.nextAvailableNonce = nextNonce + 1;
+      return nextNonce;
+    }
+  };
+
+  // НОВОЕ: освобождение использованного nonce
+  const releaseNonce = (chainId, address, nonce) => {
+    const manager = getNonceManager(chainId, address);
+    manager.reservedNonces.delete(nonce);
+    console.log(`Released nonce ${nonce} for ${address} on chain ${chainId}`);
   };
 
   // Получение газовых параметров
@@ -980,8 +1015,8 @@ export const useBlockchainUtils = () => {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
-        // УЛУЧШЕННОЕ управление nonce - используем централизованный менеджер
-        const nonce = await getNextNonce(chainId, embeddedWallet.address);
+        // УЛУЧШЕННОЕ управление nonce - используем централизованный менеджер с резервацией
+        const nonce = await getNextNonce(chainId, embeddedWallet.address, false, true); // isPreSigning = true
         
         const txData = {
           account: embeddedWallet.address,
@@ -1101,6 +1136,13 @@ export const useBlockchainUtils = () => {
       const tx = pool.transactions[pool.currentIndex];
       pool.currentIndex++;
 
+      // НОВОЕ: освобождаем nonce использованной pre-signed транзакции
+      const embeddedWallet = getEmbeddedWallet();
+      if (embeddedWallet && pool.baseNonce !== undefined) {
+        const usedNonce = pool.baseNonce + pool.currentIndex - 1;
+        releaseNonce(chainId, embeddedWallet.address, usedNonce);
+      }
+
       // УЛУЧШЕННАЯ логика автодозаправки - пополняем при достижении порога
       const usageRatio = pool.currentIndex / pool.transactions.length;
       if (usageRatio >= poolConfig.refillAt && !pool.hasTriggeredRefill && !pool.isRefilling) {
@@ -1110,7 +1152,7 @@ export const useBlockchainUtils = () => {
         try {
           const embeddedWallet = getEmbeddedWallet();
           if (embeddedWallet) {
-            const nextNonce = await getNextNonce(chainId, embeddedWallet.address);
+            const nextNonce = await getNextNonce(chainId, embeddedWallet.address, false, true); // Pre-signing для пополнения
             await extendPool(chainId, nextNonce, poolConfig.batchSize);
           }
         } catch (error) {
@@ -1138,8 +1180,8 @@ export const useBlockchainUtils = () => {
         throw new Error('No embedded wallet available for realtime signing');
       }
 
-      // УЛУЧШЕННОЕ получение nonce через централизованный менеджер
-      const nonce = await getNextNonce(chainId, embeddedWallet.address);
+      // УЛУЧШЕННОЕ получение nonce через централизованный менеджер для real-time транзакций
+      const nonce = await getNextNonce(chainId, embeddedWallet.address, false, false); // isPreSigning = false
 
       const txData = {
         account: embeddedWallet.address,
@@ -1546,6 +1588,19 @@ export const useBlockchainUtils = () => {
         }
       }
       
+      // Специальная обработка "already known" ошибок
+      if (error.message?.includes('already known')) {
+        console.log('⚠️ Transaction already known - possibly duplicate, treating as success');
+        success = true;
+        // Возвращаем фиктивный результат для известной транзакции
+        return {
+          hash: 'already_known',
+          isInstant: config.sendMethod === 'realtime_sendRawTransaction',
+          network: config.name,
+          duplicate: true
+        };
+      }
+      
       throw error;
     } finally {
       // Обновляем статус здоровья RPC endpoint
@@ -1561,7 +1616,9 @@ export const useBlockchainUtils = () => {
 
   // РЕВОЛЮЦИОННЫЙ основной метод отправки обновления с Real-Time Gaming архитектурой
   const sendUpdate = async (chainId) => {
+    // УЛУЧШЕННАЯ проверка на pending транзакции с более детальным контролем
     if (transactionPending) {
+      console.log('Transaction already pending, blocking jump');
       throw new Error('Transaction already pending, blocking jump');
     }
 
@@ -1737,104 +1794,96 @@ export const useBlockchainUtils = () => {
       // УЛУЧШЕННАЯ инициализация nonce manager
       const nonceManager = getNonceManager(chainId, embeddedWallet.address);
       
-      // ПАРАЛЛЕЛЬНАЯ инициализация - не блокируем игру!
-      const initializationPromises = [];
+      // ПАРАЛЛЕЛЬНАЯ инициализация - минимально необходимое для старта игры
+      console.log('💰 Current balance:', await checkBalance(chainId));
       
-      // 1. Проверяем баланс и получаем начальный nonce
-      const balanceAndNoncePromise = Promise.all([
-        checkBalance(chainId),
-        retryWithBackoff(async () => {
-          const { publicClient } = await createClients(chainId);
-          return await publicClient.getTransactionCount({
-            address: embeddedWallet.address,
-            blockTag: 'pending'
-          });
-        }, 3, 1000, chainId)
-      ]).then(([currentBalance, initialNonce]) => {
+      // Получаем начальный nonce для инициализации
+      try {
+        const { publicClient } = await createClients(chainId);
+        const initialNonce = await publicClient.getTransactionCount({
+          address: embeddedWallet.address,
+          blockTag: 'pending'
+        });
+        
         // Инициализируем nonce manager с текущим nonce
         nonceManager.currentNonce = initialNonce;
-        nonceManager.pendingNonce = initialNonce;
+        nonceManager.nextAvailableNonce = initialNonce;
         nonceManager.lastUpdate = Date.now();
 
-        console.log('💰 Current balance:', currentBalance);
         console.log('🎯 Starting nonce:', initialNonce);
-
-        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
-        if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
+        
+        // НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
+        isInitialized.current[chainKey] = true;
+        console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
+        
+      } catch (error) {
+        console.error('Error getting initial nonce:', error);
+        // Даже при ошибке, позволяем игре работать
+        nonceManager.currentNonce = 0;
+        nonceManager.nextAvailableNonce = 0;
+        nonceManager.lastUpdate = Date.now();
+        isInitialized.current[chainKey] = true;
+        console.log('⚠️ Started with fallback nonce, game ready');
+      }
+      
+      // ВСЁ ОСТАЛЬНОЕ ВЫПОЛНЯЕТСЯ В ФОНЕ БЕЗ БЛОКИРОВКИ ИГРЫ
+      setTimeout(async () => {
+        console.log('🚀 Full performance mode activating in background...');
+        
+        try {
+          // Проверяем баланс и вызываем faucet если нужно
+          const currentBalance = await checkBalance(chainId);
+          if (parseFloat(currentBalance) < 0.00005) {
+            console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
+            
+            callFaucet(embeddedWallet.address, chainId)
+              .then(() => {
+                console.log('✅ Background faucet completed');
+                setTimeout(() => checkBalance(chainId), 5000);
+              })
+              .catch(faucetError => {
+                console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
+              });
+          }
           
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
-          callFaucet(embeddedWallet.address, chainId)
+          // Pre-signing в фоновом режиме с правильной синхронизацией nonce
+          const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+          const fallbackConfig = getFallbackConfig(chainId);
+          
+          let batchSize = poolConfig.poolSize;
+          if (fallbackConfig) {
+            batchSize = fallbackConfig.reducedBatchSize;
+            console.log(`Using fallback batch size: ${batchSize}`);
+          }
+          
+          console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${nonceManager.currentNonce}`);
+          
+          // Запускаем pre-signing в фоне
+          preSignBatch(chainId, nonceManager.currentNonce, batchSize)
             .then(() => {
-              console.log('✅ Background faucet completed');
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
-              // Обновляем nonce после faucet
-              return getNextNonce(chainId, embeddedWallet.address, true);
+              const pool = preSignedPool.current[chainKey];
+              if (pool && pool.transactions.length > 0) {
+                console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
+                // Запускаем автоматическое пополнение после успешного pre-signing
+                startAutoReplenishment(chainId);
+              } else {
+                console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
+              }
             })
-            .catch(faucetError => {
-              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
+            .catch(error => {
+              console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
+              enableFallbackMode(chainId);
+              console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
             });
+            
+        } catch (error) {
+          console.warn('⚠️ Background optimization failed (non-critical):', error);
         }
         
-        return { currentBalance, initialNonce };
-      });
-      
-      initializationPromises.push(balanceAndNoncePromise);
-
-      // 2. НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
-      isInitialized.current[chainKey] = true;
-      console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
-      
-      // 3. Pre-signing в ФОНОВОМ режиме (не блокируем игру)
-      const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
-      const fallbackConfig = getFallbackConfig(chainId);
-      
-      let batchSize = poolConfig.poolSize;
-      if (fallbackConfig) {
-        batchSize = fallbackConfig.reducedBatchSize;
-        console.log(`Using fallback batch size: ${batchSize}`);
-      }
-      
-      // ФОНОВОЕ предподписание
-      const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
-        console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
-        
-        return preSignBatch(chainId, initialNonce, batchSize)
-          .then(() => {
-            const pool = preSignedPool.current[chainKey];
-            if (pool && pool.transactions.length > 0) {
-              console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
-            } else {
-              console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
-            }
-          })
-          .catch(error => {
-            console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
-            enableFallbackMode(chainId);
-            console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
-          });
-      });
-      
-      initializationPromises.push(preSigningPromise);
-      
-      // Ждем только базовую инициализацию (баланс + nonce)
-      await balanceAndNoncePromise;
+        console.log('✅ Full blockchain optimization complete');
+      }, 100); // Минимальная задержка для неблокирующего запуска
       
       console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
-      
-      if (fallbackConfig) {
-        console.log('⚠️ Running in fallback mode - reduced performance expected');
-      } else {
-        console.log('🚀 Full performance mode activating in background...');
-      }
-      
-      // Остальные задачи выполняются в фоне
-      Promise.all(initializationPromises.slice(1)).then(() => {
-        console.log('✅ Full blockchain optimization complete');
-      }).catch(error => {
-        console.warn('⚠️ Some background optimizations failed (non-critical):', error);
-      });
       
     } catch (error) {
       console.error('❌ Critical initialization error:', error);
@@ -2239,6 +2288,95 @@ export const useBlockchainUtils = () => {
       }, 2000); // Через 2 секунды после загрузки
     }
   }, []);
+
+  // НОВОЕ: автоматическое пополнение пула транзакций в фоне
+  const autoReplenishPool = useRef({});
+  
+  const startAutoReplenishment = (chainId) => {
+    const chainKey = chainId.toString();
+    
+    // Предотвращаем множественные интервалы для одной сети
+    if (autoReplenishPool.current[chainKey]) {
+      return;
+    }
+    
+    const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+    
+    // Запускаем автоматическое пополнение каждые 10 секунд
+    autoReplenishPool.current[chainKey] = setInterval(async () => {
+      try {
+        const pool = preSignedPool.current[chainKey];
+        const embeddedWallet = getEmbeddedWallet();
+        
+        if (!pool || !embeddedWallet || pool.isRefilling) {
+          return;
+        }
+        
+        const availableTransactions = pool.transactions.length - pool.currentIndex;
+        const lowThreshold = Math.floor(poolConfig.poolSize * 0.2); // Пополняем когда остается 20%
+        
+        if (availableTransactions <= lowThreshold) {
+          console.log(`🔄 Auto-replenishing pool: ${availableTransactions}/${poolConfig.poolSize} transactions remaining`);
+          
+          const newTransactionsNeeded = poolConfig.poolSize - availableTransactions;
+          const nextNonce = await getNextNonce(chainId, embeddedWallet.address, false, true);
+          
+          // Запускаем пополнение в фоне, не блокируя игру
+          extendPool(chainId, nextNonce, newTransactionsNeeded)
+            .catch(error => {
+              console.warn('⚠️ Auto-replenishment failed (non-blocking):', error);
+            });
+        }
+      } catch (error) {
+        console.warn('⚠️ Auto-replenishment check failed:', error);
+      }
+    }, 10000); // Проверяем каждые 10 секунд
+    
+    console.log(`🔄 Started auto-replenishment for chain ${chainId}`);
+  };
+  
+  const stopAutoReplenishment = (chainId) => {
+    const chainKey = chainId.toString();
+    if (autoReplenishPool.current[chainKey]) {
+      clearInterval(autoReplenishPool.current[chainKey]);
+      delete autoReplenishPool.current[chainKey];
+      console.log(`⏹️ Stopped auto-replenishment for chain ${chainId}`);
+    }
+  };
+  
+  // Останавливаем автоматическое пополнение при размонтировании компонента
+  useEffect(() => {
+    return () => {
+      Object.keys(autoReplenishPool.current).forEach(chainKey => {
+        clearInterval(autoReplenishPool.current[chainKey]);
+      });
+    };
+  }, []);
+
+  // НОВОЕ: система отслеживания отправленных транзакций для предотвращения дубликатов
+  const sentTransactions = useRef({});
+  
+  const isTransactionSent = (chainId, txHash) => {
+    const chainKey = chainId.toString();
+    if (!sentTransactions.current[chainKey]) {
+      sentTransactions.current[chainKey] = new Set();
+    }
+    return sentTransactions.current[chainKey].has(txHash);
+  };
+  
+  const markTransactionSent = (chainId, txHash) => {
+    const chainKey = chainId.toString();
+    if (!sentTransactions.current[chainKey]) {
+      sentTransactions.current[chainKey] = new Set();
+    }
+    sentTransactions.current[chainKey].add(txHash);
+    
+    // Очищаем старые записи (держим только последние 100 транзакций)
+    if (sentTransactions.current[chainKey].size > 100) {
+      const entries = Array.from(sentTransactions.current[chainKey]);
+      sentTransactions.current[chainKey] = new Set(entries.slice(-50));
+    }
+  };
 
   return {
     // Состояние
