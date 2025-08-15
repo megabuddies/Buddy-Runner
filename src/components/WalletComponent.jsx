@@ -104,16 +104,29 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         const networkConfig = getNetworkConfig(chainId);
         if (networkConfig) {
           console.log(`Adding network ${networkName} to wallet...`);
-          await addNetwork(wallet, networkConfig);
           
-          // Small delay to ensure network is added
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Then try to switch again
-          console.log(`Switching to ${networkName}...`);
-          await wallet.switchChain(chainId);
-          setShowNetworks(false);
-          console.log(`Successfully added and switched to ${networkName}`);
+          try {
+            await addNetwork(wallet, networkConfig);
+            
+            // Small delay to ensure network is added
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Then try to switch again
+            console.log(`Switching to ${networkName}...`);
+            await wallet.switchChain(chainId);
+            setShowNetworks(false);
+            console.log(`Successfully added and switched to ${networkName}`);
+          } catch (addNetworkError) {
+            // Check if this is the Privy mainnet RPC limitation
+            if (addNetworkError.message?.includes('this request method is not supported') || 
+                addNetworkError.message?.includes('mainnet.rpc.privy.systems') ||
+                addNetworkError.code === 'SERVER_ERROR') {
+              // Network addition failed due to Privy limitation, but user was informed
+              console.log('Network addition failed due to Privy limitation - user needs to add manually');
+              return; // Exit gracefully, user was already informed
+            }
+            throw addNetworkError; // Re-throw other errors
+          }
         } else {
           throw new Error(`Network configuration not found for chain ID ${chainId}`);
         }
@@ -186,6 +199,25 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         console.log('Network already exists in wallet');
         return;
       }
+      
+      // Handle Privy's mainnet RPC limitation for testnet chains
+      if (error.message.includes('this request method is not supported') || 
+          error.message.includes('mainnet.rpc.privy.systems') ||
+          error.code === 'SERVER_ERROR') {
+        console.warn('⚠️ Privy mainnet RPC does not support adding testnet chains');
+        console.log('Network configuration available, but automatic addition failed:', networkConfig);
+        
+        // Show user-friendly message for manual network addition
+        alert(`Please add the ${networkConfig.chainName} network manually in your wallet:\n\n` +
+              `Network Name: ${networkConfig.chainName}\n` +
+              `RPC URL: ${networkConfig.rpcUrls[0]}\n` +
+              `Chain ID: ${networkConfig.chainId}\n` +
+              `Currency Symbol: ${networkConfig.nativeCurrency.symbol}\n` +
+              `Block Explorer: ${networkConfig.blockExplorerUrls[0]}\n\n` +
+              `After adding the network manually, try switching again.`);
+        return;
+      }
+      
       throw error;
     }
   };
