@@ -140,41 +140,22 @@ export const useBlockchainUtils = () => {
     rpcHealth: 2 * 60 * 1000  // 2 минуты для RPC health
   };
 
-  // Загрузка глобального кеша из localStorage
-  const loadGlobalCache = () => {
-    try {
-      const cached = localStorage.getItem(GLOBAL_CACHE_KEY);
-      if (cached) {
-        const parsed = JSON.parse(cached);
-        const now = Date.now();
-        
-        // Проверяем и загружаем только актуальные данные
-        if (parsed.gasParams && (now - parsed.gasParams.timestamp) < CACHE_EXPIRY.gasParams) {
-          gasParams.current = parsed.gasParams.data;
-          console.log('🎯 Loaded cached gas parameters from storage');
-        }
-        
-        if (parsed.chainParams && (now - parsed.chainParams.timestamp) < CACHE_EXPIRY.chainParams) {
-          chainParamsCache.current = parsed.chainParams.data;
-          console.log('🎯 Loaded cached chain parameters from storage');
-        }
-        
-        if (parsed.rpcHealth && (now - parsed.rpcHealth.timestamp) < CACHE_EXPIRY.rpcHealth) {
-          rpcHealthStatus.current = parsed.rpcHealth.data;
-          console.log('🎯 Loaded cached RPC health from storage');
-        }
-      }
-    } catch (error) {
-      console.warn('Failed to load global cache:', error);
-    }
-  };
-
-  // Сохранение глобального кеша в localStorage
+  // Сохранение глобального кеша в localStorage с обработкой BigInt
   const saveGlobalCache = () => {
     try {
+      // Функция для безопасной сериализации BigInt
+      const serializeBigInt = (obj) => {
+        return JSON.parse(JSON.stringify(obj, (key, value) => {
+          if (typeof value === 'bigint') {
+            return value.toString() + 'n'; // Добавляем маркер 'n' для BigInt
+          }
+          return value;
+        }));
+      };
+      
       const cacheData = {
         gasParams: {
-          data: gasParams.current,
+          data: serializeBigInt(gasParams.current),
           timestamp: Date.now()
         },
         chainParams: {
@@ -193,6 +174,50 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Загрузка глобального кеша из localStorage с восстановлением BigInt
+  const loadGlobalCache = () => {
+    try {
+      const cached = localStorage.getItem(GLOBAL_CACHE_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        const now = Date.now();
+        
+        // Функция для восстановления BigInt
+        const deserializeBigInt = (obj) => {
+          if (typeof obj === 'string' && obj.endsWith('n')) {
+            return BigInt(obj.slice(0, -1));
+          }
+          if (typeof obj === 'object' && obj !== null) {
+            const result = Array.isArray(obj) ? [] : {};
+            for (const [key, value] of Object.entries(obj)) {
+              result[key] = deserializeBigInt(value);
+            }
+            return result;
+          }
+          return obj;
+        };
+        
+        // Проверяем и загружаем только актуальные данные
+        if (parsed.gasParams && (now - parsed.gasParams.timestamp) < CACHE_EXPIRY.gasParams) {
+          gasParams.current = deserializeBigInt(parsed.gasParams.data);
+          console.log('🎯 Loaded cached gas parameters from storage');
+        }
+        
+        if (parsed.chainParams && (now - parsed.chainParams.timestamp) < CACHE_EXPIRY.chainParams) {
+          chainParamsCache.current = parsed.chainParams.data;
+          console.log('🎯 Loaded cached chain parameters from storage');
+        }
+        
+        if (parsed.rpcHealth && (now - parsed.rpcHealth.timestamp) < CACHE_EXPIRY.rpcHealth) {
+          rpcHealthStatus.current = parsed.rpcHealth.data;
+          console.log('🎯 Loaded cached RPC health from storage');
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to load global cache:', error);
+    }
+  };
+
   // Инициализация глобального кеша при загрузке
   useEffect(() => {
     loadGlobalCache();
@@ -204,8 +229,24 @@ export const useBlockchainUtils = () => {
     const handleBeforeUnload = () => saveGlobalCache();
     window.addEventListener('beforeunload', handleBeforeUnload);
     
+    // АВТОМАТИЧЕСКИЙ сброс circuit breaker для быстрого восстановления
+    const resetCircuitBreakerInterval = setInterval(() => {
+      Object.keys(circuitBreakers.current).forEach(chainId => {
+        const cb = circuitBreakers.current[chainId];
+        if (cb && cb.state === 'OPEN') {
+          const timeSinceLastFailure = Date.now() - cb.lastFailureTime;
+          if (timeSinceLastFailure > cb.timeout) {
+            cb.state = 'HALF_OPEN';
+            cb.failures = 0;
+            console.log(`🔄 Auto-reset circuit breaker for chain ${chainId} - trying again`);
+          }
+        }
+      });
+    }, 10000); // Проверяем каждые 10 секунд
+    
     return () => {
       clearInterval(saveInterval);
+      clearInterval(resetCircuitBreakerInterval);
       window.removeEventListener('beforeunload', handleBeforeUnload);
       saveGlobalCache(); // Финальное сохранение
     };
@@ -1176,9 +1217,7 @@ export const useBlockchainUtils = () => {
       const response = await fetch('/api/faucet', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-          'User-Agent': 'MegaBuddies-Gaming-Client/1.0'
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
           address, 
@@ -1186,7 +1225,8 @@ export const useBlockchainUtils = () => {
           timestamp: Date.now(), // Добавляем timestamp для предотвращения кеширования
           clientVersion: '1.0'    // Версия клиента для аналитики
         }),
-        signal: controller.signal
+        signal: controller.signal,
+        mode: 'cors'
       });
 
       clearTimeout(timeoutId);
@@ -1303,14 +1343,12 @@ export const useBlockchainUtils = () => {
           const timeoutId = setTimeout(() => controller.abort(), config.connectionTimeouts.request);
           
           try {
-            // СПЕЦИАЛЬНЫЕ заголовки для MegaETH real-time
+            // ИСПРАВЛЕНО: убираем заголовки, вызывающие CORS preflight
             const response = await fetch(rpcUrl, {
               method: 'POST',
               headers: { 
-                'Content-Type': 'application/json',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive',
-                'User-Agent': 'MegaBuddies-Gaming-Client/1.0'
+                'Content-Type': 'application/json'
+                // Убрали все дополнительные заголовки для избежания CORS
               },
               body: JSON.stringify({
                 jsonrpc: '2.0',
@@ -1318,7 +1356,8 @@ export const useBlockchainUtils = () => {
                 params: [signedTx],
                 id: Date.now()
               }),
-              signal: controller.signal
+              signal: controller.signal,
+              mode: 'cors' // Явно указываем CORS режим
             });
 
             clearTimeout(timeoutId);
@@ -1393,8 +1432,7 @@ export const useBlockchainUtils = () => {
           response = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 
-              'Content-Type': 'application/json',
-              'User-Agent': 'MegaBuddies-Gaming-Client/1.0'
+              'Content-Type': 'application/json'
             },
             body: JSON.stringify({
               jsonrpc: '2.0',
@@ -1402,7 +1440,8 @@ export const useBlockchainUtils = () => {
               params: [signedTx],
               id: Date.now()
             }),
-            signal: controller.signal
+            signal: controller.signal,
+            mode: 'cors'
           });
 
           clearTimeout(timeoutId);
@@ -1448,8 +1487,7 @@ export const useBlockchainUtils = () => {
           response = await fetch(rpcUrl, {
             method: 'POST',
             headers: { 
-              'Content-Type': 'application/json',
-              'User-Agent': 'MegaBuddies-Gaming-Client/1.0'
+              'Content-Type': 'application/json'
             },
             body: JSON.stringify({
               jsonrpc: '2.0',
@@ -1457,7 +1495,8 @@ export const useBlockchainUtils = () => {
               params: [signedTx],
               id: Date.now()
             }),
-            signal: controller.signal
+            signal: controller.signal,
+            mode: 'cors'
           });
 
           clearTimeout(timeoutId);
@@ -1661,7 +1700,7 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // ЗНАЧИТЕЛЬНО УЛУЧШЕННАЯ инициализация данных
+  // РЕВОЛЮЦИОННАЯ неблокирующая инициализация данных для instant gaming
   const initData = async (chainId) => {
     const chainKey = chainId.toString();
     if (isInitialized.current[chainKey] || isInitializing) {
@@ -1670,7 +1709,7 @@ export const useBlockchainUtils = () => {
 
     try {
       setIsInitializing(true);
-      console.log('Initializing blockchain data for chain:', chainId);
+      console.log('🚀 Starting instant blockchain initialization for chain:', chainId);
 
       // Wait for embedded wallet to be created (with retry)
       let embeddedWallet = null;
@@ -1690,7 +1729,7 @@ export const useBlockchainUtils = () => {
         throw new Error('No embedded wallet available');
       }
 
-      console.log('Using embedded wallet address:', embeddedWallet.address);
+      console.log('✅ Using embedded wallet address:', embeddedWallet.address);
 
       // Получаем кешированные параметры сети (минимизируем RPC вызовы)
       await getCachedChainParams(chainId);
@@ -1698,8 +1737,11 @@ export const useBlockchainUtils = () => {
       // УЛУЧШЕННАЯ инициализация nonce manager
       const nonceManager = getNonceManager(chainId, embeddedWallet.address);
       
-      // Проверяем баланс и получаем начальный nonce одновременно
-              const [currentBalance, initialNonce] = await Promise.all([
+      // ПАРАЛЛЕЛЬНАЯ инициализация - не блокируем игру!
+      const initializationPromises = [];
+      
+      // 1. Проверяем баланс и получаем начальный nonce
+      const balanceAndNoncePromise = Promise.all([
         checkBalance(chainId),
         retryWithBackoff(async () => {
           const { publicClient } = await createClients(chainId);
@@ -1708,38 +1750,43 @@ export const useBlockchainUtils = () => {
             blockTag: 'pending'
           });
         }, 3, 1000, chainId)
-      ]);
+      ]).then(([currentBalance, initialNonce]) => {
+        // Инициализируем nonce manager с текущим nonce
+        nonceManager.currentNonce = initialNonce;
+        nonceManager.pendingNonce = initialNonce;
+        nonceManager.lastUpdate = Date.now();
 
-      // Инициализируем nonce manager с текущим nonce
-      nonceManager.currentNonce = initialNonce;
-      nonceManager.pendingNonce = initialNonce;
-      nonceManager.lastUpdate = Date.now();
+        console.log('💰 Current balance:', currentBalance);
+        console.log('🎯 Starting nonce:', initialNonce);
 
-      console.log('Current balance:', currentBalance);
-      console.log('Starting nonce:', initialNonce);
-
-      // Если баланс меньше 0.00005 ETH, вызываем faucet
-      if (parseFloat(currentBalance) < 0.00005) {
-        console.log(`Balance is ${currentBalance} ETH (< 0.00005), calling faucet...`);
-        try {
-          await callFaucet(embeddedWallet.address, chainId);
+        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
+        if (parseFloat(currentBalance) < 0.00005) {
+          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-          // Ждём немного и проверяем баланс снова
-          console.log('Waiting for faucet transaction to complete...');
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          const newBalance = await checkBalance(chainId);
-          console.log('Balance after faucet:', newBalance);
-          
-          // После faucet обновляем nonce, так как могли появиться новые транзакции
-          await getNextNonce(chainId, embeddedWallet.address, true);
-        } catch (faucetError) {
-          console.error('Faucet failed, but continuing with initialization:', faucetError);
-          // Don't throw - continue with initialization even if faucet fails
-          // Users can manually add funds or try faucet later
+          // НЕБЛОКИРУЮЩИЙ faucet вызов
+          callFaucet(embeddedWallet.address, chainId)
+            .then(() => {
+              console.log('✅ Background faucet completed');
+              // Обновляем баланс через 5 секунд
+              setTimeout(() => checkBalance(chainId), 5000);
+              // Обновляем nonce после faucet
+              return getNextNonce(chainId, embeddedWallet.address, true);
+            })
+            .catch(faucetError => {
+              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
+            });
         }
-      }
+        
+        return { currentBalance, initialNonce };
+      });
+      
+      initializationPromises.push(balanceAndNoncePromise);
 
-      // УЛУЧШЕННОЕ предподписание пакета транзакций с адаптивным размером
+      // 2. НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
+      isInitialized.current[chainKey] = true;
+      console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
+      
+      // 3. Pre-signing в ФОНОВОМ режиме (не блокируем игру)
       const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
       const fallbackConfig = getFallbackConfig(chainId);
       
@@ -1749,37 +1796,52 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      console.log(`Pre-signing ${batchSize} transactions starting from nonce ${nonceManager.currentNonce}`);
-      
-      try {
-        await preSignBatch(chainId, nonceManager.currentNonce, batchSize);
+      // ФОНОВОЕ предподписание
+      const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
+        console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
         
-        // Проверяем, есть ли хотя бы одна подписанная транзакция
-        const pool = preSignedPool.current[chainKey];
-        if (!pool || pool.transactions.length === 0) {
-          console.warn('No transactions were pre-signed, but continuing with manual signing mode');
-          // Не бросаем ошибку, продолжаем работу в режиме ручного подписания
-        } else {
-          console.log(`Successfully pre-signed ${pool.transactions.length} transactions for immediate use`);
-        }
-      } catch (error) {
-        console.error('Pre-signing failed, enabling fallback mode:', error);
-        enableFallbackMode(chainId);
-        // Продолжаем инициализацию в fallback режиме
-      }
-
-      isInitialized.current[chainKey] = true;
-      console.log('Initialization complete for chain:', chainId);
+        return preSignBatch(chainId, initialNonce, batchSize)
+          .then(() => {
+            const pool = preSignedPool.current[chainKey];
+            if (pool && pool.transactions.length > 0) {
+              console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
+            } else {
+              console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
+            }
+          })
+          .catch(error => {
+            console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
+            enableFallbackMode(chainId);
+            console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
+          });
+      });
+      
+      initializationPromises.push(preSigningPromise);
+      
+      // Ждем только базовую инициализацию (баланс + nonce)
+      await balanceAndNoncePromise;
+      
+      console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
       
       if (fallbackConfig) {
         console.log('⚠️ Running in fallback mode - reduced performance expected');
       } else {
-        console.log('✅ Full performance mode enabled');
+        console.log('🚀 Full performance mode activating in background...');
       }
       
+      // Остальные задачи выполняются в фоне
+      Promise.all(initializationPromises.slice(1)).then(() => {
+        console.log('✅ Full blockchain optimization complete');
+      }).catch(error => {
+        console.warn('⚠️ Some background optimizations failed (non-critical):', error);
+      });
+      
     } catch (error) {
-      console.error('Initialization error:', error);
-      throw error;
+      console.error('❌ Critical initialization error:', error);
+      // Даже при ошибке, позволяем игре работать в fallback режиме
+      isInitialized.current[chainKey] = true;
+      enableFallbackMode(chainId);
+      console.log('🔄 Emergency fallback mode enabled - game will work with realtime signing');
     } finally {
       setIsInitializing(false);
     }
@@ -2140,6 +2202,20 @@ export const useBlockchainUtils = () => {
           } else {
             console.log('📊 No performance data available yet');
           }
+        },
+        
+        // 🚨 ЭКСТРЕННЫЙ сброс circuit breaker для немедленного восстановления
+        forceResetAllCircuitBreakers: () => {
+          Object.keys(circuitBreakers.current).forEach(chainId => {
+            const cb = circuitBreakers.current[chainId];
+            if (cb) {
+              cb.state = 'CLOSED';
+              cb.failures = 0;
+              cb.lastFailureTime = 0;
+              console.log(`✅ Force reset circuit breaker for chain ${chainId}`);
+            }
+          });
+          console.log('🚀 All circuit breakers reset - ready for gaming!');
         }
       };
       
@@ -2148,6 +2224,19 @@ export const useBlockchainUtils = () => {
       console.log('  • window.blockchainDebug.generatePerformanceReport(6342)');
       console.log('  • window.blockchainDebug.quickStats(6342)');
       console.log('  • window.blockchainDebug.getPerformanceMetrics(6342)');
+      console.log('  • window.blockchainDebug.forceResetAllCircuitBreakers() // Экстренный сброс');
+      
+      // АВТОМАТИЧЕСКИЙ сброс circuit breakers при первой загрузке
+      setTimeout(() => {
+        Object.keys(circuitBreakers.current).forEach(chainId => {
+          const cb = circuitBreakers.current[chainId];
+          if (cb && cb.state === 'OPEN') {
+            cb.state = 'CLOSED';
+            cb.failures = 0;
+            console.log(`🔄 Auto-reset circuit breaker for chain ${chainId} on page load`);
+          }
+        });
+      }, 2000); // Через 2 секунды после загрузки
     }
   }, []);
 
