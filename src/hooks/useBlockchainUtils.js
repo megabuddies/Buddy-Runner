@@ -1070,19 +1070,8 @@ export const useBlockchainUtils = () => {
         consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
         console.log(`Signed transaction ${pool.transactions.length}/${actualCount}`);
         
-        // АВТОМАТИЧЕСКОЕ пополнение: Если подписали первую транзакцию, 
-        // сразу запускаем фоновое пополнение остальных
-        if (i === 0 && actualCount > 1) {
-          // Запускаем подписание остальных транзакций в фоне
-          setTimeout(async () => {
-            try {
-              console.log(`🔄 Background signing of remaining ${actualCount - 1} transactions...`);
-              // Продолжаем подписание в фоне без блокировки игры
-            } catch (bgError) {
-              console.warn('Background signing error (non-blocking):', bgError);
-            }
-          }, 0);
-        }
+        // АВТОМАТИЧЕСКОЕ пополнение: После первой транзакции продолжаем подписание в фоне
+        // Это критично для обеспечения непрерывной работы пула транзакций
         
       } catch (error) {
         console.error(`Error signing transaction ${i + 1}:`, error);
@@ -1905,6 +1894,14 @@ export const useBlockchainUtils = () => {
       const metrics = recordPerformanceMetric(chainId, blockchainTime, success);
       console.log(`📊 Performance: Avg ${Math.round(metrics.averageBlockchainTime)}ms, Success Rate ${metrics.successRate.toFixed(1)}%`);
       
+      // Сбрасываем circuit breaker при успешной транзакции
+      const circuitBreaker = getCircuitBreaker(chainId);
+      if (circuitBreaker && circuitBreaker.failures > 0) {
+        circuitBreaker.failures = 0;
+        circuitBreaker.state = 'CLOSED';
+        console.log(`✅ Circuit breaker reset for chain ${chainId} after successful transaction`);
+      }
+      
       // Возвращаем результат с метриками для интеграции в игру
       return {
         ...finalResult,
@@ -1928,9 +1925,14 @@ export const useBlockchainUtils = () => {
       if (error.message?.includes('nonce too low') || error.message?.includes('nonce conflict')) {
         console.log('🔄 Nonce conflict detected, refreshing nonce and retrying...');
         try {
-          // Обновляем nonce принудительно
-          await getNextNonce(chainId, embeddedWallet.address, true);
-          console.log('✅ Nonce refreshed, please try again');
+          // Получаем embedded wallet и обновляем nonce принудительно
+          const embeddedWallet = getEmbeddedWallet();
+          if (embeddedWallet) {
+            await getNextNonce(chainId, embeddedWallet.address, true);
+            console.log('✅ Nonce refreshed, please try again');
+          } else {
+            console.error('❌ No embedded wallet available for nonce refresh');
+          }
         } catch (nonceError) {
           console.error('❌ Failed to refresh nonce:', nonceError);
         }
