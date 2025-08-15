@@ -87,15 +87,15 @@ export default async function handler(req, res) {
       });
     }
 
-    // Проверяем, что у пользователя мало средств (< 0.001 ETH)
+    // Проверяем, что у пользователя мало средств (< 0.00005 ETH)
     const userBalance = await provider.getBalance(address);
-    const minBalance = ethers.parseEther('0.001'); // Изменено с 0.01 на 0.001 ETH
+    const minBalance = ethers.parseEther('0.00005'); // Изменено на 0.00005 ETH
     
     if (userBalance >= minBalance) {
       return res.status(400).json({ 
         error: 'Address already has sufficient balance',
         balance: ethers.formatEther(userBalance),
-        minimum: '0.001'
+        minimum: '0.00005'
       });
     }
 

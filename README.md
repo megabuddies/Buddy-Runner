@@ -99,7 +99,7 @@ Supported features:
 
 ## 💰 Faucet Configuration
 
-The game includes an automatic faucet system that provides 0.0001 ETH to users with low balances (< 0.001 ETH).
+The game includes an automatic faucet system that provides 0.0001 ETH to users with low balances (< 0.00005 ETH).
 
 ### Setting up the Faucet Wallet
 
@@ -116,7 +116,7 @@ The game includes an automatic faucet system that provides 0.0001 ETH to users w
 
 ### How the Faucet Works
 
-- Automatically triggers when user balance < 0.001 ETH
+- Automatically triggers when user balance < 0.00005 ETH
 - Sends 0.0001 ETH per request
 - Users can also manually request funds via the "Get Test ETH" button
 - Works across all supported networks (MegaETH, Base Sepolia, etc.)

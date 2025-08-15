@@ -12,7 +12,7 @@ export const PERFORMANCE_CONFIG = {
   alerts: {
     slowTransaction: 15000, // Предупреждение если транзакция > 15 секунд
     highFailureRate: 0.3, // Предупреждение если >30% транзакций неудачны
-    lowBalance: 0.001, // Предупреждение если баланс < 0.001 ETH
+    lowBalance: 0.00005, // Предупреждение если баланс < 0.00005 ETH
     circuitBreakerOpen: true, // Уведомление когда circuit breaker открыт
   },
 
