@@ -50,7 +50,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
           if (currentChainId !== selectedNetwork.id) {
             console.log(`Auto-switching to ${selectedNetwork.name}...`);
             setIsNetworkSwitching(true);
-            await switchNetwork(selectedNetwork.id);
+            await handleNetworkSwitch(selectedNetwork.id);
           }
         } catch (error) {
           console.warn('Auto network switch failed:', error);
@@ -75,14 +75,24 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     }
   };
 
-  const switchNetwork = async (chainId) => {
-    if (!wallets || wallets.length === 0) return;
+  const handleNetworkSwitch = async (chainId) => {
+    if (!wallets || wallets.length === 0) {
+      alert('No wallet connected. Please connect your wallet first.');
+      return;
+    }
     
     setIsNetworkSwitching(true);
     
     try {
       const wallet = wallets[0];
       const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
+      
+      // Check if wallet is already on the correct network
+      if (wallet.chainId === chainId) {
+        console.log(`Already on ${networkName} (Chain ID: ${chainId})`);
+        setShowNetworks(false);
+        return;
+      }
       
       // Safely check if wallet supports switchChain method
       if (typeof wallet.switchChain !== 'function') {
@@ -98,8 +108,31 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         console.log(`Successfully switched to ${networkName}`);
         return;
       } catch (switchError) {
-        // If switching fails, try to add the network first
-        console.log(`Network ${networkName} not found, attempting to add it...`, switchError);
+        console.log(`Network ${networkName} switch failed:`, switchError);
+        
+        // Handle Privy's "Unsupported chainId" error
+        if (switchError.message?.includes('Unsupported chainId') || 
+            switchError.message?.includes('unsupported chain')) {
+          console.log('Privy does not support this chain ID, attempting manual network addition...');
+          
+          const networkConfig = getNetworkConfig(chainId);
+          if (networkConfig) {
+            alert(`Privy wallet doesn't support ${networkName} automatically.\n\n` +
+                  `Please add this network manually in your wallet:\n\n` +
+                  `Network Name: ${networkConfig.chainName}\n` +
+                  `RPC URL: ${networkConfig.rpcUrls[0]}\n` +
+                  `Chain ID: ${networkConfig.chainId}\n` +
+                  `Currency Symbol: ${networkConfig.nativeCurrency.symbol}\n` +
+                  `Block Explorer: ${networkConfig.blockExplorerUrls[0]}\n\n` +
+                  `After adding the network manually, it should appear in your wallet.`);
+          } else {
+            alert(`Network ${networkName} is not supported by this wallet.`);
+          }
+          return;
+        }
+        
+        // If switching fails for other reasons, try to add the network first
+        console.log(`Network ${networkName} not found, attempting to add it...`);
         
         const networkConfig = getNetworkConfig(chainId);
         if (networkConfig) {
@@ -139,6 +172,8 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         userMessage += 'User cancelled the operation.';
       } else if (error.message.includes('already pending')) {
         userMessage += 'Another network operation is in progress. Please wait and try again.';
+      } else if (error.message.includes('Unsupported chainId')) {
+        userMessage = 'This network is not supported by your wallet. Please add it manually.';
       } else {
         userMessage += 'Please try again or add the network manually.';
       }
@@ -302,7 +337,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
                     className={`network-option ${
                       getCurrentNetwork()?.id === network.id ? 'active' : ''
                     } ${selectedNetwork?.id === network.id ? 'selected-game-network' : ''}`}
-                    onClick={() => switchNetwork(network.id)}
+                    onClick={() => handleNetworkSwitch(network.id)}
                     disabled={isNetworkSwitching}
                   >
                     {isNetworkSwitching ? '🔄' : network.emoji} {network.name}
