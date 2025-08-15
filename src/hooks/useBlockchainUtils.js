@@ -318,23 +318,25 @@ export const useBlockchainUtils = () => {
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
       poolSize: 30, // Увеличен для лучшей производительности как в Crossy Fluffle
-      refillAt: 0.3, // Очень раннее пополнение для избежания простоев
-      batchSize: 12, // Больший размер пакета для эффективности  
+      refillAt: 0.2, // СВЕРХ-РАННЕЕ пополнение для непрерывной игры
+      batchSize: 15, // Больший размер пакета для эффективности  
       maxRetries: 3,
-      retryDelay: 200, // Быстрые retry для MegaETH
+      retryDelay: 100, // Еще более быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
       maxBurstSize: 5, // Максимум транзакций в burst режиме
-      burstCooldown: 500 // Короткий cooldown для реального времени
+      burstCooldown: 200, // Еще более короткий cooldown для реального времени
+      instantRefill: true // Мгновенное пополнение пула
     },
     31337: { // Foundry
       poolSize: 20,
-      refillAt: 0.4,
+      refillAt: 0.3, // Более раннее пополнение
       batchSize: 10,
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
       maxBurstSize: 4,
-      burstCooldown: 300
+      burstCooldown: 300,
+      instantRefill: true
     },
     50311: { // Somnia
       poolSize: 15,
@@ -358,13 +360,14 @@ export const useBlockchainUtils = () => {
     },
     default: {
       poolSize: 15,
-      refillAt: 0.5,
+      refillAt: 0.4, // Более раннее пополнение по умолчанию
       batchSize: 8,
       maxRetries: 3,
       retryDelay: 300,
       burstMode: false,
       maxBurstSize: 2,
-      burstCooldown: 1000
+      burstCooldown: 1000,
+      instantRefill: false // По умолчанию выключено для стабильности
     }
   };
 
@@ -934,8 +937,9 @@ export const useBlockchainUtils = () => {
   };
 
   // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ предварительное подписание пакета транзакций
-  const preSignBatch = async (chainId, startNonce, count) => {
+  const preSignBatch = async (chainId, startNonce, count, options = {}) => {
     const chainKey = chainId.toString();
+    const { isInstantStart = false, batchSize: customBatchSize } = options;
     
     // Получаем конфигурацию для данной сети
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
@@ -943,7 +947,12 @@ export const useBlockchainUtils = () => {
     
     // Применяем конфигурацию
     let actualCount = Math.min(count, poolConfig.poolSize);
-    if (fallbackConfig) {
+    
+    // Для мгновенного старта используем меньший размер пакета
+    if (isInstantStart) {
+      actualCount = customBatchSize || Math.min(5, actualCount); // Начинаем с малого пакета
+      console.log(`🚀 Instant start mode: pre-signing initial batch of ${actualCount} transactions`);
+    } else if (fallbackConfig) {
       actualCount = Math.min(actualCount, fallbackConfig.reducedBatchSize);
       console.log(`Using fallback mode for chain ${chainId}: batch size ${actualCount}`);
     }
@@ -956,7 +965,8 @@ export const useBlockchainUtils = () => {
         currentIndex: 0,
         baseNonce: startNonce,
         hasTriggeredRefill: false,
-        isRefilling: false
+        isRefilling: false,
+        isInstantMode: isInstantStart
       };
     }
 
@@ -972,12 +982,14 @@ export const useBlockchainUtils = () => {
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
 
+    // Для мгновенного режима уменьшаем задержки
+    const baseDelay = isInstantStart ? 10 : (fallbackConfig ? fallbackConfig.increasedDelay : poolConfig.retryDelay);
+
     for (let i = 0; i < actualCount; i++) {
       try {
-        // Добавляем задержку между подписаниями
-        const delay = fallbackConfig ? fallbackConfig.increasedDelay : poolConfig.retryDelay;
-        if (delay > 0 && i > 0) {
-          await new Promise(resolve => setTimeout(resolve, delay));
+        // Добавляем задержку между подписаниями (меньше для instant mode)
+        if (baseDelay > 0 && i > 0) {
+          await new Promise(resolve => setTimeout(resolve, baseDelay));
         }
         
         // УЛУЧШЕННОЕ управление nonce - используем централизованный менеджер
@@ -1025,6 +1037,20 @@ export const useBlockchainUtils = () => {
         
         consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
         console.log(`Signed transaction ${pool.transactions.length}/${actualCount}`);
+        
+        // В мгновенном режиме сразу делаем транзакции доступными
+        if (isInstantStart && pool.transactions.length >= 2) {
+          console.log(`⚡ Quick-start pool ready with ${pool.transactions.length} transactions!`);
+          console.log(`🎮 GAMING IS NOW READY - instant transactions available!`);
+          // Продолжаем подписание в фоне
+          if (actualCount > pool.transactions.length) {
+            console.log(`🔄 Background pre-signing will continue for ${actualCount - pool.transactions.length} more transactions...`);
+            setTimeout(() => {
+              continuePreSigning(chainId, startNonce + pool.transactions.length, actualCount - pool.transactions.length);
+            }, 0);
+          }
+          break; // Выходим из цикла, продолжаем асинхронно
+        }
       } catch (error) {
         console.error(`Error signing transaction ${i + 1}:`, error);
         consecutiveErrors++;
@@ -1058,6 +1084,30 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Продолжение предподписания в фоновом режиме
+  const continuePreSigning = async (chainId, startNonce, remainingCount) => {
+    const chainKey = chainId.toString();
+    const pool = preSignedPool.current[chainKey];
+    
+    if (!pool || pool.isRefilling) {
+      return; // Пул не найден или уже пополняется
+    }
+    
+    console.log(`🔄 Continuing background pre-signing: ${remainingCount} more transactions from nonce ${startNonce}`);
+    
+    try {
+      pool.isRefilling = true;
+      await preSignBatch(chainId, startNonce, remainingCount, { isInstantStart: false });
+      console.log(`✅ Background pre-signing completed. Pool now has ${pool.transactions.length} transactions total`);
+    } catch (error) {
+      console.warn('⚠️ Background pre-signing continuation failed:', error);
+    } finally {
+      if (pool) {
+        pool.isRefilling = false;
+      }
+    }
+  };
+
   // УЛУЧШЕННОЕ умное пополнение пула
   const extendPool = async (chainId, startNonce, count) => {
     const chainKey = chainId.toString();
@@ -1074,7 +1124,7 @@ export const useBlockchainUtils = () => {
       console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
       
       // Используем существующую функцию preSignBatch для пополнения
-      await preSignBatch(chainId, startNonce, count);
+      await preSignBatch(chainId, startNonce, count, { isInstantStart: true, batchSize: Math.min(3, count) });
       
       if (pool) {
         pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
@@ -1101,20 +1151,45 @@ export const useBlockchainUtils = () => {
       const tx = pool.transactions[pool.currentIndex];
       pool.currentIndex++;
 
-      // УЛУЧШЕННАЯ логика автодозаправки - пополняем при достижении порога
+      // УЛЬТРА-АГРЕССИВНАЯ логика автодозаправки для бесшовной игры
       const usageRatio = pool.currentIndex / pool.transactions.length;
-      if (usageRatio >= poolConfig.refillAt && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      const remainingTransactions = pool.transactions.length - pool.currentIndex;
+      
+      // Для MegaETH и других быстрых сетей - пополняем сразу при достижении порога
+      if (usageRatio >= poolConfig.refillAt && !pool.hasTriggeredRefill) {
         pool.hasTriggeredRefill = true;
-        console.log(`Pool ${Math.round(usageRatio * 100)}% empty, extending with new transactions...`);
+        console.log(`Pool ${Math.round(usageRatio * 100)}% empty (${remainingTransactions} remaining), extending with new transactions...`);
         
-        try {
-          const embeddedWallet = getEmbeddedWallet();
-          if (embeddedWallet) {
-            const nextNonce = await getNextNonce(chainId, embeddedWallet.address);
-            await extendPool(chainId, nextNonce, poolConfig.batchSize);
-          }
-        } catch (error) {
-          console.error('Error extending pool:', error);
+        // Асинхронное пополнение без ожидания
+        const embeddedWallet = getEmbeddedWallet();
+        if (embeddedWallet) {
+          getNextNonce(chainId, embeddedWallet.address)
+            .then(nextNonce => extendPool(chainId, nextNonce, poolConfig.batchSize))
+            .catch(error => {
+              console.error('Error extending pool:', error);
+              // Сбрасываем флаг, чтобы попробовать снова
+              if (pool) pool.hasTriggeredRefill = false;
+            });
+        }
+      }
+      
+      // Экстренное пополнение для критично низкого количества транзакций
+      if (remainingTransactions <= 2 && !pool.isRefilling && poolConfig.instantRefill) {
+        console.log(`🚨 CRITICAL: Only ${remainingTransactions} transactions left! Starting emergency refill...`);
+        const embeddedWallet = getEmbeddedWallet();
+        if (embeddedWallet) {
+          // Немедленное асинхронное пополнение
+          getNextNonce(chainId, embeddedWallet.address)
+            .then(nextNonce => {
+              console.log('🔥 EMERGENCY REFILL: Starting instant pre-signing...');
+              return preSignBatch(chainId, nextNonce, Math.min(5, poolConfig.batchSize), { 
+                isInstantStart: true, 
+                batchSize: 3 
+              });
+            })
+            .catch(error => {
+              console.error('❌ Emergency refill failed:', error);
+            });
         }
       }
 
@@ -1796,15 +1871,32 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      // ФОНОВОЕ предподписание
+      // МГНОВЕННОЕ предподписание с параллельной дозаправкой
       const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
         console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
         
-        return preSignBatch(chainId, initialNonce, batchSize)
+        // Сначала делаем быстрый старт с малым пакетом
+        return preSignBatch(chainId, initialNonce, batchSize, { 
+          isInstantStart: true, 
+          batchSize: Math.min(5, batchSize) 
+        })
           .then(() => {
             const pool = preSignedPool.current[chainKey];
             if (pool && pool.transactions.length > 0) {
+              const isInstantReady = pool.transactions.length >= 2;
               console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
+              
+              if (isInstantReady) {
+                console.log(`⚡ INSTANT GAMING READY - ${pool.transactions.length} transactions available immediately!`);
+              }
+              
+              // Если нужно больше транзакций, продолжаем в фоне
+              if (batchSize > pool.transactions.length) {
+                console.log(`🔄 Continuing background pre-signing for ${batchSize - pool.transactions.length} more transactions...`);
+                setTimeout(() => {
+                  continuePreSigning(chainId, initialNonce + pool.transactions.length, batchSize - pool.transactions.length);
+                }, 100); // Небольшая задержка для стабильности
+              }
             } else {
               console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
             }
