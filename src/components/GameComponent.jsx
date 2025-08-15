@@ -92,6 +92,7 @@ const GameComponent = ({ selectedNetwork }) => {
 
   // Инициализация блокчейн данных
   const initializeBlockchain = async () => {
+    console.log('🚀 initializeBlockchain called for network:', selectedNetwork?.name);
     if (!isReady || !selectedNetwork || selectedNetwork.isWeb2) {
       console.log('Skipping blockchain initialization - Web2 mode or not ready');
       setBlockchainStatus(prev => ({ 
@@ -121,6 +122,7 @@ const GameComponent = ({ selectedNetwork }) => {
       
       // Переводим игру в режим готовности к игре
       setGameState(GameState.PLAYING);
+      console.log('🎮 Game state set to PLAYING - ready for blockchain gaming!');
 
       console.log('Blockchain initialization complete');
     } catch (error) {
@@ -131,8 +133,9 @@ const GameComponent = ({ selectedNetwork }) => {
         contractAvailable: false
       }));
       
-      // При ошибке инициализации все равно позволяем игру (fallback режим)
+      // При ошибке инициализации все равно позволяем игру (fallback режим)  
       setGameState(GameState.PLAYING);
+      console.log('🎮 Game state set to PLAYING (fallback mode) after initialization error');
     }
   };
 
