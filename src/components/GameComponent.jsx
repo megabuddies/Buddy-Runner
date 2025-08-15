@@ -125,28 +125,9 @@ const GameComponent = ({ selectedNetwork }) => {
       return;
     }
 
-    // Менее строгая блокировка для быстрых сетей
-    // Для MegaETH позволяем высокий параллелизм
-    if (selectedNetwork?.chainId === 6342) {
-      // Для MegaETH разрешаем до 8 одновременных транзакций
-      if (pendingTransactionCount.current > 8) {
-        console.log('Maximum MegaETH transaction throughput reached');
-        return;
-      }
-    } else {
-      // Для других сетей более строгая проверка
-      if (transactionPendingRef.current) {
-        console.log('Transaction already pending, blocking jump');
-        return;
-      }
-    }
-
     try {
-      // Для MegaETH не используем глобальный pending флаг
-      if (selectedNetwork?.chainId !== 6342) {
-        transactionPendingRef.current = true;
-      }
-      pendingTransactionCount.current++;
+      // Убираем дублирующуюся логику блокировки - вся логика управления 
+      // параллельными транзакциями теперь в useBlockchainUtils
       setShowToast(true);
       
       // 🎮 НОВАЯ Real-Time Gaming архитектура с измерением производительности
@@ -256,10 +237,7 @@ const GameComponent = ({ selectedNetwork }) => {
       throw enhancedError;
       
     } finally {
-      if (selectedNetwork?.chainId !== 6342) {
-        transactionPendingRef.current = false;
-      }
-      pendingTransactionCount.current--;
+      // Убираем управление флагами транзакций - это теперь делает useBlockchainUtils
       setShowToast(false);
     }
   }, []); // Empty dependency array - function is stable now
