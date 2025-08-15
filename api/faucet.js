@@ -77,7 +77,7 @@ export default async function handler(req, res) {
     const ownerWallet = new ethers.Wallet(ownerPrivateKey, provider);
 
     // Проверяем баланс фонда
-    const dripAmount = ethers.parseEther('0.01'); // Изменено с 0.05 на 0.01 ETH
+    const dripAmount = ethers.parseEther('0.0001'); // Изменено на 0.0001 ETH
     const faucetBalance = await provider.getBalance(ownerWallet.address); // Проверяем баланс отдельного faucet кошелька
     
     if (faucetBalance < dripAmount) {
@@ -100,7 +100,7 @@ export default async function handler(req, res) {
     }
 
     // Отправляем ETH напрямую из faucet кошелька
-    console.log(`Sending 0.01 ETH from faucet wallet to ${address} on chain ${chainId}`);
+    console.log(`Sending 0.0001 ETH from faucet wallet to ${address} on chain ${chainId}`);
     
     const tx = await ownerWallet.sendTransaction({
       to: address,
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
     return res.status(200).json({
       success: true,
       transactionHash: receipt.hash,
-      amount: '0.01',
+      amount: '0.0001',
       recipient: address,
       blockNumber: receipt.blockNumber
     });
