@@ -1370,9 +1370,9 @@ export const useBlockchainUtils = () => {
       console.log('Current balance:', currentBalance);
       console.log('Starting nonce:', initialNonce);
 
-      // Если баланс равен 0, вызываем faucet
-      if (parseFloat(currentBalance) === 0) {
-        console.log('Balance is 0, calling faucet...');
+      // Если баланс меньше 0.00005 ETH, вызываем faucet
+      if (parseFloat(currentBalance) < 0.00005) {
+        console.log(`Balance is ${currentBalance} ETH (< 0.00005), calling faucet...`);
         try {
           await callFaucet(embeddedWallet.address, chainId);
           
