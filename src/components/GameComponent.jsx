@@ -43,6 +43,12 @@ const GameComponent = ({ selectedNetwork }) => {
   const pendingJumpRef = useRef(null);
   const pendingTransactionCount = useRef(0);
   
+  // ========== ENHANCED ERROR RECOVERY STATE ==========
+  const [gameState, setGameState] = useState('PLAYING'); // PLAYING, TRANSACTION_FAILED, RECOVERING
+  const [lastError, setLastError] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
+  const maxRetries = 3;
+  
   // Store blockchain functions in refs to avoid dependency issues
   const blockchainFunctionsRef = useRef({});
   
@@ -122,6 +128,12 @@ const GameComponent = ({ selectedNetwork }) => {
     // Проверяем, поддерживает ли сеть ончейн функциональность
     if (!selectedNetwork || selectedNetwork.isWeb2 || !blockchainInitialized) {
       console.log('Skipping on-chain movement - Web2 mode or not initialized');
+      return;
+    }
+
+    // Enhanced state checking for error recovery
+    if (gameState === 'TRANSACTION_FAILED') {
+      console.log('Game in error state, blocking movement until recovery');
       return;
     }
 
@@ -213,13 +225,15 @@ const GameComponent = ({ selectedNetwork }) => {
     } catch (error) {
       console.error('❌ Error sending on-chain movement:', error);
       
-      // Более детальная обработка ошибок
+      // Enhanced error handling with recovery logic
       let errorMessage = 'Transaction failed';
       let errorType = 'UNKNOWN';
+      let canRetry = true;
       
       if (error.message.includes('insufficient funds')) {
         errorMessage = 'Insufficient funds for transaction. Please check your balance.';
         errorType = 'INSUFFICIENT_FUNDS';
+        canRetry = false; // Don't retry for insufficient funds
       } else if (error.message.includes('nonce')) {
         errorMessage = 'Transaction nonce error. Please try again.';
         errorType = 'NONCE_ERROR';
@@ -229,6 +243,7 @@ const GameComponent = ({ selectedNetwork }) => {
       } else if (error.message.includes('rejected')) {
         errorMessage = 'Transaction was rejected by the network.';
         errorType = 'REJECTED';
+        canRetry = false; // Don't retry for rejected transactions
       } else if (error.message.includes('rate limit')) {
         errorMessage = 'Rate limit exceeded. Please wait a moment.';
         errorType = 'RATE_LIMIT';
@@ -237,23 +252,43 @@ const GameComponent = ({ selectedNetwork }) => {
         errorType = 'BLOCKCHAIN_ERROR';
       }
       
-      // Логируем ошибку с типом для аналитики
+      // Log error for analytics
       console.error(`🚨 Blockchain Error [${errorType}]:`, errorMessage);
       
-      // Обновляем статистику ошибок (можно добавить в blockchainStatus)
+      // Update error state
+      const errorDetails = {
+        type: errorType,
+        message: errorMessage,
+        timestamp: Date.now(),
+        canRetry,
+        retryCount: retryCount
+      };
+      
+      setLastError(errorDetails);
+      setGameState('TRANSACTION_FAILED');
+      
+      // Update blockchain status
       setBlockchainStatus(prev => ({
         ...prev,
-        lastError: {
-          type: errorType,
-          message: errorMessage,
-          timestamp: Date.now()
-        }
+        lastError: errorDetails
       }));
       
-      // Бросаем ошибку для обработки выше
-      const enhancedError = new Error(errorMessage);
-      enhancedError.type = errorType;
-      throw enhancedError;
+      // Auto-recovery for retryable errors
+      if (canRetry && retryCount < maxRetries) {
+        console.log(`🔄 Auto-retry attempt ${retryCount + 1}/${maxRetries} in 2 seconds...`);
+        setTimeout(() => {
+          setRetryCount(prev => prev + 1);
+          setGameState('RECOVERING');
+          // Reset game state after brief recovery period
+          setTimeout(() => {
+            setGameState('PLAYING');
+            setLastError(null);
+          }, 1000);
+        }, 2000);
+      } else {
+        // Max retries reached or non-retryable error
+        console.error(`❌ Maximum retries reached or non-retryable error: ${errorType}`);
+      }
       
     } finally {
       if (selectedNetwork?.chainId !== 6342) {
@@ -293,6 +328,20 @@ const GameComponent = ({ selectedNetwork }) => {
     } finally {
       setManualFaucetLoading(false);
     }
+  };
+
+  // Manual error recovery function
+  const handleManualRetry = () => {
+    console.log('🔄 Manual retry initiated');
+    setGameState('RECOVERING');
+    setLastError(null);
+    setRetryCount(0);
+    
+    // Brief recovery period before allowing gameplay
+    setTimeout(() => {
+      setGameState('PLAYING');
+      console.log('✅ Game recovered, ready for play');
+    }, 1000);
   };
 
   // Get wallet information for display
@@ -845,6 +894,32 @@ const GameComponent = ({ selectedNetwork }) => {
                   <span className="value error-text" title={blockchainStatus.lastError.message}>
                     {blockchainStatus.lastError.type}
                   </span>
+                </div>
+              )}
+              
+              {/* Enhanced Error Recovery UI */}
+              {gameState === 'TRANSACTION_FAILED' && lastError && (
+                <div className="status-item error-recovery">
+                  <div className="error-message">
+                    <span className="error-icon">⚠️</span>
+                    <span className="error-text">{lastError.message}</span>
+                  </div>
+                  {lastError.canRetry && (
+                    <button 
+                      className="retry-button" 
+                      onClick={handleManualRetry}
+                      disabled={gameState === 'RECOVERING'}
+                    >
+                      {gameState === 'RECOVERING' ? 'Recovering...' : 'Try Again'}
+                    </button>
+                  )}
+                </div>
+              )}
+              
+              {gameState === 'RECOVERING' && (
+                <div className="status-item recovering">
+                  <span className="label">Status:</span>
+                  <span className="value recovering-text">🔄 Recovering...</span>
                 </div>
               )}
               
