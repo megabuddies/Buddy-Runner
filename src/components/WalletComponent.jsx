@@ -7,7 +7,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
   const { logout } = useLogout();
   const { wallets } = useWallets();
   const [showNetworks, setShowNetworks] = useState(false);
-  const [isNetworkSwitching, setIsNetworkSwitching] = useState(false);
+  // isNetworkSwitching больше не нужен - embedded кошелек работает автоматически
 
   const networks = [
     { id: 6342, name: 'MegaETH Testnet', emoji: '⚡' },
@@ -15,52 +15,21 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     { id: 10143, name: 'Monad Testnet', emoji: '🟣' },
   ];
 
-  // Auto-switch to selected network when wallet connects
+  // ИСПРАВЛЕНО: НЕ переключаем сеть на кошельке для входа
+  // Embedded кошелек Privy автоматически работает с правильной сетью
   useEffect(() => {
-    const autoSwitchNetwork = async () => {
-      if (authenticated && wallets && wallets.length > 0 && selectedNetwork && !isNetworkSwitching) {
-        try {
-          const wallet = wallets[0];
-          
-          // Safely get chain ID with error handling
-          let currentChainId;
-          try {
-            // Check if wallet has getChainId method
-            if (typeof wallet.getChainId === 'function') {
-              currentChainId = await wallet.getChainId();
-            } else if (wallet.chainId) {
-              // Fallback to chainId property
-              currentChainId = wallet.chainId;
-            } else {
-              // Try to get chain ID from provider
-              const provider = await wallet.getEthereumProvider?.();
-              if (provider && provider.request) {
-                const chainIdHex = await provider.request({ method: 'eth_chainId' });
-                currentChainId = parseInt(chainIdHex, 16);
-              } else {
-                console.warn('Cannot determine current chain ID, skipping auto-switch');
-                return;
-              }
-            }
-          } catch (chainIdError) {
-            console.warn('Failed to get current chain ID:', chainIdError);
-            return;
-          }
-          
-          if (currentChainId !== selectedNetwork.id) {
-            console.log(`Auto-switching to ${selectedNetwork.name}...`);
-            setIsNetworkSwitching(true);
-            await switchNetwork(selectedNetwork.id);
-          }
-        } catch (error) {
-          console.warn('Auto network switch failed:', error);
-        } finally {
-          setIsNetworkSwitching(false);
-        }
-      }
-    };
-
-    autoSwitchNetwork();
+    // Кошелек для входа используется ТОЛЬКО для аутентификации
+    // Все блокчейн операции идут через embedded кошелек Privy
+    console.log('Authentication status:', {
+      authenticated,
+      wallets: wallets?.length || 0,
+      isReady: authenticated && wallets?.length > 0
+    });
+    
+    if (authenticated && selectedNetwork) {
+      console.log(`Initializing blockchain for network: ${selectedNetwork.name}`);
+      // Не переключаем сеть - embedded кошелек автоматически работает с выбранной сетью
+    }
   }, [authenticated, wallets, selectedNetwork]);
 
   const handleWalletAction = () => {
@@ -76,119 +45,26 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
   };
 
   const switchNetwork = async (chainId) => {
-    if (!wallets || wallets.length === 0) return;
+    // ИСПРАВЛЕНО: НЕ переключаем кошелек для входа, только обновляем выбранную сеть
+    const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
     
-    setIsNetworkSwitching(true);
+    console.log(`Switching game network to ${networkName} (Chain ID: ${chainId})`);
+    console.log('Note: Login wallet is used ONLY for authentication. All blockchain operations use embedded wallet.');
     
-    try {
-      const wallet = wallets[0];
-      const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
-      
-      // Safely check if wallet supports switchChain method
-      if (typeof wallet.switchChain !== 'function') {
-        console.warn('Wallet does not support network switching');
-        alert('This wallet does not support automatic network switching. Please switch manually.');
-        return;
-      }
-      
-      // First try to switch to the network
-      try {
-        await wallet.switchChain(chainId);
+    // Обновляем выбранную сеть через onNetworkSelect
+    if (onNetworkSelect) {
+      const selectedNet = networks.find(n => n.id === chainId);
+      if (selectedNet) {
+        onNetworkSelect(selectedNet);
         setShowNetworks(false);
-        console.log(`Successfully switched to ${networkName}`);
-        return;
-      } catch (switchError) {
-        // If switching fails, try to add the network first
-        console.log(`Network ${networkName} not found, attempting to add it...`, switchError);
-        
-        const networkConfig = getNetworkConfig(chainId);
-        if (networkConfig) {
-          console.log(`Adding network ${networkName} to wallet...`);
-          await addNetwork(wallet, networkConfig);
-          
-          // Small delay to ensure network is added
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          // Then try to switch again
-          console.log(`Switching to ${networkName}...`);
-          await wallet.switchChain(chainId);
-          setShowNetworks(false);
-          console.log(`Successfully added and switched to ${networkName}`);
-        } else {
-          throw new Error(`Network configuration not found for chain ID ${chainId}`);
-        }
+        console.log(`✅ Game network switched to ${networkName}`);
+        console.log('🎮 Embedded wallet will automatically work with this network');
       }
-    } catch (error) {
-      console.error('Failed to switch network:', error);
-      
-      let userMessage = 'Failed to switch network. ';
-      if (error.message.includes('rejected')) {
-        userMessage += 'User cancelled the operation.';
-      } else if (error.message.includes('already pending')) {
-        userMessage += 'Another network operation is in progress. Please wait and try again.';
-      } else {
-        userMessage += 'Please try again or add the network manually.';
-      }
-      
-      alert(userMessage);
-    } finally {
-      setIsNetworkSwitching(false);
     }
   };
 
-  const getNetworkConfig = (chainId) => {
-    const networkConfigs = {
-      6342: {
-        chainId: '0x18C6', // 6342 in hex
-        chainName: 'MegaETH Testnet',
-        rpcUrls: ['https://carrot.megaeth.com/rpc'],
-        nativeCurrency: {
-          name: 'Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        blockExplorerUrls: ['https://carrot.megaeth.com'],
-      },
-      84532: {
-        chainId: '0x14A34', // 84532 in hex
-        chainName: 'Base Sepolia',
-        rpcUrls: ['https://sepolia.base.org'],
-        nativeCurrency: {
-          name: 'Ether',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        blockExplorerUrls: ['https://sepolia.basescan.org'],
-      },
-      10143: {
-        chainId: '0x279F', // 10143 in hex
-        chainName: 'Monad Testnet',
-        rpcUrls: ['https://testnet-rpc.monad.xyz'],
-        nativeCurrency: {
-          name: 'Monad',
-          symbol: 'MON',
-          decimals: 18,
-        },
-        blockExplorerUrls: ['https://testnet.monadexplorer.com'],
-      },
-    };
-    return networkConfigs[chainId];
-  };
-
-  const addNetwork = async (wallet, networkConfig) => {
-    try {
-      // Use the wallet's provider to add the network
-      const provider = await wallet.getEthersProvider();
-      await provider.send('wallet_addEthereumChain', [networkConfig]);
-    } catch (error) {
-      // If the error is that the network already exists, that's fine
-      if (error.code === 4902 || error.message.includes('already exists') || error.message.includes('Already added')) {
-        console.log('Network already exists in wallet');
-        return;
-      }
-      throw error;
-    }
-  };
+  // getNetworkConfig и addNetwork удалены - больше не нужны
+  // Embedded кошелек Privy автоматически работает с любой выбранной сетью
 
   const getCurrentNetwork = () => {
     if (!wallets || wallets.length === 0) return null;
@@ -251,11 +127,8 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
             <button 
               className="network-button"
               onClick={() => setShowNetworks(!showNetworks)}
-              disabled={isNetworkSwitching}
             >
-              {isNetworkSwitching ? (
-                '🔄 Switching...'
-              ) : getCurrentNetwork() ? (
+              {getCurrentNetwork() ? (
                 `${getCurrentNetwork().emoji} ${getCurrentNetwork().name}`
               ) : (
                 '🌐 Select Network'
@@ -271,9 +144,8 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
                       getCurrentNetwork()?.id === network.id ? 'active' : ''
                     } ${selectedNetwork?.id === network.id ? 'selected-game-network' : ''}`}
                     onClick={() => switchNetwork(network.id)}
-                    disabled={isNetworkSwitching}
                   >
-                    {isNetworkSwitching ? '🔄' : network.emoji} {network.name}
+                    {network.emoji} {network.name}
                     {selectedNetwork?.id === network.id && ' 🎮'}
                   </button>
                 ))}
