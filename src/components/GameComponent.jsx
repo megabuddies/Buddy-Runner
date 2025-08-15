@@ -38,9 +38,10 @@ const GameComponent = ({ selectedNetwork }) => {
   });
 
   const [showToast, setShowToast] = useState(false);
+  const [manualFaucetLoading, setManualFaucetLoading] = useState(false);
   const transactionPendingRef = useRef(false);
   const pendingJumpRef = useRef(null);
-  const [manualFaucetLoading, setManualFaucetLoading] = useState(false);
+  const pendingTransactionCount = useRef(0);
   
   // Store blockchain functions in refs to avoid dependency issues
   const blockchainFunctionsRef = useRef({});
@@ -124,14 +125,24 @@ const GameComponent = ({ selectedNetwork }) => {
       return;
     }
 
-    // Блокируем новые прыжки пока транзакция не завершится
+    // Менее строгая блокировка для быстрых сетей
     if (transactionPendingRef.current) {
-      console.log('Transaction already pending, blocking jump');
-      return;
+      // Для MegaETH (instant transactions) позволяем больше параллелизма
+      if (selectedNetwork?.chainId === 6342) {
+        // Разрешаем 2-3 одновременные транзакции для MegaETH
+        if (pendingTransactionCount.current > 2) {
+          console.log('Too many concurrent MegaETH transactions, throttling');
+          return;
+        }
+      } else {
+        console.log('Transaction already pending, blocking jump');
+        return;
+      }
     }
 
     try {
       transactionPendingRef.current = true;
+      pendingTransactionCount.current++;
       setShowToast(true);
       
       // 🎮 НОВАЯ Real-Time Gaming архитектура с измерением производительности
@@ -242,6 +253,7 @@ const GameComponent = ({ selectedNetwork }) => {
       
     } finally {
       transactionPendingRef.current = false;
+      pendingTransactionCount.current--;
       setShowToast(false);
     }
   }, []); // Empty dependency array - function is stable now
