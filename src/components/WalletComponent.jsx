@@ -10,10 +10,36 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
   const [isNetworkSwitching, setIsNetworkSwitching] = useState(false);
 
   const networks = [
-    { id: 6342, name: 'MegaETH Testnet', emoji: '⚡' },
+    { id: 6342, name: 'MegaETH Testnet', emoji: '🚀' },
     { id: 84532, name: 'Base Sepolia', emoji: '🔵' },
     { id: 10143, name: 'Monad Testnet', emoji: '🟣' },
   ];
+
+  // Helper function to get current chain ID consistently
+  const getCurrentChainId = async (wallet) => {
+    try {
+      // Check if wallet has getChainId method
+      if (typeof wallet.getChainId === 'function') {
+        return await wallet.getChainId();
+      } else if (wallet.chainId) {
+        // Fallback to chainId property
+        return wallet.chainId;
+      } else {
+        // Try to get chain ID from provider
+        const provider = await wallet.getEthereumProvider?.();
+        if (provider && provider.request) {
+          const chainIdHex = await provider.request({ method: 'eth_chainId' });
+          return parseInt(chainIdHex, 16);
+        } else {
+          console.warn('Cannot determine current chain ID from wallet');
+          return null;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to get current chain ID:', error);
+      return null;
+    }
+  };
 
   // Auto-switch to selected network when wallet connects
   useEffect(() => {
@@ -22,35 +48,21 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         try {
           const wallet = wallets[0];
           
-          // Safely get chain ID with error handling
-          let currentChainId;
-          try {
-            // Check if wallet has getChainId method
-            if (typeof wallet.getChainId === 'function') {
-              currentChainId = await wallet.getChainId();
-            } else if (wallet.chainId) {
-              // Fallback to chainId property
-              currentChainId = wallet.chainId;
-            } else {
-              // Try to get chain ID from provider
-              const provider = await wallet.getEthereumProvider?.();
-              if (provider && provider.request) {
-                const chainIdHex = await provider.request({ method: 'eth_chainId' });
-                currentChainId = parseInt(chainIdHex, 16);
-              } else {
-                console.warn('Cannot determine current chain ID, skipping auto-switch');
-                return;
-              }
-            }
-          } catch (chainIdError) {
-            console.warn('Failed to get current chain ID:', chainIdError);
+          // Use the helper function to get current chain ID
+          const currentChainId = await getCurrentChainId(wallet);
+          
+          if (currentChainId === null) {
+            console.warn('Cannot determine current chain ID, skipping auto-switch');
             return;
           }
           
           if (currentChainId !== selectedNetwork.id) {
             console.log(`Auto-switching to ${selectedNetwork.name}...`);
+            console.log(`Current chain: ${currentChainId}, Target chain: ${selectedNetwork.id}`);
             setIsNetworkSwitching(true);
             await handleNetworkSwitch(selectedNetwork.id);
+          } else {
+            console.log(`Already on correct network: ${selectedNetwork.name} (${currentChainId})`);
           }
         } catch (error) {
           console.warn('Auto network switch failed:', error);
@@ -87,8 +99,9 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       const wallet = wallets[0];
       const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
       
-      // Check if wallet is already on the correct network
-      if (wallet.chainId === chainId) {
+      // Check if wallet is already on the correct network using the same logic as autoSwitchNetwork
+      const currentChainId = await getCurrentChainId(wallet);
+      if (currentChainId === chainId) {
         console.log(`Already on ${networkName} (Chain ID: ${chainId})`);
         setShowNetworks(false);
         return;
