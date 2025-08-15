@@ -142,7 +142,11 @@ const GameComponent = ({ selectedNetwork }) => {
     
     // Race Conditions Protection - проверка перед каждым кликом
     if (gameInteractionRef.current || gameState !== GameState.PLAYING) {
-      console.log('Blocking interaction - game not ready or already processing');
+      console.log('Blocking interaction - game not ready or already processing', {
+        gameInteractionRef: gameInteractionRef.current,
+        gameState: gameState,
+        expectedState: GameState.PLAYING
+      });
       return;
     }
     
