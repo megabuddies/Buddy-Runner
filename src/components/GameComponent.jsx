@@ -114,7 +114,7 @@ const GameComponent = ({ selectedNetwork }) => {
     }
   };
 
-  // Обработка ончейн прыжка
+  // Обработка ончейн прыжка с Real-Time Gaming архитектурой
   const handleOnChainMovement = useCallback(async () => {
     const { sendUpdate, getContractNumber, selectedNetwork, blockchainInitialized } = blockchainFunctionsRef.current;
     
@@ -134,18 +134,53 @@ const GameComponent = ({ selectedNetwork }) => {
       transactionPendingRef.current = true;
       setShowToast(true);
       
-      console.log('Sending on-chain jump transaction...');
+      // 🎮 НОВАЯ Real-Time Gaming архитектура с измерением производительности
+      const reactionTime = performance.now(); // Время реакции игрока
       
-      // Отправляем транзакцию
+      console.log('⚡ Sending instant on-chain jump transaction...');
+      
+      // Отправляем транзакцию с измерением производительности
       const txResult = await sendUpdate(selectedNetwork.id);
       
-      console.log('Jump transaction confirmed:', txResult);
+      // Рассчитываем метрики производительности
+      const totalTime = performance.now() - reactionTime;
+      const blockchainTime = txResult.blockchainTime || Math.round(totalTime);
+      
+      // Создаем результат как в Crossy Fluffle
+      const gameResult = {
+        reactionTime: Math.round(totalTime - blockchainTime), // Время обработки на клиенте
+        blockchainTime: blockchainTime, // Время выполнения блокчейна
+        totalTime: Math.round(totalTime),
+        network: selectedNetwork.name,
+        isInstant: txResult.isInstant || false,
+        txHash: txResult.hash || txResult.transactionHash,
+        performanceMetrics: txResult.performanceMetrics
+      };
+      
+      console.log('🎮 Real-Time Gaming Result:', gameResult);
+      
+      // Отображаем производительность в консоли для разработки
+      if (process.env.NODE_ENV === 'development') {
+        console.table({
+          'Reaction Time (ms)': gameResult.reactionTime,
+          'Blockchain Time (ms)': gameResult.blockchainTime,
+          'Total Time (ms)': gameResult.totalTime,
+          'Network': gameResult.network,
+          'Is Instant': gameResult.isInstant ? '✅' : '❌',
+          'Success Rate (%)': gameResult.performanceMetrics?.successRate?.toFixed(1) || 'N/A',
+          'Avg Blockchain Time (ms)': gameResult.performanceMetrics?.averageBlockchainTime || 'N/A'
+        });
+      }
+      
+      console.log(`🎯 Jump completed: ${gameResult.blockchainTime}ms blockchain time, ${gameResult.isInstant ? 'INSTANT' : 'PENDING'} confirmation`);
       
       // Обновляем статистику
       setBlockchainStatus(prev => ({
         ...prev,
         totalMovements: prev.totalMovements + 1,
-        onChainScore: prev.onChainScore + 1
+        onChainScore: prev.onChainScore + 1,
+        lastTransactionTime: gameResult.blockchainTime, // Добавляем время последней транзакции
+        averageTransactionTime: gameResult.performanceMetrics?.averageBlockchainTime || prev.averageTransactionTime
       }));
 
       // Обновляем номер из контракта
@@ -157,29 +192,53 @@ const GameComponent = ({ selectedNetwork }) => {
         }
       }, 1000);
 
+      // Возвращаем результат для использования в игре
+      return gameResult;
+
     } catch (error) {
-      console.error('Error sending on-chain movement:', error);
+      console.error('❌ Error sending on-chain movement:', error);
       
       // Более детальная обработка ошибок
       let errorMessage = 'Transaction failed';
+      let errorType = 'UNKNOWN';
       
       if (error.message.includes('insufficient funds')) {
         errorMessage = 'Insufficient funds for transaction. Please check your balance.';
+        errorType = 'INSUFFICIENT_FUNDS';
       } else if (error.message.includes('nonce')) {
         errorMessage = 'Transaction nonce error. Please try again.';
+        errorType = 'NONCE_ERROR';
       } else if (error.message.includes('timeout')) {
         errorMessage = 'Transaction timeout. Please try again.';
+        errorType = 'TIMEOUT';
       } else if (error.message.includes('rejected')) {
         errorMessage = 'Transaction was rejected by the network.';
+        errorType = 'REJECTED';
+      } else if (error.message.includes('rate limit')) {
+        errorMessage = 'Rate limit exceeded. Please wait a moment.';
+        errorType = 'RATE_LIMIT';
       } else {
         errorMessage = `Transaction failed: ${error.message}`;
+        errorType = 'BLOCKCHAIN_ERROR';
       }
       
-      // Показываем ошибку в консоли и в toast
-      console.error('Blockchain transaction error:', errorMessage);
+      // Логируем ошибку с типом для аналитики
+      console.error(`🚨 Blockchain Error [${errorType}]:`, errorMessage);
       
-      // Опционально можно показать toast с ошибкой
-      // setShowErrorToast(errorMessage);
+      // Обновляем статистику ошибок (можно добавить в blockchainStatus)
+      setBlockchainStatus(prev => ({
+        ...prev,
+        lastError: {
+          type: errorType,
+          message: errorMessage,
+          timestamp: Date.now()
+        }
+      }));
+      
+      // Бросаем ошибку для обработки выше
+      const enhancedError = new Error(errorMessage);
+      enhancedError.type = errorType;
+      throw enhancedError;
       
     } finally {
       transactionPendingRef.current = false;
@@ -701,7 +760,7 @@ const GameComponent = ({ selectedNetwork }) => {
         </div>
       )}
       
-      {/* Blockchain Status Panel */}
+      {/* Blockchain Status Panel с Real-Time Gaming метриками */}
       {selectedNetwork && !selectedNetwork.isWeb2 && (
         <div className="blockchain-status-panel">
           <div className="status-header">
@@ -725,6 +784,52 @@ const GameComponent = ({ selectedNetwork }) => {
                 <span className="label">Jumps:</span>
                 <span className="value">{blockchainStatus.totalMovements}</span>
               </div>
+              
+              {/* 🎮 НОВЫЕ Real-Time Gaming метрики */}
+              {blockchainStatus.lastTransactionTime && (
+                <div className="status-item">
+                  <span className="label">Last TX:</span>
+                  <span className="value performance-metric">
+                    {blockchainStatus.lastTransactionTime}ms
+                  </span>
+                </div>
+              )}
+              
+              {blockchainStatus.averageTransactionTime && (
+                <div className="status-item">
+                  <span className="label">Avg Speed:</span>
+                  <span className="value performance-metric">
+                    {Math.round(blockchainStatus.averageTransactionTime)}ms
+                  </span>
+                </div>
+              )}
+              
+              {/* Индикатор производительности */}
+              {blockchainStatus.averageTransactionTime && (
+                <div className="status-item">
+                  <span className="label">Performance:</span>
+                  <span className={`value performance-indicator ${
+                    blockchainStatus.averageTransactionTime < 1000 ? 'excellent' :
+                    blockchainStatus.averageTransactionTime < 3000 ? 'good' :
+                    blockchainStatus.averageTransactionTime < 5000 ? 'fair' : 'slow'
+                  }`}>
+                    {blockchainStatus.averageTransactionTime < 1000 ? '🚀 INSTANT' :
+                     blockchainStatus.averageTransactionTime < 3000 ? '⚡ FAST' :
+                     blockchainStatus.averageTransactionTime < 5000 ? '🔥 GOOD' : '🐌 SLOW'}
+                  </span>
+                </div>
+              )}
+              
+              {/* Ошибка последней транзакции */}
+              {blockchainStatus.lastError && (
+                <div className="status-item error">
+                  <span className="label">Last Error:</span>
+                  <span className="value error-text" title={blockchainStatus.lastError.message}>
+                    {blockchainStatus.lastError.type}
+                  </span>
+                </div>
+              )}
+              
               {parseFloat(balance) < 0.00005 && (
                 <div className="status-item">
                   <button 
@@ -739,7 +844,7 @@ const GameComponent = ({ selectedNetwork }) => {
               {transactionPending && (
                 <div className="status-item">
                   <span className="label">Status:</span>
-                  <span className="value pending">Pending TX...</span>
+                  <span className="value pending">⚡ Processing TX...</span>
                 </div>
               )}
             </div>
@@ -748,7 +853,7 @@ const GameComponent = ({ selectedNetwork }) => {
           {isInitializing && (
             <div className="initialization-status">
               <div className="loading-spinner"></div>
-              <span>Initializing blockchain...</span>
+              <span>🚀 Initializing blockchain...</span>
             </div>
           )}
         </div>
