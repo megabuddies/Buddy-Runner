@@ -137,7 +137,9 @@ export const useBlockchainUtils = () => {
   const CACHE_EXPIRY = {
     gasParams: 5 * 60 * 1000, // 5 минут для газовых параметров
     chainParams: 30 * 1000,   // 30 секунд для параметров сети
-    rpcHealth: 2 * 60 * 1000  // 2 минуты для RPC health
+    rpcHealth: 2 * 60 * 1000, // 2 минуты для RPC health
+    clients: 10 * 60 * 1000,  // 10 минут для клиентов
+    nonce: 30 * 1000          // 30 секунд для nonce кэша
   };
 
   // Сохранение глобального кеша в localStorage с обработкой BigInt
@@ -164,6 +166,10 @@ export const useBlockchainUtils = () => {
         },
         rpcHealth: {
           data: rpcHealthStatus.current,
+          timestamp: Date.now()
+        },
+        nonceCache: {
+          data: nonceManager.current,
           timestamp: Date.now()
         }
       };
@@ -211,6 +217,20 @@ export const useBlockchainUtils = () => {
         if (parsed.rpcHealth && (now - parsed.rpcHealth.timestamp) < CACHE_EXPIRY.rpcHealth) {
           rpcHealthStatus.current = parsed.rpcHealth.data;
           console.log('🎯 Loaded cached RPC health from storage');
+        }
+        
+        if (parsed.nonceCache && (now - parsed.nonceCache.timestamp) < CACHE_EXPIRY.nonce) {
+          // Осторожно восстанавливаем nonce кэш - используем только если данные не слишком старые
+          Object.entries(parsed.nonceCache.data).forEach(([key, cachedManager]) => {
+            if (cachedManager && typeof cachedManager.currentNonce === 'number') {
+              nonceManager.current[key] = {
+                ...cachedManager,
+                isUpdating: false, // Сбрасываем флаг обновления
+                lastUpdate: cachedManager.lastUpdate || 0
+              };
+            }
+          });
+          console.log('🎯 Loaded cached nonce data from storage');
         }
       }
     } catch (error) {
@@ -768,31 +788,60 @@ export const useBlockchainUtils = () => {
     // Обновляем nonce если прошло больше 30 секунд или принудительное обновление
     if (!manager.currentNonce || forceRefresh || (now - manager.lastUpdate) > 30000) {
       if (manager.isUpdating) {
-        // Ждем завершения текущего обновления
-        while (manager.isUpdating) {
+        // Ждем завершения текущего обновления с таймаутом
+        let waitTime = 0;
+        while (manager.isUpdating && waitTime < 5000) {
           await new Promise(resolve => setTimeout(resolve, 100));
+          waitTime += 100;
         }
-      } else {
+        
+        // Если обновление заблокировано слишком долго, принудительно сбрасываем флаг
+        if (manager.isUpdating) {
+          console.warn('⚠️ Nonce update timeout, forcing reset');
+          manager.isUpdating = false;
+        }
+      }
+      
+      if (!manager.isUpdating) {
         manager.isUpdating = true;
         try {
           const { publicClient } = await createClients(chainId);
-          const networkNonce = await publicClient.getTransactionCount({
-            address: address,
-            blockTag: 'pending'
-          });
           
-          // Используем максимальное значение между сетевым nonce и нашим локальным
-          manager.currentNonce = Math.max(networkNonce, manager.currentNonce || 0);
-          manager.pendingNonce = manager.currentNonce;
+          // Получаем и подтвержденный, и pending nonces для лучшей синхронизации
+          const [latestNonce, pendingNonce] = await Promise.all([
+            publicClient.getTransactionCount({ address: address, blockTag: 'latest' }),
+            publicClient.getTransactionCount({ address: address, blockTag: 'pending' })
+          ]);
+          
+          // Используем максимальное значение между всеми nonces
+          const networkNonce = Math.max(latestNonce, pendingNonce);
+          const previousNonce = manager.currentNonce || 0;
+          
+          // Обновляем только если сетевой nonce больше или форсированное обновление
+          if (networkNonce > previousNonce || forceRefresh) {
+            manager.currentNonce = networkNonce;
+            manager.pendingNonce = networkNonce;
+            console.log(`🔄 Nonce updated for ${address} on chain ${chainId}: ${previousNonce} → ${networkNonce}`);
+          } else {
+            // Если сетевой nonce меньше, используем наш локальный (возможно есть pending транзакции)
+            manager.pendingNonce = manager.currentNonce;
+            console.log(`🔄 Keeping local nonce for ${address} on chain ${chainId}: ${manager.currentNonce} (network: ${networkNonce})`);
+          }
+          
           manager.lastUpdate = now;
           
-          console.log(`Updated nonce for ${address} on chain ${chainId}: ${manager.currentNonce}`);
         } catch (error) {
-          console.error('Error updating nonce:', error);
-          // Если не удалось получить nonce из сети, используем локальный + 1
+          console.error('❌ Error updating nonce:', error);
+          // Если не удалось получить nonce из сети
           if (manager.currentNonce !== null) {
-            manager.currentNonce += 1;
+            // При ошибке не увеличиваем nonce, просто логируем
+            console.warn(`⚠️ Using cached nonce ${manager.currentNonce} due to network error`);
             manager.pendingNonce = manager.currentNonce;
+          } else {
+            // Если nonce вообще не инициализирован, начинаем с 0
+            manager.currentNonce = 0;
+            manager.pendingNonce = 0;
+            console.warn(`⚠️ Initializing nonce to 0 due to network error`);
           }
         } finally {
           manager.isUpdating = false;
@@ -804,6 +853,7 @@ export const useBlockchainUtils = () => {
     const nextNonce = manager.pendingNonce;
     manager.pendingNonce += 1;
     
+    console.log(`🎯 Allocated nonce ${nextNonce} for ${address} on chain ${chainId}`);
     return nextNonce;
   };
 
@@ -1638,7 +1688,32 @@ export const useBlockchainUtils = () => {
         if (embeddedWallet) {
           console.log('🔄 Refreshing nonce due to "nonce too low" error');
           try {
+            // Принудительно обновляем nonce с сети
             await getNextNonce(chainId, embeddedWallet.address, true);
+            
+            // Очищаем пул предподписанных транзакций, так как они теперь имеют неверные nonces
+            const chainKey = chainId.toString();
+            const pool = preSignedPool.current[chainKey];
+            if (pool) {
+              console.log('🗑️ Clearing invalid pre-signed transaction pool');
+              pool.transactions = [];
+              pool.currentIndex = 0;
+              pool.isReady = false;
+              pool.hasTriggeredRefill = false;
+              
+              // Запускаем пересоздание пула в фоне
+              setTimeout(async () => {
+                try {
+                  const manager = getNonceManager(chainId, embeddedWallet.address);
+                  const newStartNonce = manager.currentNonce;
+                  const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+                  await preSignBatch(chainId, newStartNonce, poolConfig.initialSize);
+                  console.log('✅ Pre-signed transaction pool recreated with correct nonces');
+                } catch (recreateError) {
+                  console.error('❌ Failed to recreate transaction pool:', recreateError);
+                }
+              }, 100);
+            }
           } catch (nonceError) {
             console.error('Failed to refresh nonce:', nonceError);
           }
@@ -1808,9 +1883,26 @@ export const useBlockchainUtils = () => {
       if (error.message?.includes('nonce too low')) {
         console.log('🔄 Nonce too low detected, refreshing nonce and retrying...');
         try {
-          // Обновляем nonce принудительно
-          await getNextNonce(chainId, embeddedWallet.address, true);
-          console.log('✅ Nonce refreshed, please try again');
+          // Получаем кошелек и обновляем nonce принудительно
+          const wallet = getEmbeddedWallet();
+          if (wallet) {
+            await getNextNonce(chainId, wallet.address, true);
+            
+            // Очищаем пул предподписанных транзакций
+            const chainKey = chainId.toString();
+            const pool = preSignedPool.current[chainKey];
+            if (pool) {
+              console.log('🗑️ Clearing invalid pre-signed transaction pool due to nonce error');
+              pool.transactions = [];
+              pool.currentIndex = 0;
+              pool.isReady = false;
+              pool.hasTriggeredRefill = false;
+            }
+            
+            console.log('✅ Nonce refreshed, please try again');
+          } else {
+            console.error('❌ No wallet available for nonce refresh');
+          }
         } catch (nonceError) {
           console.error('❌ Failed to refresh nonce:', nonceError);
         }
