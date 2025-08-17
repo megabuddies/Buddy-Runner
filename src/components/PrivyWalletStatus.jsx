@@ -182,25 +182,7 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
             </div>
           )}
 
-          {selectedNetwork && selectedNetwork.id !== 'select' && (
-            <div className="detail-section">
-              <h4>🎮 Gaming Performance</h4>
-              <div className="detail-item">
-                <span>Instant Mode:</span>
-                <span className="text-green-400">
-                  {poolStatus?.isReady ? 'Active' : 'Preparing'}
-                </span>
-              </div>
-              <div className="detail-item">
-                <span>Burst Mode:</span>
-                <span className="text-blue-400">Enabled</span>
-              </div>
-              <div className="detail-item">
-                <span>Auto-refill:</span>
-                <span className="text-purple-400">Infinite</span>
-              </div>
-            </div>
-          )}
+
         </div>
       )}
     </div>
