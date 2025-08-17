@@ -338,9 +338,9 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 200, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
+      poolSize: 4000, // УВЕЛИЧЕН в 20 раз для поддержки ~10000 транзакций
       refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 50, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
+      batchSize: 1000, // УВЕЛИЧЕН в 20 раз для массивного опережающего пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
@@ -1032,7 +1032,7 @@ export const useBlockchainUtils = () => {
     const maxConsecutiveErrors = 3;
 
     // ПАРАЛЛЕЛЬНОЕ подписание транзакций для максимальной скорости
-    const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
+    const PARALLEL_BATCH_SIZE = 200; // УВЕЛИЧЕН в 20 раз - подписываем по 200 транзакций параллельно
     console.log(`🚀 Starting parallel pre-signing of ${actualCount} transactions`);
     
     // Сначала подписываем первую транзакцию отдельно для быстрого старта
@@ -1192,7 +1192,7 @@ export const useBlockchainUtils = () => {
       const embeddedWallet = getEmbeddedWallet();
       
       // ПАРАЛЛЕЛЬНОЕ подписание новых транзакций для максимальной скорости
-      const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
+      const PARALLEL_BATCH_SIZE = 200; // УВЕЛИЧЕН в 20 раз - подписываем по 200 транзакций параллельно
       console.log(`📝 Starting parallel signing of ${count} transactions in batches of ${PARALLEL_BATCH_SIZE}`);
       
       for (let batchStart = 0; batchStart < count; batchStart += PARALLEL_BATCH_SIZE) {
@@ -1309,9 +1309,9 @@ export const useBlockchainUtils = () => {
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем ЗНАЧИТЕЛЬНО больше транзакций для длинных сессий
               // Используем логарифмическую шкалу для увеличения размера батча
               const usedCount = pool.currentIndex;
-              const baseRefillSize = Math.max(35, poolConfig.batchSize * 2);
-              // После 50 транзакций добавляем еще больше для предотвращения замедления
-              const refillSize = usedCount > 50 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
+              const baseRefillSize = Math.max(700, poolConfig.batchSize * 2); // УВЕЛИЧЕН в 20 раз (35->700)
+              // После 1000 транзакций добавляем еще больше для предотвращения замедления
+              const refillSize = usedCount > 1000 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
               
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
@@ -1338,7 +1338,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(50, poolConfig.batchSize * 2.5);
+              const emergencyRefillSize = Math.max(1000, poolConfig.batchSize * 2.5); // УВЕЛИЧЕН в 20 раз (50->1000)
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
