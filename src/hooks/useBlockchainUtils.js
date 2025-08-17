@@ -338,7 +338,7 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 200, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 для максимального количества pre-processed транзакций
       refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
       batchSize: 50, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
       maxRetries: 3,
@@ -348,7 +348,7 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
     },
     31337: { // Foundry
-      poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 для максимального количества pre-processed транзакций
       refillAt: 0.2, // Более раннее пополнение
       batchSize: 30, // Больший размер пакета
       maxRetries: 3,
@@ -358,7 +358,7 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // Уменьшен cooldown
     },
     50311: { // Somnia
-      poolSize: 100, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 для максимального количества pre-processed транзакций
       refillAt: 0.2, // Более раннее пополнение
       batchSize: 25, // Больший размер пакета
       maxRetries: 3,
@@ -368,7 +368,7 @@ export const useBlockchainUtils = () => {
       burstCooldown: 400 // Уменьшен cooldown
     },
     1313161556: { // RISE
-      poolSize: 50, // Увеличен для pre-signed only
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 для максимального количества pre-processed транзакций
       refillAt: 0.4,
       batchSize: 12,
       maxRetries: 2,
@@ -378,7 +378,7 @@ export const useBlockchainUtils = () => {
       burstCooldown: 1500
     },
     default: {
-      poolSize: 60, // Увеличен для pre-signed only
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 для максимального количества pre-processed транзакций
       refillAt: 0.3, // Раннее пополнение
       batchSize: 15,
       maxRetries: 3,
