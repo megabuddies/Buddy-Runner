@@ -335,17 +335,18 @@ export const useBlockchainUtils = () => {
   // Кеширование параметров сети для минимизации RPC вызовов
   const chainParamsCache = useRef({});
 
-  // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
+  // PRE-SIGNED ONLY MODE: Оптимизированные пулы с защитой от rate limiting
   const ENHANCED_POOL_CONFIG = {
-    6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 100, // ЗНАЧИТЕЛЬНО увеличен для pre-signed only режима
-      refillAt: 0.2, // Очень раннее пополнение при 20% использования
-      batchSize: 25, // Больший размер пакета для быстрого пополнения
-      maxRetries: 3,
-      retryDelay: 200, // Быстрые retry для MegaETH
-      burstMode: true, // Поддержка burst режима
-      maxBurstSize: 5, // Максимум транзакций в burst режиме
-      burstCooldown: 500 // Короткий cooldown для реального времени
+    6342: { // MegaETH - ОПТИМИЗИРОВАННАЯ ПРОИЗВОДИТЕЛЬНОСТЬ с защитой от rate limiting
+      poolSize: 50, // Уменьшен для предотвращения rate limiting
+      refillAt: 0.3, // Более консервативное пополнение
+      batchSize: 10, // Меньший размер пакета для избежания 429 ошибок
+      maxRetries: 2, // Меньше retry для быстрого fallback
+      retryDelay: 500, // Больше задержка для MegaETH rate limits
+      burstMode: false, // Отключаем burst mode для стабильности
+      maxBurstSize: 2, // Уменьшен burst размер
+      burstCooldown: 1000, // Больше cooldown
+      sequentialFallback: true // Включаем последовательный fallback
     },
     31337: { // Foundry
       poolSize: 80, // Увеличен для pre-signed only
@@ -389,14 +390,20 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // Fallback конфигурация для MegaETH
+  // Fallback конфигурация для MegaETH с защитой от rate limiting
   const MEGAETH_FALLBACK_CONFIG = {
-    // Уменьшаем batch size при проблемах с RPC
-    reducedBatchSize: 1,
-    // Увеличиваем задержки
-    increasedDelay: 1000,
+    // Очень маленький batch size при проблемах с RPC
+    reducedBatchSize: 3,
+    // Значительно увеличиваем задержки для rate limiting
+    increasedDelay: 2000,
     // Режим graceful degradation
-    degradedMode: false
+    degradedMode: false,
+    // Специальные настройки для rate limiting
+    rateLimitProtection: {
+      maxConcurrentSignings: 2,
+      delayBetweenBatches: 3000,
+      backoffMultiplier: 2
+    }
   };
 
   const fallbackState = useRef({
@@ -604,12 +611,27 @@ export const useBlockchainUtils = () => {
     };
   };
 
-  // Управление fallback режимом
-  const enableFallbackMode = (chainId) => {
+  // Управление fallback режимом с автоматической активацией
+  const enableFallbackMode = (chainId, reason = 'unknown') => {
     const state = fallbackState.current[chainId];
     if (state) {
       state.degradedMode = true;
-      console.log(`Enabled fallback mode for chain ${chainId}`);
+      console.log(`🔄 Enabled fallback mode for chain ${chainId} (reason: ${reason})`);
+      
+      // Специальная обработка для rate limiting
+      if (reason.includes('rate limit') || reason.includes('429')) {
+        console.log('📉 Rate limiting detected - activating conservative mode');
+        state.rateLimitProtection.maxConcurrentSignings = 1;
+        state.rateLimitProtection.delayBetweenBatches = 5000;
+      }
+      
+      // Автоматический сброс fallback режима через 5 минут
+      setTimeout(() => {
+        if (state.degradedMode) {
+          state.degradedMode = false;
+          console.log(`🔄 Auto-disabled fallback mode for chain ${chainId} after 5 minutes`);
+        }
+      }, 5 * 60 * 1000);
     }
   };
 
@@ -700,32 +722,52 @@ export const useBlockchainUtils = () => {
         })
       });
 
-      // Для MegaETH используем локальное подписание (не RPC)
+      // Для MegaETH используем улучшенное локальное подписание с защитой от iframe проблем
       let walletClient;
       if (chainId === 6342) {
-        // MegaETH: локальное подписание с Privy account
+        // MegaETH: улучшенное локальное подписание с Privy account
         walletClient = createWalletClient({
           account: embeddedWallet.address,
           chain: publicClient.chain,
           transport: custom({
             async request({ method, params }) {
               if (method === 'eth_signTransaction') {
-                // Локальное подписание через embedded wallet
+                // Локальное подписание через embedded wallet с retry логикой
                 const embeddedWallet = getEmbeddedWallet();
                 if (!embeddedWallet) {
                   throw new Error('No embedded wallet found for signing');
                 }
                 
-                // Создаем walletClient с embedded wallet
-                const provider = await embeddedWallet.getProvider?.() || 
-                                await embeddedWallet.getEthereumProvider?.() ||
-                                embeddedWallet;
+                // Ждем готовности iframe с таймаутом
+                let retries = 0;
+                const maxRetries = 5;
                 
-                if (provider?.request) {
-                  return await provider.request({ method, params });
+                while (retries < maxRetries) {
+                  try {
+                    const provider = await embeddedWallet.getProvider?.() || 
+                                    await embeddedWallet.getEthereumProvider?.() ||
+                                    embeddedWallet;
+                    
+                    if (provider?.request) {
+                      return await provider.request({ method, params });
+                    }
+                    
+                    throw new Error('Provider not ready');
+                  } catch (providerError) {
+                    const errorMessage = providerError?.message || providerError?.toString() || 'Unknown error';
+                    
+                    if (errorMessage.includes('iframe not initialized') && retries < maxRetries - 1) {
+                      console.log(`⏳ Iframe not ready, waiting... (attempt ${retries + 1}/${maxRetries})`);
+                      await new Promise(resolve => setTimeout(resolve, 1000)); // Ждем 1 секунду
+                      retries++;
+                      continue;
+                    }
+                    
+                    throw providerError;
+                  }
                 }
                 
-                throw new Error('Unable to get provider for signing');
+                throw new Error('Unable to get provider for signing after retries');
               }
               // Остальные методы идут через публичный RPC
               return await publicClient.request({ method, params });
@@ -1037,9 +1079,20 @@ export const useBlockchainUtils = () => {
     const config = NETWORK_CONFIGS[chainId];
     const embeddedWallet = getEmbeddedWallet();
     
-    // ПАРАЛЛЕЛЬНОЕ подписание всех транзакций одновременно
+    // АДАПТИВНОЕ подписание с защитой от rate limiting и iframe проблем
     const signingPromises = Array.from({ length: actualCount }, async (_, i) => {
       try {
+        // Добавляем прогрессивную задержку для предотвращения rate limiting
+        if (i > 0) {
+          const delay = chainId === 6342 ? i * 100 : i * 50; // Больше задержка для MegaETH
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+        
+        // Дополнительная задержка для iframe инициализации
+        if (i === 0) {
+          await new Promise(resolve => setTimeout(resolve, 500)); // Ждем iframe инициализации
+        }
+        
         // Используем зарезервированный nonce для пре-подписания
         const nonce = startNonce + i;
         
@@ -1089,8 +1142,9 @@ export const useBlockchainUtils = () => {
         console.error(`Error signing transaction ${i + 1}:`, error);
         
         // Для rate limiting ошибок, возвращаем null но не прерываем весь процесс
-        if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403 || error.message?.includes('not whitelisted')) {
-          console.log('Rate limit/403/not whitelisted detected during parallel pre-signing');
+        const errorMessage = error?.message || error?.toString() || 'Unknown error';
+        if (errorMessage.includes('rate limit') || error.status === 429 || error.status === 403 || errorMessage.includes('not whitelisted') || errorMessage.includes('iframe not initialized')) {
+          console.log('Rate limit/403/iframe error detected during parallel pre-signing, skipping transaction:', errorMessage);
           return null;
         }
         
@@ -1098,11 +1152,58 @@ export const useBlockchainUtils = () => {
       }
     });
     
-    // Ждем завершения всех параллельных подписаний
-    const results = await Promise.all(signingPromises);
-    const successfulTransactions = results.filter(tx => tx !== null);
+    // Ждем завершения всех параллельных подписаний с fallback
+    let successfulTransactions = [];
     
-    console.log(`⚡ Parallel signing completed: ${successfulTransactions.length}/${actualCount} successful`);
+    try {
+      const results = await Promise.all(signingPromises);
+      successfulTransactions = results.filter(tx => tx !== null);
+      console.log(`⚡ Parallel signing completed: ${successfulTransactions.length}/${actualCount} successful`);
+      
+    } catch (parallelError) {
+      console.warn('⚠️ Parallel signing failed, falling back to sequential mode:', parallelError);
+      
+      // FALLBACK: Последовательное подписание при проблемах с параллельным
+      for (let i = 0; i < Math.min(actualCount, 10); i++) { // Ограничиваем до 10 в fallback режиме
+        try {
+          await new Promise(resolve => setTimeout(resolve, 200)); // Задержка между подписаниями
+          
+          const nonce = startNonce + i;
+          const txData = {
+            account: embeddedWallet.address,
+            to: config.contractAddress,
+            data: '0xa2e62045',
+            nonce,
+            maxFeePerGas: gasParams.maxFeePerGas,
+            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+            value: 0n,
+            type: 'eip1559',
+            gas: 100000n,
+          };
+
+          const signedTx = await walletClient.signTransaction(txData);
+          
+          successfulTransactions.push({
+            signedTx,
+            _reservedNonce: nonce,
+            timestamp: Date.now()
+          });
+          
+          console.log(`✅ Sequential signing: ${successfulTransactions.length}/${Math.min(actualCount, 10)}`);
+          
+        } catch (seqError) {
+          console.error(`Sequential signing error for transaction ${i + 1}:`, seqError);
+          const errorMessage = seqError?.message || seqError?.toString() || 'Unknown error';
+          
+          if (errorMessage.includes('rate limit') || seqError.status === 429) {
+            console.log('Rate limit in sequential mode, stopping');
+            break;
+          }
+        }
+      }
+      
+      console.log(`🔄 Sequential fallback completed: ${successfulTransactions.length} transactions`);
+    }
     
     // Добавляем успешные транзакции в пул
     pool.transactions.push(...successfulTransactions);
@@ -1180,6 +1281,14 @@ export const useBlockchainUtils = () => {
           };
         } catch (error) {
           console.error(`Error signing extension transaction ${i + 1}:`, error);
+          const errorMessage = error?.message || error?.toString() || 'Unknown error';
+          
+          // Для iframe ошибок просто пропускаем транзакцию
+          if (errorMessage.includes('iframe not initialized')) {
+            console.log('Iframe not initialized, skipping transaction in extension');
+            return null;
+          }
+          
           return null;
         }
       });
@@ -2112,9 +2221,12 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      // ФОНОВОЕ предподписание
-      const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
+      // ФОНОВОЕ предподписание с улучшенной обработкой ошибок
+      const preSigningPromise = balanceAndNoncePromise.then(async ({ initialNonce }) => {
         console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+        
+        // Дополнительная задержка для полной инициализации Privy iframe
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
         // Резервируем nonces для pre-signing
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -2132,8 +2244,27 @@ export const useBlockchainUtils = () => {
             }
           })
           .catch(error => {
-            console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
-            enableFallbackMode(chainId);
+            const errorMessage = error?.message || error?.toString() || 'Unknown error';
+            console.warn('⚠️ Background pre-signing failed (non-blocking):', errorMessage);
+            
+            if (errorMessage.includes('iframe not initialized')) {
+              console.log('🔄 Iframe initialization issue detected - will retry later');
+              // Повторная попытка через 5 секунд
+              setTimeout(async () => {
+                try {
+                  console.log('🔄 Retrying pre-signing after iframe initialization...');
+                  await preSignBatch(chainId, initialNonce, Math.min(batchSize, 5));
+                } catch (retryError) {
+                  console.warn('⚠️ Retry pre-signing also failed:', retryError);
+                  enableFallbackMode(chainId);
+                }
+              }, 5000);
+            } else if (errorMessage.includes('rate limit') || errorMessage.includes('429')) {
+              enableFallbackMode(chainId, 'rate limit detected');
+            } else {
+              enableFallbackMode(chainId, errorMessage);
+            }
+            
             console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
           });
       });
@@ -2247,8 +2378,13 @@ export const useBlockchainUtils = () => {
         lastError = error;
         const isLastRetry = i === maxRetries - 1;
         
-        // Обновляем circuit breaker при ошибке
-        if (circuitBreaker) {
+        // Безопасная проверка ошибок с защитой от undefined
+        const errorMessage = error?.message || error?.toString() || '';
+        const errorStatus = error?.status || 0;
+        const errorName = error?.name || '';
+        
+        // Обновляем circuit breaker при ошибке (но не для iframe проблем)
+        if (circuitBreaker && !errorMessage.includes('iframe not initialized')) {
           circuitBreaker.failures++;
           circuitBreaker.lastFailureTime = Date.now();
           
@@ -2257,32 +2393,35 @@ export const useBlockchainUtils = () => {
             circuitBreaker.state = 'OPEN';
             console.warn(`Circuit breaker OPENED for chain ${chainId} after ${circuitBreaker.failures} failures`);
           }
+        } else if (errorMessage.includes('iframe not initialized')) {
+          console.log('🔄 Iframe error detected - not counting as network failure');
         }
         
         // Проверяем, стоит ли повторять попытку
         const isRetryableError = 
-          error.status === 429 || // Too Many Requests
-          error.status === 403 || // Forbidden (может быть временно)
-          error.status === 500 || // Internal Server Error
-          error.status === 502 || // Bad Gateway
-          error.status === 503 || // Service Unavailable
-          error.status === 504 || // Gateway Timeout
-          error.message?.includes('rate limit') ||
-          error.message?.includes('timeout') ||
-          error.message?.includes('context deadline exceeded') ||
-          error.message?.includes('connection') ||
-          error.message?.includes('network') ||
-          error.message?.includes('fetch') ||
-          error.name === 'AbortError' ||
-          error.name === 'TypeError'; // Network errors
+          errorStatus === 429 || // Too Many Requests
+          errorStatus === 403 || // Forbidden (может быть временно)
+          errorStatus === 500 || // Internal Server Error
+          errorStatus === 502 || // Bad Gateway
+          errorStatus === 503 || // Service Unavailable
+          errorStatus === 504 || // Gateway Timeout
+          errorMessage.includes('rate limit') ||
+          errorMessage.includes('timeout') ||
+          errorMessage.includes('context deadline exceeded') ||
+          errorMessage.includes('connection') ||
+          errorMessage.includes('network') ||
+          errorMessage.includes('fetch') ||
+          errorName === 'AbortError' ||
+          errorName === 'TypeError'; // Network errors
 
         // Специальные ошибки, которые не стоит повторять
         const isNonRetryableError = 
-          error.message?.includes('nonce too low') ||
-          error.message?.includes('insufficient funds') ||
-          error.message?.includes('gas too low') ||
-          error.message?.includes('invalid signature') ||
-          error.message?.includes('execution reverted');
+          errorMessage.includes('nonce too low') ||
+          errorMessage.includes('insufficient funds') ||
+          errorMessage.includes('gas too low') ||
+          errorMessage.includes('invalid signature') ||
+          errorMessage.includes('execution reverted') ||
+          errorMessage.includes('iframe not initialized'); // Добавляем iframe ошибки
 
         if (isLastRetry || isNonRetryableError || !isRetryableError) {
           if (isNonRetryableError) {
@@ -2538,6 +2677,24 @@ export const useBlockchainUtils = () => {
             }
           });
           console.log('🚀 All circuit breakers reset - ready for gaming!');
+        },
+        
+        // 🔄 Специальный сброс для iframe проблем
+        resetIframeIssues: (chainId) => {
+          const cb = circuitBreakers.current[chainId];
+          if (cb && cb.state === 'OPEN') {
+            cb.state = 'CLOSED';
+            cb.failures = 0;
+            cb.lastFailureTime = 0;
+            console.log(`🔄 Reset circuit breaker for iframe issues on chain ${chainId}`);
+          }
+          
+          // Сбрасываем fallback режим если он был активирован из-за iframe
+          const fallback = fallbackState.current[chainId];
+          if (fallback && fallback.degradedMode) {
+            fallback.degradedMode = false;
+            console.log(`🔄 Reset fallback mode for iframe issues on chain ${chainId}`);
+          }
         }
       };
       
@@ -2548,6 +2705,7 @@ export const useBlockchainUtils = () => {
       console.log('  • window.blockchainDebug.infinitePoolStats(6342) // 🆕 Infinite pool analysis');
       console.log('  • window.blockchainDebug.getPerformanceMetrics(6342)');
       console.log('  • window.blockchainDebug.forceResetAllCircuitBreakers() // Экстренный сброс');
+      console.log('  • window.blockchainDebug.resetIframeIssues(6342) // 🆕 Сброс iframe проблем');
       
       // АВТОМАТИЧЕСКИЙ сброс circuit breakers при первой загрузке
       setTimeout(() => {
