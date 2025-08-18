@@ -1,10 +1,12 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
+import PrivyWalletStatus from './PrivyWalletStatus';
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
+import '../styles/PrivyWalletStatus.css';
 
 const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
@@ -796,6 +798,14 @@ const GameComponent = ({ selectedNetwork }) => {
       )}
       
       <canvas ref={canvasRef} />
+      
+      {/* Privy Wallet Status Monitor */}
+      {authenticated && selectedNetwork && !selectedNetwork.isWeb2 && (
+        <PrivyWalletStatus 
+          selectedNetwork={selectedNetwork}
+          className="wallet-status-overlay"
+        />
+      )}
       
       {/* Transaction Status Toast */}
       {showToast && (

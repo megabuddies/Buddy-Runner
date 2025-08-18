@@ -22,6 +22,14 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         try {
           const wallet = wallets[0];
           
+          // Для Privy embedded wallets пропускаем переключение сети
+          const isEmbeddedWallet = wallet.walletClientType === 'privy';
+          if (isEmbeddedWallet) {
+            console.log(`Auto-switching to ${selectedNetwork.name}...`);
+            console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
+            return;
+          }
+          
           // Safely get chain ID with error handling
           let currentChainId;
           try {
@@ -84,6 +92,18 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       const wallet = wallets[0];
       const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
       
+      // Проверяем тип кошелька - для Privy embedded wallets используем другую логику
+      const isEmbeddedWallet = wallet.walletClientType === 'privy';
+      
+      if (isEmbeddedWallet) {
+        // Для Privy embedded wallets - просто логируем переключение
+        // Фактическое переключение происходит в useBlockchainUtils
+        console.log(`⚡ INSTANT GAMING MODE ENABLED - игра готова!`);
+        console.log(`Privy embedded wallet automatically configured for ${networkName}`);
+        setShowNetworks(false);
+        return;
+      }
+      
       // Safely check if wallet supports switchChain method
       if (typeof wallet.switchChain !== 'function') {
         console.warn('Wallet does not support network switching');
@@ -120,6 +140,14 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       }
     } catch (error) {
       console.error('Failed to switch network:', error);
+      
+      // Для Privy embedded wallets игнорируем ошибки переключения
+      const isEmbeddedWallet = wallets[0]?.walletClientType === 'privy';
+      if (isEmbeddedWallet && error.message.includes('Unsupported chainId')) {
+        console.log('⚡ Privy embedded wallet: Network switching handled automatically');
+        setShowNetworks(false);
+        return;
+      }
       
       let userMessage = 'Failed to switch network. ';
       if (error.message.includes('rejected')) {

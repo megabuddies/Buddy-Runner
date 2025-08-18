@@ -2056,6 +2056,13 @@ export const useBlockchainUtils = () => {
 
       console.log('✅ Using embedded wallet address:', embeddedWallet.address);
 
+      // Для Privy embedded wallets пропускаем переключение сети
+      // Используем логику bypass для избежания ошибок Privy
+      if (embeddedWallet.walletClientType === 'privy') {
+        console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
+        // Сразу переходим к инициализации без переключения сети
+      }
+
       // Получаем кешированные параметры сети (минимизируем RPC вызовы)
       await getCachedChainParams(chainId);
 

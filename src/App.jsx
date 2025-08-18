@@ -102,6 +102,7 @@ const App = () => {
         requireUserPasswordOnCreate: false, // Убираем трение пароля
         prependWithWalletUi: false, // Не показываем дополнительные UI элементы
         noPromptOnSignature: true, // Отключаем промпты для подписи
+        showWalletUiOnNotConnected: false, // Не показываем UI если не подключен
       },
       
       // Login methods optimized for gaming
