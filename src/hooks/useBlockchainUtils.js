@@ -2647,6 +2647,7 @@ export const useBlockchainUtils = () => {
     // Состояние
     isInitializing,
     transactionPending,
+    transactionPendingCount: transactionPendingCount.current, // Добавляем счетчик pending транзакций
     balance,
     contractNumber,
     
