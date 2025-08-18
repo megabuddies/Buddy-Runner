@@ -1,0 +1,345 @@
+/* Стили для монитора производительности транзакций */
+
+.performance-monitor {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid #333;
+  border-radius: 12px;
+  color: white;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  min-width: 280px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.performance-monitor.compact {
+  max-width: 300px;
+}
+
+.performance-monitor.expanded {
+  max-width: 400px;
+}
+
+.performance-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid #333;
+  transition: background-color 0.2s ease;
+}
+
+.performance-header:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.performance-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+}
+
+.performance-icon {
+  font-size: 14px;
+}
+
+.chain-indicator {
+  background: #2196F3;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: normal;
+}
+
+.performance-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metric-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.performance-grade {
+  font-weight: bold;
+  font-size: 11px;
+}
+
+.performance-time {
+  font-size: 10px;
+  color: #ccc;
+}
+
+.pool-status-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+.expand-arrow {
+  font-size: 10px;
+  color: #888;
+  transition: transform 0.2s ease;
+}
+
+.performance-monitor.expanded .expand-arrow {
+  transform: rotate(0deg);
+}
+
+.performance-details {
+  padding: 12px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.metric-card {
+  background: rgba(255, 255, 255, 0.05);
+  padding: 8px;
+  border-radius: 6px;
+  text-align: center;
+}
+
+.metric-label {
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-value {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+}
+
+.metric-number {
+  font-size: 16px;
+  font-weight: bold;
+}
+
+.metric-unit {
+  font-size: 10px;
+  color: #888;
+}
+
+.pool-status-text {
+  font-size: 11px;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.pool-details {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.pool-message {
+  font-size: 11px;
+  color: #ccc;
+  margin-bottom: 8px;
+  line-height: 1.4;
+}
+
+.pool-utilization {
+  margin-bottom: 8px;
+}
+
+.utilization-label {
+  font-size: 10px;
+  color: #888;
+  margin-bottom: 4px;
+}
+
+.utilization-bar {
+  width: 100%;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.utilization-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+  border-radius: 2px;
+}
+
+.utilization-text {
+  font-size: 10px;
+  color: #ccc;
+  text-align: right;
+}
+
+.refill-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #2196F3;
+  background: rgba(33, 150, 243, 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.refill-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.performance-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.last-update {
+  font-size: 10px;
+  color: #666;
+}
+
+.debug-button {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.debug-button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 768px) {
+  .performance-monitor {
+    position: relative;
+    top: auto;
+    right: auto;
+    margin: 10px;
+    max-width: calc(100vw - 20px);
+  }
+  
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .performance-header {
+    padding: 10px;
+  }
+  
+  .performance-details {
+    padding: 10px;
+  }
+}
+
+/* Темная тема для лучшей видимости в игре */
+.performance-monitor {
+  --success-color: #4CAF50;
+  --warning-color: #FF9800;
+  --error-color: #F44336;
+  --info-color: #2196F3;
+  --text-primary: #ffffff;
+  --text-secondary: #cccccc;
+  --text-muted: #888888;
+  --background-primary: rgba(0, 0, 0, 0.9);
+  --background-secondary: rgba(255, 255, 255, 0.05);
+  --border-color: #333333;
+}
+
+/* Анимации для привлечения внимания при критических состояниях */
+.performance-monitor .metric-card:has(.pool-status-text[style*="color: rgb(244, 67, 54)"]) {
+  animation: alertPulse 2s infinite;
+}
+
+@keyframes alertPulse {
+  0%, 100% { 
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid transparent;
+  }
+  50% { 
+    background: rgba(244, 67, 54, 0.1);
+    border: 1px solid rgba(244, 67, 54, 0.3);
+  }
+}
+
+/* Градиент для индикатора производительности */
+.performance-grade {
+  background: linear-gradient(45deg, currentColor, rgba(255, 255, 255, 0.8));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Эффект свечения для активных элементов */
+.pool-status-indicator {
+  box-shadow: 0 0 8px currentColor;
+}
+
+/* Плавные переходы для всех интерактивных элементов */
+.performance-monitor * {
+  transition: all 0.2s ease;
+}
+
+/* Специальные стили для состояния инициализации */
+.performance-monitor:has(.pool-status-text:contains("INITIALIZING")) .performance-header {
+  background: linear-gradient(90deg, rgba(33, 150, 243, 0.1) 0%, rgba(33, 150, 243, 0.05) 100%);
+}
+
+/* Стили для режима разработки */
+.performance-monitor.debug-mode {
+  border: 2px solid #FF9800;
+  box-shadow: 0 0 20px rgba(255, 152, 0, 0.3);
+}
+
+.performance-monitor.debug-mode::before {
+  content: "DEBUG MODE";
+  position: absolute;
+  top: -8px;
+  right: 8px;
+  background: #FF9800;
+  color: black;
+  padding: 2px 6px;
+  font-size: 8px;
+  border-radius: 4px;
+  font-weight: bold;
+}

@@ -4,12 +4,15 @@ import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
+import TransactionPerformanceMonitor from './components/TransactionPerformanceMonitor';
+import OptimizationDashboard from './components/OptimizationDashboard';
 import './App.css';
 
 const App = () => {
   const appId = 'cme84q0og02aalc0bh9blzwa9';
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
+  const [showOptimizationDashboard, setShowOptimizationDashboard] = useState(false);
 
   // Конфигурация сетей для ончейн системы
   const megaethTestnet = {
@@ -307,6 +310,60 @@ const App = () => {
               </div>
             </div>
             <GameComponent selectedNetwork={selectedNetwork} />
+            
+            {/* Монитор производительности транзакций для блокчейн сетей */}
+            {selectedNetwork && !selectedNetwork.isWeb2 && (
+              <TransactionPerformanceMonitor 
+                chainId={selectedNetwork.id}
+                isVisible={true}
+              />
+            )}
+            
+            {/* Кнопка для открытия дашборда оптимизации */}
+            {selectedNetwork && !selectedNetwork.isWeb2 && (
+              <div style={{
+                position: 'fixed',
+                top: '10px',
+                left: '10px',
+                zIndex: 1500
+              }}>
+                <button 
+                  onClick={() => setShowOptimizationDashboard(!showOptimizationDashboard)}
+                  style={{
+                    background: 'linear-gradient(45deg, #FF6B35, #F7931E)',
+                    border: 'none',
+                    color: 'white',
+                    padding: '8px 12px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '11px',
+                    fontFamily: 'Courier New, monospace',
+                    fontWeight: 'bold',
+                    boxShadow: '0 2px 8px rgba(255, 107, 53, 0.3)',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseOver={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(255, 107, 53, 0.4)';
+                  }}
+                  onMouseOut={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(255, 107, 53, 0.3)';
+                  }}
+                >
+                  🚀 {showOptimizationDashboard ? 'Close' : 'Open'} Dashboard
+                </button>
+              </div>
+            )}
+            
+            {/* Дашборд оптимизации */}
+            {selectedNetwork && !selectedNetwork.isWeb2 && (
+              <OptimizationDashboard 
+                chainId={selectedNetwork.id}
+                isVisible={showOptimizationDashboard}
+              />
+            )}
+            
             <div className="instructions">
               <p className="main-instruction">📱 Press SPACE or tap to make Buddy jump!</p>
               <p className="help-text">Help our brave bunny Buddy hop over the giant carrots and achieve the highest score!</p>
