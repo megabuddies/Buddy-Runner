@@ -23,161 +23,182 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
       if (embeddedWallet) {
         setWalletInfo({
           address: embeddedWallet.address,
-          type: embeddedWallet.walletClientType || embeddedWallet.connectorType,
-          isEmbedded: embeddedWallet.walletClientType === 'privy' || 
-                     embeddedWallet.connectorType === 'embedded' ||
-                     embeddedWallet.connectorType === 'privy'
+          type: embeddedWallet.walletClientType,
+          isEmbedded: embeddedWallet.walletClientType === 'privy'
         });
       }
-    } else {
-      setWalletInfo(null);
     }
   }, [authenticated, wallets, getEmbeddedWallet]);
 
-  // Обновление статуса пула каждые 2 секунды
+  // Обновление статуса пула транзакций
   useEffect(() => {
-    if (!selectedNetwork || selectedNetwork.isWeb2) return;
+    if (selectedNetwork && selectedNetwork.id !== 'select') {
+      const updatePoolStatus = () => {
+        try {
+          const status = getPoolStatus(selectedNetwork.id);
+          const infiniteStats = getInfinitePoolStats(selectedNetwork.id);
+          
+          setPoolStatus({
+            ...status,
+            infiniteStats
+          });
+        } catch (error) {
+          console.warn('Failed to get pool status:', error);
+        }
+      };
 
-    const updatePoolStatus = () => {
-      try {
-        const status = getPoolStatus?.(selectedNetwork.id);
-        const infiniteStats = getInfinitePoolStats?.(selectedNetwork.id);
-        
-        setPoolStatus({
-          ...status,
-          infiniteStats
-        });
-      } catch (error) {
-        console.warn('Error updating pool status:', error);
-      }
-    };
-
-    updatePoolStatus();
-    const interval = setInterval(updatePoolStatus, 2000);
-    return () => clearInterval(interval);
+      updatePoolStatus();
+      const interval = setInterval(updatePoolStatus, 1000);
+      return () => clearInterval(interval);
+    }
   }, [selectedNetwork, getPoolStatus, getInfinitePoolStats]);
 
-  if (!authenticated || !walletInfo || selectedNetwork?.isWeb2) {
+  if (!authenticated || !walletInfo) {
     return null;
   }
 
   const formatAddress = (address) => {
-    if (!address) return 'N/A';
+    if (!address) return '';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const getPoolTrendIcon = (trend) => {
-    switch (trend?.toLowerCase()) {
-      case 'growing': return '📈';
-      case 'stable': return '➡️';
-      case 'attention': return '📉';
-      default: return '❓';
+  const getStatusColor = (status) => {
+    if (!status) return 'text-gray-400';
+    
+    if (status.isReady && status.totalTransactions > 10) {
+      return 'text-green-400';
+    } else if (status.isReady && status.totalTransactions > 5) {
+      return 'text-yellow-400';
+    } else if (status.isReady) {
+      return 'text-orange-400';
+    } else {
+      return 'text-red-400';
     }
   };
 
-  const getPoolStatusColor = (remaining) => {
-    if (remaining > 20) return '#4ade80'; // green
-    if (remaining > 10) return '#fbbf24'; // yellow
-    return '#f87171'; // red
+  const getStatusIcon = (status) => {
+    if (!status) return '⏳';
+    
+    if (status.isReady && status.totalTransactions > 10) {
+      return '🚀';
+    } else if (status.isReady && status.totalTransactions > 5) {
+      return '⚡';
+    } else if (status.isReady) {
+      return '⚠️';
+    } else {
+      return '❌';
+    }
   };
 
   return (
     <div className={`privy-wallet-status ${className}`}>
-      <div className="wallet-header" onClick={() => setIsExpanded(!isExpanded)}>
-        <div className="wallet-indicator">
-          <div className={`status-dot ${walletInfo.isEmbedded ? 'embedded' : 'external'}`} />
-          <span className="wallet-type">
-            {walletInfo.isEmbedded ? '🔐 Privy Wallet' : '🔗 External Wallet'}
-          </span>
+      <div 
+        className="status-header"
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{ cursor: 'pointer' }}
+      >
+        <div className="wallet-info">
+          <span className="wallet-icon">👛</span>
+          <span className="wallet-address">{formatAddress(walletInfo.address)}</span>
+          {walletInfo.isEmbedded && (
+            <span className="embedded-badge">Privy</span>
+          )}
         </div>
-        <div className="wallet-balance">
-          {balance} ETH
-        </div>
-        <div className="expand-icon">
-          {isExpanded ? '▼' : '▶'}
-        </div>
+        
+        {selectedNetwork && selectedNetwork.id !== 'select' && poolStatus && (
+          <div className="pool-status">
+            <span className={`status-icon ${getStatusColor(poolStatus)}`}>
+              {getStatusIcon(poolStatus)}
+            </span>
+            <span className={`pool-count ${getStatusColor(poolStatus)}`}>
+              {poolStatus.totalTransactions - poolStatus.consumedTransactions}
+            </span>
+          </div>
+        )}
+        
+        <span className={`expand-icon ${isExpanded ? 'expanded' : ''}`}>
+          ▼
+        </span>
       </div>
 
       {isExpanded && (
-        <div className="wallet-details">
-          <div className="wallet-info">
-            <div className="info-row">
-              <span className="label">Address:</span>
-              <span className="value">{formatAddress(walletInfo.address)}</span>
+        <div className="status-details">
+          <div className="detail-section">
+            <h4>💰 Wallet Details</h4>
+            <div className="detail-item">
+              <span>Address:</span>
+              <span className="monospace">{walletInfo.address}</span>
             </div>
-            <div className="info-row">
-              <span className="label">Type:</span>
-              <span className="value">{walletInfo.type}</span>
+            <div className="detail-item">
+              <span>Type:</span>
+              <span>{walletInfo.isEmbedded ? 'Privy Embedded' : 'External'}</span>
             </div>
-            <div className="info-row">
-              <span className="label">Network:</span>
-              <span className="value">{selectedNetwork.name}</span>
+            <div className="detail-item">
+              <span>Balance:</span>
+              <span>{balance || '0.0000'} ETH</span>
             </div>
           </div>
 
-          {poolStatus && (
-            <div className="pool-status">
-              <div className="pool-header">
-                <h4>⚡ Pre-signed Transaction Pool</h4>
-                <div className="pool-trend">
-                  {getPoolTrendIcon(poolStatus.trend)} {poolStatus.trend}
-                </div>
+          {selectedNetwork && selectedNetwork.id !== 'select' && poolStatus && (
+            <div className="detail-section">
+              <h4>⚡ Pre-signed Pool Status</h4>
+              <div className="detail-item">
+                <span>Network:</span>
+                <span>{selectedNetwork.name}</span>
+              </div>
+              <div className="detail-item">
+                <span>Status:</span>
+                <span className={getStatusColor(poolStatus)}>
+                  {poolStatus.isReady ? 'Ready' : 'Initializing'}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span>Available:</span>
+                <span className={getStatusColor(poolStatus)}>
+                  {poolStatus.totalTransactions - poolStatus.consumedTransactions}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span>Total Signed:</span>
+                <span>{poolStatus.totalTransactions}</span>
+              </div>
+              <div className="detail-item">
+                <span>Used:</span>
+                <span>{poolStatus.consumedTransactions}</span>
               </div>
               
-              <div className="pool-stats">
-                <div className="stat-item">
-                  <span className="stat-label">Ready:</span>
-                  <span 
-                    className="stat-value"
-                    style={{ color: getPoolStatusColor(poolStatus.remaining) }}
-                  >
-                    {poolStatus.remaining}/{poolStatus.total}
-                  </span>
-                </div>
-                
-                <div className="stat-item">
-                  <span className="stat-label">Used:</span>
-                  <span className="stat-value">{poolStatus.used}</span>
-                </div>
-                
-                <div className="stat-item">
-                  <span className="stat-label">Status:</span>
-                  <span className={`stat-value ${poolStatus.isReady ? 'ready' : 'not-ready'}`}>
-                    {poolStatus.isReady ? '✅ Ready' : '⏳ Loading'}
-                  </span>
-                </div>
-
-                {poolStatus.isRefilling && (
-                  <div className="stat-item">
-                    <span className="stat-label">Refilling:</span>
-                    <span className="stat-value refilling">🔄 In Progress</span>
-                  </div>
-                )}
-              </div>
-
               {poolStatus.infiniteStats && (
-                <div className="infinite-pool-stats">
-                  <div className="infinite-header">
-                    <h5>♾️ Infinite Pool Status</h5>
+                <>
+                  <div className="detail-item">
+                    <span>Refill Cycles:</span>
+                    <span>{poolStatus.infiniteStats.cycles}</span>
                   </div>
-                  <div className="infinite-stats">
-                    <div className="stat-item">
-                      <span className="stat-label">Growth Cycles:</span>
-                      <span className="stat-value">{poolStatus.infiniteStats.cyclesCompleted}</span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="stat-label">Net Growth:</span>
-                      <span className="stat-value">+{poolStatus.infiniteStats.netGrowth}</span>
-                    </div>
-                    <div className="stat-item">
-                      <span className="stat-label">Next Refill:</span>
-                      <span className="stat-value">
-                        {poolStatus.infiniteStats.transactionsToNextRefill || 'N/A'} txs
-                      </span>
-                    </div>
+                  <div className="detail-item">
+                    <span>Growth Rate:</span>
+                    <span>+{poolStatus.infiniteStats.netGrowthPerCycle}/cycle</span>
                   </div>
-                </div>
+                </>
               )}
+            </div>
+          )}
+
+          {selectedNetwork && selectedNetwork.id !== 'select' && (
+            <div className="detail-section">
+              <h4>🎮 Gaming Performance</h4>
+              <div className="detail-item">
+                <span>Instant Mode:</span>
+                <span className="text-green-400">
+                  {poolStatus?.isReady ? 'Active' : 'Preparing'}
+                </span>
+              </div>
+              <div className="detail-item">
+                <span>Burst Mode:</span>
+                <span className="text-blue-400">Enabled</span>
+              </div>
+              <div className="detail-item">
+                <span>Auto-refill:</span>
+                <span className="text-purple-400">Infinite</span>
+              </div>
             </div>
           )}
         </div>

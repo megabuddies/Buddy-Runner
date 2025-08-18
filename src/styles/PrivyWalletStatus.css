@@ -1,0 +1,237 @@
+.privy-wallet-status {
+  background: linear-gradient(135deg, rgba(0, 0, 0, 0.8), rgba(20, 20, 20, 0.9));
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  color: white;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  margin: 10px 0;
+  box-shadow: 0 4px 20px rgba(0, 255, 0, 0.1);
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+
+.wallet-status-overlay {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 280px;
+  max-width: calc(100vw - 40px);
+}
+
+.privy-wallet-status:hover {
+  border-color: rgba(0, 255, 0, 0.3);
+  box-shadow: 0 6px 25px rgba(0, 255, 0, 0.2);
+}
+
+.status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.status-header:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.wallet-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wallet-icon {
+  font-size: 16px;
+}
+
+.wallet-address {
+  font-weight: bold;
+  color: #00ff88;
+}
+
+.embedded-badge {
+  background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
+.pool-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-icon {
+  font-size: 14px;
+}
+
+.pool-count {
+  font-weight: bold;
+  min-width: 20px;
+  text-align: center;
+}
+
+.expand-icon {
+  font-size: 12px;
+  transition: transform 0.3s ease;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.expand-icon.expanded {
+  transform: rotate(180deg);
+}
+
+.status-details {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 16px;
+  animation: slideDown 0.3s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 500px;
+    padding-top: 16px;
+    padding-bottom: 16px;
+  }
+}
+
+.detail-section {
+  margin-bottom: 16px;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section h4 {
+  color: #00ff88;
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: bold;
+  border-bottom: 1px solid rgba(0, 255, 136, 0.2);
+  padding-bottom: 4px;
+}
+
+.detail-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.detail-item:last-child {
+  border-bottom: none;
+}
+
+.detail-item span:first-child {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 11px;
+}
+
+.detail-item span:last-child {
+  color: white;
+  font-weight: bold;
+  text-align: right;
+}
+
+.monospace {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 2px 4px;
+  border-radius: 3px;
+}
+
+/* Цветовые классы для статусов */
+.text-green-400 {
+  color: #4ade80;
+}
+
+.text-yellow-400 {
+  color: #facc15;
+}
+
+.text-orange-400 {
+  color: #fb923c;
+}
+
+.text-red-400 {
+  color: #f87171;
+}
+
+.text-blue-400 {
+  color: #60a5fa;
+}
+
+.text-purple-400 {
+  color: #c084fc;
+}
+
+.text-gray-400 {
+  color: #9ca3af;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+  .privy-wallet-status {
+    font-size: 11px;
+  }
+  
+  .status-header {
+    padding: 10px 12px;
+  }
+  
+  .status-details {
+    padding: 12px;
+  }
+  
+  .wallet-address {
+    max-width: 80px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
+/* Пульсирующая анимация для активного статуса */
+.status-icon.text-green-400 {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Специальные стили для разных состояний пула */
+.pool-status.critical .status-icon {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50% {
+    opacity: 1;
+  }
+  51%, 100% {
+    opacity: 0.3;
+  }
+}
