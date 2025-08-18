@@ -2,11 +2,13 @@ import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
 import PrivyWalletStatus from './PrivyWalletStatus';
+import TransactionNotifications from './TransactionNotifications';
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
 import Score from '../game/Score.js';
 import '../styles/PrivyWalletStatus.css';
+import '../styles/TransactionNotifications.css';
 
 const GameComponent = ({ selectedNetwork }) => {
   const canvasRef = useRef(null);
@@ -781,21 +783,7 @@ const GameComponent = ({ selectedNetwork }) => {
 
   return (
     <div className="game-container">
-      {/* Show login prompt if blockchain network selected but not authenticated */}
-      {selectedNetwork && !selectedNetwork.isWeb2 && !authenticated && (
-        <div className="login-prompt-overlay">
-          <div className="login-prompt-container">
-            <div className="login-prompt-content">
-              <h2>🔐 Authentication Required</h2>
-              <p>You need to connect your wallet to play on <strong>{selectedNetwork.name}</strong></p>
-              <p>This will create an embedded wallet for seamless blockchain gaming.</p>
-              <button className="login-prompt-button" onClick={login}>
-                Connect Wallet
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+
       
       <canvas ref={canvasRef} />
       
@@ -915,6 +903,15 @@ const GameComponent = ({ selectedNetwork }) => {
           )}
         </div>
       )}
+
+      {/* Transaction Notifications - правый нижний угол */}
+      <TransactionNotifications
+        transactionPending={transactionPending}
+        balance={balance}
+        blockchainStatus={blockchainStatus}
+        selectedNetwork={selectedNetwork}
+        authenticated={authenticated}
+      />
     </div>
   );
 };
