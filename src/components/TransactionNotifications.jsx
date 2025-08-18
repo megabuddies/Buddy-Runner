@@ -3,6 +3,7 @@ import '../styles/TransactionNotifications.css';
 
 const TransactionNotifications = ({ 
   transactionPending, 
+  transactionPendingCount,
   balance, 
   blockchainStatus, 
   selectedNetwork,
@@ -10,28 +11,67 @@ const TransactionNotifications = ({
 }) => {
   const [notifications, setNotifications] = useState([]);
   const [nextId, setNextId] = useState(1);
+  const [lastProcessedTransactionTime, setLastProcessedTransactionTime] = useState(0);
+  const [lastPendingCount, setLastPendingCount] = useState(0);
 
-  // Добавляем уведомление о транзакции
+  // Добавляем уведомление о транзакции (отслеживаем изменения totalMovements)
   useEffect(() => {
-    if (transactionPending && authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
-      const notification = {
-        id: nextId,
-        type: 'transaction',
-        title: 'Transaction Pending',
-        message: `Processing jump on ${selectedNetwork.name}`,
-        status: 'pending',
-        timestamp: Date.now()
-      };
+    if (authenticated && selectedNetwork && !selectedNetwork.isWeb2 && blockchainStatus) {
+      // Отслеживаем увеличение totalMovements как индикатор новой транзакции
+      const currentMovements = blockchainStatus.totalMovements || 0;
       
-      setNotifications(prev => [...prev, notification]);
-      setNextId(prev => prev + 1);
+      // Если totalMovements увеличился, значит была новая транзакция
+      if (currentMovements > 0) {
+        // Проверяем, есть ли новая транзакция по времени
+        const currentTransactionTime = blockchainStatus.lastTransactionTime || 0;
+        
+        if (currentTransactionTime > lastProcessedTransactionTime && currentTransactionTime > 0) {
+          const notification = {
+            id: nextId,
+            type: 'transaction',
+            title: 'Jump Completed',
+            message: `Jump completed in ${currentTransactionTime}ms on ${selectedNetwork.name}`,
+            status: 'completed',
+            timestamp: Date.now(),
+            completedAt: Date.now()
+          };
+          
+          setNotifications(prev => [...prev, notification]);
+          setNextId(prev => prev + 1);
+          setLastProcessedTransactionTime(currentTransactionTime);
+        }
+      }
     }
-  }, [transactionPending, authenticated, selectedNetwork, nextId]);
+  }, [blockchainStatus?.totalMovements, blockchainStatus?.lastTransactionTime, authenticated, selectedNetwork, nextId, lastProcessedTransactionTime]);
 
-  // Добавляем уведомление о завершении транзакции
+  // Добавляем уведомление о pending транзакции (отслеживаем увеличение transactionPendingCount)
+  useEffect(() => {
+    if (authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
+      // Если количество pending транзакций увеличилось, создаем уведомление
+      if (transactionPendingCount > lastPendingCount) {
+        const notification = {
+          id: nextId,
+          type: 'transaction',
+          title: 'Transaction Pending',
+          message: `Processing jump on ${selectedNetwork.name}`,
+          status: 'pending',
+          timestamp: Date.now()
+        };
+        
+        setNotifications(prev => [...prev, notification]);
+        setNextId(prev => prev + 1);
+        setLastPendingCount(transactionPendingCount);
+      } else if (transactionPendingCount < lastPendingCount) {
+        // Если количество pending уменьшилось, обновляем счетчик
+        setLastPendingCount(transactionPendingCount);
+      }
+    }
+  }, [transactionPendingCount, authenticated, selectedNetwork, nextId, lastPendingCount]);
+
+  // Обновляем pending транзакции до completed (только для не-MegaETH сетей)
   useEffect(() => {
     if (blockchainStatus?.lastTransactionTime && authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
-      // Находим pending транзакцию и обновляем её
+      // Находим pending транзакцию и обновляем её (только если есть pending транзакции)
       setNotifications(prev => prev.map(notif => 
         notif.status === 'pending' && notif.type === 'transaction' 
           ? {

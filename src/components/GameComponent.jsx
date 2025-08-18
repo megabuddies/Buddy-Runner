@@ -21,6 +21,7 @@ const GameComponent = ({ selectedNetwork }) => {
   const {
     isInitializing,
     transactionPending,
+    transactionPendingCount,
     balance,
     contractNumber,
     initData,
@@ -908,6 +909,7 @@ const GameComponent = ({ selectedNetwork }) => {
       {/* Transaction Notifications - правый нижний угол */}
       <TransactionNotifications
         transactionPending={transactionPending}
+        transactionPendingCount={transactionPendingCount}
         balance={balance}
         blockchainStatus={blockchainStatus}
         selectedNetwork={selectedNetwork}
