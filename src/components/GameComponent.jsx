@@ -216,7 +216,8 @@ const GameComponent = ({ selectedNetwork }) => {
         totalMovements: prev.totalMovements + 1,
         onChainScore: prev.onChainScore + 1,
         lastTransactionTime: gameResult.blockchainTime, // Добавляем время последней транзакции
-        averageTransactionTime: gameResult.performanceMetrics?.averageBlockchainTime || prev.averageTransactionTime
+        averageTransactionTime: gameResult.performanceMetrics?.averageBlockchainTime || prev.averageTransactionTime,
+        lastError: null // Очищаем ошибку при успешной транзакции
       }));
 
       // Обновляем номер из контракта

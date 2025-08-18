@@ -94,6 +94,8 @@ const App = () => {
         logo: 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&h=100&fit=crop&crop=center',
         walletChainType: 'ethereum-and-solana',
         showWalletLoginFirst: false,
+        showWalletUiOnNotConnected: false, // Отключаем UI кошелька
+        showWalletUi: false, // Полностью отключаем UI кошелька
       },
       
       // РЕВОЛЮЦИОННАЯ конфигурация Embedded Wallets для нулевого трения
@@ -103,6 +105,7 @@ const App = () => {
         prependWithWalletUi: false, // Не показываем дополнительные UI элементы
         noPromptOnSignature: true, // Отключаем промпты для подписи
         showWalletUiOnNotConnected: false, // Не показываем UI если не подключен
+        showWalletLoginFirst: false, // Отключаем первоначальное отображение кошелька
       },
       
       // Login methods optimized for gaming

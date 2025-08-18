@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import '../styles/TransactionNotifications.css';
 
 const TransactionNotifications = ({ 
@@ -48,19 +48,28 @@ const TransactionNotifications = ({
   // Добавляем уведомление об ошибках транзакций
   useEffect(() => {
     if (blockchainStatus?.lastError && authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
-      const notification = {
-        id: nextId,
-        type: 'error',
-        title: 'Transaction Error',
-        message: `${blockchainStatus.lastError.type}: ${blockchainStatus.lastError.message?.slice(0, 50)}...`,
-        status: 'error',
-        timestamp: Date.now()
-      };
+      // Проверяем, что это новая ошибка (по timestamp)
+      const hasRecentError = notifications.some(n => 
+        n.type === 'error' && 
+        (Date.now() - n.timestamp) < 5000 && // За последние 5 секунд
+        n.message.includes(blockchainStatus.lastError.type)
+      );
       
-      setNotifications(prev => [...prev, notification]);
-      setNextId(prev => prev + 1);
+      if (!hasRecentError) {
+        const notification = {
+          id: nextId,
+          type: 'error',
+          title: 'Transaction Error',
+          message: `${blockchainStatus.lastError.type}: ${blockchainStatus.lastError.message?.slice(0, 50)}...`,
+          status: 'error',
+          timestamp: Date.now()
+        };
+        
+        setNotifications(prev => [...prev, notification]);
+        setNextId(prev => prev + 1);
+      }
     }
-  }, [blockchainStatus?.lastError, authenticated, selectedNetwork, nextId]);
+  }, [blockchainStatus?.lastError?.timestamp, authenticated, selectedNetwork, notifications, nextId]); // Используем timestamp вместо всего объекта
 
   // Добавляем уведомление о высокой производительности
   useEffect(() => {
@@ -110,28 +119,33 @@ const TransactionNotifications = ({
   // Автоматическое удаление старых уведомлений
   useEffect(() => {
     const interval = setInterval(() => {
-      const now = Date.now();
-      setNotifications(prev => prev.filter(notif => {
-        // Удаляем completed уведомления через 3 секунды
-        if (notif.status === 'completed' && notif.completedAt && (now - notif.completedAt) > 3000) {
-          return false;
-        }
-        // Удаляем старые уведомления через 10 секунд
-        if ((now - notif.timestamp) > 10000) {
-          return false;
-        }
-        return true;
-      }));
-    }, 1000);
+      setNotifications(prev => {
+        const now = Date.now();
+        const filtered = prev.filter(notif => {
+          // Удаляем completed уведомления через 3 секунды
+          if (notif.status === 'completed' && notif.completedAt && (now - notif.completedAt) > 3000) {
+            return false;
+          }
+          // Удаляем старые уведомления через 10 секунд
+          if ((now - notif.timestamp) > 10000) {
+            return false;
+          }
+          return true;
+        });
+        
+        // Возвращаем тот же массив, если ничего не изменилось (избегаем лишних ререндеров)
+        return filtered.length === prev.length ? prev : filtered;
+      });
+    }, 2000); // Увеличиваем интервал до 2 секунд
 
     return () => clearInterval(interval);
   }, []);
 
-  const dismissNotification = (id) => {
+  const dismissNotification = useCallback((id) => {
     setNotifications(prev => prev.filter(notif => notif.id !== id));
-  };
+  }, []);
 
-  const getNotificationIcon = (type, status) => {
+  const getNotificationIcon = useCallback((type, status) => {
     if (type === 'transaction') {
       return status === 'pending' ? '⏳' : status === 'completed' ? '✅' : '🔄';
     }
@@ -145,9 +159,9 @@ const TransactionNotifications = ({
       return '🚀';
     }
     return '📢';
-  };
+  }, []);
 
-  const getNotificationClass = (type, status) => {
+  const getNotificationClass = useCallback((type, status) => {
     if (type === 'transaction') {
       return status === 'pending' ? 'pending' : status === 'completed' ? 'success' : 'info';
     }
@@ -161,7 +175,7 @@ const TransactionNotifications = ({
       return 'success';
     }
     return 'info';
-  };
+  }, []);
 
   if (!authenticated || !selectedNetwork || selectedNetwork.isWeb2 || notifications.length === 0) {
     return null;
