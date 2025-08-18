@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
+import InstantTransactionDemo from './InstantTransactionDemo';
 import Player from '../game/Player.js';
 import Ground from '../game/Ground.js';
 import CarrotController from '../game/CarrotController.js';
@@ -904,6 +905,11 @@ const GameComponent = ({ selectedNetwork }) => {
             </div>
           )}
         </div>
+      )}
+
+      {/* Демонстрационный компонент мгновенных транзакций */}
+      {authenticated && selectedNetwork && !selectedNetwork.isWeb2 && (
+        <InstantTransactionDemo selectedNetwork={selectedNetwork} />
       )}
     </div>
   );

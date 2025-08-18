@@ -94,6 +94,8 @@ const UPDATER_ABI = [
   }
 ];
 
+// Функции для работы с предподписанными транзакциями будут определены в хуке
+
 // Safe JSON parsing utility to handle malformed responses
 const safeJsonParse = (data) => {
   try {
@@ -2084,22 +2086,28 @@ export const useBlockchainUtils = () => {
         console.log('💰 Current balance:', currentBalance);
         console.log('🎯 Starting nonce:', initialNonce);
 
-        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
-        if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
+        // АВТОМАТИЧЕСКОЕ ФОНДИРОВАНИЕ: Если баланс меньше 0.0001 ETH, вызываем faucet
+        if (parseFloat(currentBalance) < 0.0001) {
+          console.log(`💰 Balance is ${currentBalance} ETH (< 0.0001), calling auto-faucet in background...`);
           
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
+          // НЕБЛОКИРУЮЩИЙ faucet вызов для мгновенного gaming опыта
           callFaucet(embeddedWallet.address, chainId)
             .then(() => {
-              console.log('✅ Background faucet completed');
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
+              console.log('✅ Auto-faucet completed - wallet funded for gaming');
+              // Обновляем баланс через 3 секунды для быстрого отклика
+              setTimeout(() => {
+                checkBalance(chainId).then(newBalance => {
+                  console.log(`💰 Updated balance after auto-faucet: ${newBalance} ETH`);
+                });
+              }, 3000);
               // Обновляем nonce после faucet
               return getNextNonce(chainId, embeddedWallet.address, true);
             })
             .catch(faucetError => {
-              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
+              console.warn('⚠️ Auto-faucet failed (non-blocking):', faucetError);
             });
+        } else {
+          console.log(`💰 Sufficient balance: ${currentBalance} ETH - ready for gaming`);
         }
         
         return { currentBalance, initialNonce };
@@ -2636,6 +2644,55 @@ export const useBlockchainUtils = () => {
     }
   }, []);
 
+  // НОВАЯ функция инициализации системы мгновенных транзакций
+  const initInstantTransactionSystem = async (chainKey, batchSize = 10) => {
+    console.log('🚀 Initializing Instant Transaction System...');
+    
+    try {
+      // Проверяем поддержку сети
+      const chainId = parseInt(chainKey);
+      const config = NETWORK_CONFIGS[chainId];
+      if (!config) {
+        throw new Error(`Unsupported chain: ${chainKey}`);
+      }
+      
+      // Создаем клиент для подписания
+      const { walletClient, publicClient } = await createClients(chainId);
+      
+      // Получаем embedded wallet
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet found');
+      }
+      
+      console.log('✅ Using embedded wallet:', embeddedWallet.address);
+      
+      // Получаем текущий nonce
+      const currentNonce = await publicClient.getTransactionCount({
+        address: embeddedWallet.address,
+        blockTag: 'pending'
+      });
+      
+      console.log('🎯 Current nonce:', currentNonce);
+      
+      // Предварительно подписываем пакет транзакций
+      await preSignBatch(chainId, currentNonce, batchSize);
+      
+      console.log('🎮 Instant Transaction System ready for gaming!');
+      
+      return {
+        success: true,
+        walletAddress: embeddedWallet.address,
+        startingNonce: currentNonce,
+        batchSize,
+        message: 'System initialized successfully'
+      };
+    } catch (error) {
+      console.error('❌ Failed to initialize Instant Transaction System:', error);
+      throw error;
+    }
+  };
+
   return {
     // Состояние
     isInitializing,
@@ -2649,6 +2706,7 @@ export const useBlockchainUtils = () => {
     checkBalance,
     callFaucet,
     getContractNumber,
+    initInstantTransactionSystem, // НОВЫЙ метод
     
     // Утилиты
     getEmbeddedWallet,
