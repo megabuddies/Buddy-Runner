@@ -219,7 +219,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
             </div>
 
             <div className="scanner-text">
-              <span className="terminal-prompt">></span> {terminalText}
+                              <span className="terminal-prompt">&gt;</span> {terminalText}
             </div>
           </div>
         </div>
@@ -254,13 +254,13 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
             <div className="briefing-title">MISSION BRIEFING</div>
             <div className="briefing-content">
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
+                                  <span className="terminal-prompt">&gt;</span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
+                <span className="terminal-prompt">&gt;</span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
+                <span className="terminal-prompt">&gt;</span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
               </div>
             </div>
           </div>
@@ -312,10 +312,10 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
               <div className="launch-section">
                 <div className="launch-info">
                   <div className="terminal-text">
-                    <span className="terminal-prompt">></span> TARGET NETWORK: {selectedNetwork.name}
+                                          <span className="terminal-prompt">&gt;</span> TARGET NETWORK: {selectedNetwork.name}
                   </div>
                   <div className="terminal-text">
-                    <span className="terminal-prompt">></span> MISSION STATUS: READY FOR DEPLOYMENT
+                    <span className="terminal-prompt">&gt;</span> MISSION STATUS: READY FOR DEPLOYMENT
                   </div>
                 </div>
                 <button className="launch-button" onClick={handleStartGame}>

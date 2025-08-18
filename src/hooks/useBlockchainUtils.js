@@ -2309,71 +2309,7 @@ export const useBlockchainUtils = () => {
     throw lastError;
   };
 
-  // Debug утилиты для мониторинга (только в development)
-  useEffect(() => {
-    if (process.env.NODE_ENV === 'development' || window.location.hostname === 'localhost') {
-      window.blockchainDebug = {
-        getRPCHealth: (chainId) => rpcHealthStatus.current[chainId],
-        getCircuitBreaker: (chainId) => circuitBreakers.current[chainId],
-        getTransactionPool: (chainId) => preSignedPool.current[chainId],
-        getBurstState: (chainId) => burstState.current[chainId],
-        getConnectionPool: () => activeConnections.current,
-        getNonceManager: (chainId, address) => nonceManager.current[`${chainId}-${address}`],
-        
-        // Утилиты для тестирования
-        forceCircuitBreakerOpen: (chainId) => {
-          const cb = getCircuitBreaker(chainId);
-          cb.state = 'OPEN';
-          cb.failures = cb.threshold;
-          cb.lastFailureTime = Date.now();
-          console.log(`Force opened circuit breaker for chain ${chainId}`);
-        },
-        
-        resetCircuitBreaker: (chainId) => {
-          const cb = getCircuitBreaker(chainId);
-          cb.state = 'CLOSED';
-          cb.failures = 0;
-          console.log(`Reset circuit breaker for chain ${chainId}`);
-        },
-        
-        clearTransactionPool: (chainId) => {
-          const chainKey = chainId.toString();
-          if (preSignedPool.current[chainKey]) {
-            preSignedPool.current[chainKey].transactions = [];
-            preSignedPool.current[chainKey].currentIndex = 0;
-            console.log(`Cleared transaction pool for chain ${chainId}`);
-          }
-        },
-        
-        generateHealthReport: (chainId) => {
-          const rpcHealth = rpcHealthStatus.current[chainId];
-          const poolStatus = preSignedPool.current[chainId?.toString()];
-          const circuitBreakerState = circuitBreakers.current[chainId];
-          
-          const report = {
-            timestamp: new Date().toISOString(),
-            chainId,
-            rpcEndpoints: rpcHealth,
-            transactionPool: poolStatus ? {
-              totalTransactions: poolStatus.transactions.length,
-              currentIndex: poolStatus.currentIndex,
-              availableTransactions: poolStatus.transactions.length - poolStatus.currentIndex,
-              isRefilling: poolStatus.isRefilling
-            } : null,
-            circuitBreaker: circuitBreakerState,
-            connections: activeConnections.current,
-            burstState: burstState.current[chainId]
-          };
-          
-          console.table(report);
-          return report;
-        }
-      };
-      
-      console.log('🔧 Blockchain debug utilities loaded. Use window.blockchainDebug for monitoring.');
-      console.log('📊 Example: window.blockchainDebug.generateHealthReport(6342)');
-    }
-  }, []);
+
 
   // Debug утилиты для мониторинга (только в development) - ДОПОЛНЕННЫЕ для Real-Time Gaming
   useEffect(() => {
