@@ -64,6 +64,32 @@ const GameComponent = ({ selectedNetwork }) => {
     };
   }, [sendUpdate, getContractNumber, selectedNetwork, blockchainStatus.initialized]);
 
+  // ДОБАВЛЕНО: Периодическая очистка застрявших состояний
+  useEffect(() => {
+    const cleanupInterval = setInterval(() => {
+      const now = Date.now();
+      
+      // Если нет активности более 30 секунд - агрессивно сбрасываем состояние
+      if (lastTransactionTime.current && (now - lastTransactionTime.current) > 30000) {
+        if (pendingTransactionCount.current > 0) {
+          console.log('🧹 Periodic cleanup: resetting stuck transaction state');
+          console.log(`  Previous pending count: ${pendingTransactionCount.current}`);
+          pendingTransactionCount.current = 0;
+          transactionPendingRef.current = false;
+        }
+      }
+      
+      // Проверка на аномально высокие значения pending count
+      if (pendingTransactionCount.current > 20) {
+        console.warn('🚨 ANOMALY: Extremely high pending count detected:', pendingTransactionCount.current);
+        pendingTransactionCount.current = 0;
+        transactionPendingRef.current = false;
+      }
+    }, 10000); // Проверяем каждые 10 секунд
+    
+    return () => clearInterval(cleanupInterval);
+  }, []);
+
   // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
   const GAME_SPEED_INCREMENT = 0.00001;
@@ -141,11 +167,20 @@ const GameComponent = ({ selectedNetwork }) => {
         console.log('🚫 Maximum MegaETH transaction throughput reached:', pendingTransactionCount.current);
         return;
       }
-      // Дополнительная проверка: если транзакция висит больше 10 секунд, сбрасываем счетчик
+      // ИСПРАВЛЕНО: Более агрессивный сброс pending счетчика (5 секунд вместо 10)
       const now = Date.now();
-      if (lastTransactionTime.current && (now - lastTransactionTime.current) > 10000) {
-        console.log('🔄 Resetting pending count due to timeout, was:', pendingTransactionCount.current);
+      if (lastTransactionTime.current && (now - lastTransactionTime.current) > 5000) {
+        console.log('🔄 Resetting pending count due to timeout (5s), was:', pendingTransactionCount.current);
         pendingTransactionCount.current = 0;
+        // Сбрасываем также pending флаги для полной очистки состояния
+        transactionPendingRef.current = false;
+      }
+      
+      // ДОБАВЛЕНО: Экстренный сброс при критических значениях
+      if (pendingTransactionCount.current > 15) {
+        console.warn('🚨 CRITICAL: Force resetting stuck pending count:', pendingTransactionCount.current);
+        pendingTransactionCount.current = 0;
+        transactionPendingRef.current = false;
       }
     } else {
       // Для других сетей более строгая проверка

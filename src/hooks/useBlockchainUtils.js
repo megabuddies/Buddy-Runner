@@ -1208,9 +1208,26 @@ export const useBlockchainUtils = () => {
       
       // Добавляем новые транзакции в основной пул
       if (pool && tempTransactions.length > 0) {
+        // ДОБАВЛЕНО: Очистка старых транзакций для предотвращения утечек памяти
+        const MAX_POOL_SIZE = 200; // Максимальный размер пула
+        const totalAfterExtension = pool.transactions.length + tempTransactions.length;
+        
+        if (totalAfterExtension > MAX_POOL_SIZE) {
+          console.log(`🧹 Pool cleanup: ${totalAfterExtension} -> ${MAX_POOL_SIZE} transactions`);
+          // Удаляем старые использованные транзакции
+          const usedTransactions = pool.currentIndex;
+          const transactionsToRemove = Math.min(usedTransactions, totalAfterExtension - MAX_POOL_SIZE);
+          
+          if (transactionsToRemove > 0) {
+            pool.transactions.splice(0, transactionsToRemove);
+            pool.currentIndex = Math.max(0, pool.currentIndex - transactionsToRemove);
+            console.log(`🧹 Removed ${transactionsToRemove} old transactions, new index: ${pool.currentIndex}`);
+          }
+        }
+        
         pool.transactions.push(...tempTransactions);
         pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
-        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
+        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}, Available: ${pool.transactions.length - pool.currentIndex}`);
         
         // Обновляем nonce manager
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -1772,14 +1789,28 @@ export const useBlockchainUtils = () => {
     } catch (error) {
       console.error('❌ Send transaction error:', error);
       
-      // Специальная обработка ошибок nonce для всех сетей
+      // УЛУЧШЕНО: Специальная обработка ошибок nonce для всех сетей
       if (error.message?.includes('nonce too low')) {
         const embeddedWallet = getEmbeddedWallet();
         if (embeddedWallet) {
           console.log('🔄 Refreshing nonce due to "nonce too low" error');
           try {
-            // Принудительно обновляем nonce с сети
-            await getNextNonce(chainId, embeddedWallet.address, true);
+            // ИСПРАВЛЕНО: Двойная проверка nonce из сети для точной синхронизации
+            const { publicClient } = await createClients(chainId);
+            const [latestNonce, pendingNonce] = await Promise.all([
+              publicClient.getTransactionCount({ address: embeddedWallet.address, blockTag: 'latest' }),
+              publicClient.getTransactionCount({ address: embeddedWallet.address, blockTag: 'pending' })
+            ]);
+            
+            const actualNonce = Math.max(latestNonce, pendingNonce);
+            console.log(`🎯 Network nonce sync: latest=${latestNonce}, pending=${pendingNonce}, using=${actualNonce}`);
+            
+            // Обновляем nonce manager с актуальными данными
+            const manager = getNonceManager(chainId, embeddedWallet.address);
+            manager.currentNonce = actualNonce;
+            manager.pendingNonce = actualNonce;
+            manager.lastUpdate = Date.now();
+            manager.isUpdating = false; // Сбрасываем флаг блокировки
             
             // Очищаем пул предподписанных транзакций, так как они теперь имеют неверные nonces
             const chainKey = chainId.toString();
@@ -1790,24 +1821,12 @@ export const useBlockchainUtils = () => {
               pool.currentIndex = 0;
               pool.isReady = false;
               pool.hasTriggeredRefill = false;
+              pool.isRefilling = false; // ДОБАВЛЕНО: Сбрасываем флаг refilling
               
               // Запускаем пересоздание пула в фоне с правильным nonce
               setTimeout(async () => {
                 try {
-                  // Принудительно получаем актуальный nonce из сети
-                  const { publicClient } = await createClients(chainId);
-                  const actualNonce = await publicClient.getTransactionCount({
-                    address: embeddedWallet.address,
-                    blockTag: 'pending'
-                  });
-                  
-                  console.log(`🔄 Recreating pool with actual network nonce: ${actualNonce}`);
-                  
-                  // Обновляем менеджер nonce
-                  const manager = getNonceManager(chainId, embeddedWallet.address);
-                  manager.currentNonce = actualNonce;
-                  manager.pendingNonce = actualNonce;
-                  manager.lastUpdate = Date.now();
+                  console.log(`🔄 Recreating pool with synchronized nonce: ${actualNonce}`);
                   
                   // Пересоздаем пул с правильным nonce
                   const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
@@ -1815,6 +1834,11 @@ export const useBlockchainUtils = () => {
                   console.log(`✅ Pre-signed transaction pool recreated with correct nonces starting from ${actualNonce}`);
                 } catch (recreateError) {
                   console.error('❌ Failed to recreate transaction pool:', recreateError);
+                  // ДОБАВЛЕНО: При ошибке пересоздания - сбрасываем флаги для возможности retry
+                  if (pool) {
+                    pool.isRefilling = false;
+                    pool.hasTriggeredRefill = false;
+                  }
                 }
               }, 100);
             }
@@ -1890,6 +1914,41 @@ export const useBlockchainUtils = () => {
 
   // Отдельная функция для выполнения транзакции с измерением производительности
   const executeTransaction = async (chainId, startTime) => {
+    let signedTx = null;
+    let blockchainTime = 0;
+    let success = false;
+    
+    // ДОБАВЛЕНО: Глобальный таймаут для всей операции
+    const GLOBAL_TIMEOUT = chainId === 6342 ? 10000 : 30000; // 10s для MegaETH, 30s для остальных
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`Global transaction timeout (${GLOBAL_TIMEOUT}ms) for chain ${chainId}`));
+      }, GLOBAL_TIMEOUT);
+    });
+    
+    try {
+      // Выполняем транзакцию с глобальным таймаутом
+      const result = await Promise.race([
+        executeTransactionCore(chainId, startTime),
+        timeoutPromise
+      ]);
+      
+      return result;
+    } catch (error) {
+      // При таймауте - агрессивно сбрасываем состояние
+      if (error.message.includes('Global transaction timeout')) {
+        console.warn('🚨 Global timeout - resetting transaction state');
+        transactionPendingCount.current = Math.max(0, transactionPendingCount.current - 1);
+        if (chainId !== 6342) {
+          setTransactionPending(false);
+        }
+      }
+      throw error;
+    }
+  };
+
+  // Основная логика выполнения транзакции
+  const executeTransactionCore = async (chainId, startTime) => {
     let signedTx = null;
     let blockchainTime = 0;
     let success = false;
@@ -2023,6 +2082,7 @@ export const useBlockchainUtils = () => {
       }
       transactionPendingCount.current = Math.max(0, transactionPendingCount.current - 1);
     }
+  };
   };
 
   // РЕВОЛЮЦИОННАЯ неблокирующая инициализация данных для instant gaming
@@ -2221,7 +2281,7 @@ export const useBlockchainUtils = () => {
         lastFailureTime: 0,
         state: 'CLOSED', // CLOSED, OPEN, HALF_OPEN
         threshold: 5, // Открываем circuit после 5 неудач
-        timeout: 60000 // 60 секунд до попытки перехода в HALF_OPEN
+        timeout: 30000 // ИСПРАВЛЕНО: 30 секунд вместо 60 для игр
       };
     }
     return circuitBreakers.current[chainId];
@@ -2238,12 +2298,16 @@ export const useBlockchainUtils = () => {
       // Проверяем состояние circuit breaker
       if (circuitBreaker.state === 'OPEN') {
         const timeSinceLastFailure = Date.now() - circuitBreaker.lastFailureTime;
-        if (timeSinceLastFailure < circuitBreaker.timeout) {
-          throw new Error(`Circuit breaker is OPEN for chain ${chainId}. Try again in ${Math.round((circuitBreaker.timeout - timeSinceLastFailure) / 1000)} seconds.`);
+        // ИСПРАВЛЕНО: Для игр - более мягкий подход с ранним восстановлением
+        const gameRecoveryTime = Math.min(15000, circuitBreaker.timeout / 2); // 15 секунд или половина timeout
+        
+        if (timeSinceLastFailure < gameRecoveryTime) {
+          throw new Error(`Circuit breaker is OPEN for chain ${chainId}. Try again in ${Math.round((gameRecoveryTime - timeSinceLastFailure) / 1000)} seconds.`);
         } else {
           // Переходим в состояние HALF_OPEN для тестирования
           circuitBreaker.state = 'HALF_OPEN';
-          console.log(`Circuit breaker for chain ${chainId} entering HALF_OPEN state`);
+          circuitBreaker.failures = Math.max(0, circuitBreaker.failures - 1); // Уменьшаем счетчик ошибок
+          console.log(`🎮 Gaming mode: Circuit breaker for chain ${chainId} entering HALF_OPEN state (early recovery)`);
         }
       }
     }
@@ -2618,6 +2682,91 @@ export const useBlockchainUtils = () => {
             }
           });
           console.log('🚀 All circuit breakers reset - ready for gaming!');
+        },
+        
+        // ДОБАВЛЕНО: Диагностика зависания транзакций
+        diagnoseTransactionHanging: () => {
+          console.group('🔍 Transaction Hanging Diagnosis');
+          
+          const globalPendingCount = transactionPendingCount.current;
+          console.log('📊 Global pending count:', globalPendingCount);
+          
+          if (globalPendingCount > 5) {
+            console.warn('⚠️ HIGH PENDING COUNT DETECTED');
+            console.log('  Possible causes:');
+            console.log('  - Stuck transactions not properly resolved');
+            console.log('  - Network connectivity issues');
+            console.log('  - Circuit breaker in OPEN state');
+          }
+          
+          // Проверяем circuit breakers
+          Object.entries(circuitBreakers.current).forEach(([chainId, cb]) => {
+            if (cb.state !== 'CLOSED') {
+              console.warn(`⚠️ Circuit breaker for chain ${chainId}: ${cb.state}`);
+              console.log(`  Failures: ${cb.failures}/${cb.threshold}`);
+              if (cb.lastFailureTime) {
+                const timeSince = Date.now() - cb.lastFailureTime;
+                console.log(`  Time since last failure: ${Math.round(timeSince/1000)}s`);
+              }
+            }
+          });
+          
+          // Проверяем пулы транзакций
+          Object.entries(preSignedPool.current).forEach(([chainId, pool]) => {
+            const available = pool.transactions.length - pool.currentIndex;
+            console.log(`🎯 Chain ${chainId} pool: ${available}/${pool.transactions.length} available`);
+            
+            if (pool.isRefilling) {
+              console.log(`  🔄 Currently refilling...`);
+            }
+            
+            if (available < 5) {
+              console.warn(`  ⚠️ LOW TRANSACTION COUNT: ${available}`);
+            }
+          });
+          
+          console.groupEnd();
+          
+          // Автоматическое исправление если обнаружены проблемы
+          if (globalPendingCount > 10) {
+            console.log('🚨 AUTO-FIX: Resetting high pending count');
+            transactionPendingCount.current = 0;
+            return 'FIXED_PENDING_COUNT';
+          }
+          
+          return 'DIAGNOSIS_COMPLETE';
+        },
+        
+        // ДОБАВЛЕНО: Экстренное восстановление всех систем
+        emergencyRecovery: () => {
+          console.log('🚨 EMERGENCY RECOVERY INITIATED');
+          
+          // Сброс pending счетчиков
+          transactionPendingCount.current = 0;
+          console.log('✅ Reset pending transaction count');
+          
+          // Сброс circuit breakers
+          Object.keys(circuitBreakers.current).forEach(chainId => {
+            const cb = circuitBreakers.current[chainId];
+            if (cb) {
+              cb.state = 'CLOSED';
+              cb.failures = 0;
+              cb.lastFailureTime = 0;
+            }
+          });
+          console.log('✅ Reset all circuit breakers');
+          
+          // Сброс флагов refilling в пулах
+          Object.values(preSignedPool.current).forEach(pool => {
+            if (pool.isRefilling) {
+              pool.isRefilling = false;
+              pool.hasTriggeredRefill = false;
+              console.log('✅ Reset pool refilling flags');
+            }
+          });
+          
+          console.log('🚀 EMERGENCY RECOVERY COMPLETE - ready for gaming!');
+          return 'RECOVERY_COMPLETE';
         }
       };
       
