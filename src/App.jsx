@@ -97,6 +97,25 @@ const App = () => {
         showWalletUiOnNotConnected: false, // Отключаем UI кошелька
         showWalletUi: false, // Полностью отключаем UI кошелька
       },
+
+      // Отключаем аналитику и телеметрию для улучшения производительности
+      analytics: {
+        enabled: false, // Полностью отключаем аналитику
+      },
+      
+      // Минимизируем сетевые запросы
+      telemetry: {
+        enabled: false, // Отключаем телеметрию
+      },
+
+      // Дополнительные настройки для минимизации запросов
+      clientAnalytics: {
+        enabled: false, // Отключаем клиентскую аналитику
+      },
+      
+      // Отключаем автоматические обновления и проверки
+      autoRefresh: false,
+      backgroundSync: false,
       
       // РЕВОЛЮЦИОННАЯ конфигурация Embedded Wallets для нулевого трения
       embeddedWallets: {

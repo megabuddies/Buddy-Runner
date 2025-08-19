@@ -6,11 +6,22 @@ export default defineConfig({
   publicDir: 'public',
   define: {
     global: 'globalThis',
+    // Отключаем консольные логи в production
+    'console.log': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.log',
+    'console.warn': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.warn',
+    'console.info': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.info',
+    'console.debug': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.debug',
   },
   server: {
     port: 3000,
-    open: true
+    open: true,
+    // Минимизируем логи сервера разработки
+    hmr: {
+      overlay: false // Отключаем overlay с ошибками для лучшей производительности
+    }
   },
+  // Минимизируем логи сборки
+  logLevel: process.env.NODE_ENV === 'production' ? 'error' : 'info',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
