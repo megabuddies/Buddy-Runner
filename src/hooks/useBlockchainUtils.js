@@ -309,8 +309,8 @@ export const useBlockchainUtils = () => {
       timestamp: Date.now()
     });
     
-    // Держим только последние 50 транзакций для расчетов
-    if (metrics.recentTransactions.length > 50) {
+    // Держим только последние 3250 транзакций для расчетов
+    if (metrics.recentTransactions.length > 3250) {
       metrics.recentTransactions.shift();
     }
     
@@ -338,9 +338,9 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 200, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
+      poolSize: 13000, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
       refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 50, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
+      batchSize: 3250, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
@@ -348,9 +348,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
     },
     31337: { // Foundry
-      poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 7800, // УВЕЛИЧЕН для длинных игровых сессий
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 30, // Больший размер пакета
+      batchSize: 1950, // Больший размер пакета
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
@@ -358,9 +358,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // Уменьшен cooldown
     },
     50311: { // Somnia
-      poolSize: 100, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 6500, // УВЕЛИЧЕН для длинных игровых сессий
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 25, // Больший размер пакета
+      batchSize: 1625, // Больший размер пакета
       maxRetries: 3,
       retryDelay: 300,
       burstMode: true,
@@ -368,9 +368,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 400 // Уменьшен cooldown
     },
     1313161556: { // RISE
-      poolSize: 50, // Увеличен для pre-signed only
+      poolSize: 3250, // Увеличен для pre-signed only
       refillAt: 0.4,
-      batchSize: 12,
+      batchSize: 780,
       maxRetries: 2,
       retryDelay: 400,
       burstMode: false,
@@ -378,9 +378,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 1500
     },
     default: {
-      poolSize: 60, // Увеличен для pre-signed only
+      poolSize: 3900, // Увеличен для pre-signed only
       refillAt: 0.3, // Раннее пополнение
-      batchSize: 15,
+      batchSize: 975,
       maxRetries: 3,
       retryDelay: 300,
       burstMode: false,
@@ -1309,9 +1309,9 @@ export const useBlockchainUtils = () => {
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем ЗНАЧИТЕЛЬНО больше транзакций для длинных сессий
               // Используем логарифмическую шкалу для увеличения размера батча
               const usedCount = pool.currentIndex;
-              const baseRefillSize = Math.max(35, poolConfig.batchSize * 2);
-              // После 50 транзакций добавляем еще больше для предотвращения замедления
-              const refillSize = usedCount > 50 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
+              const baseRefillSize = Math.max(2275, poolConfig.batchSize * 2);
+              // После 3250 транзакций добавляем еще больше для предотвращения замедления
+              const refillSize = usedCount > 3250 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
               
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
@@ -1328,7 +1328,7 @@ export const useBlockchainUtils = () => {
       
       // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
       const remainingTransactions = pool.transactions.length - pool.currentIndex;
-      if (remainingTransactions <= 5 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      if (remainingTransactions <= 325 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
         pool.hasTriggeredRefill = true;
         
@@ -1338,7 +1338,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(50, poolConfig.batchSize * 2.5);
+              const emergencyRefillSize = Math.max(3250, poolConfig.batchSize * 2.5);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
@@ -2685,8 +2685,8 @@ export const useBlockchainUtils = () => {
           
           console.log(`🎯 Pool Efficiency:`);
           console.log(`  • Efficiency: ${((remaining / total) * 100).toFixed(1)}%`);
-          console.log(`  • Trend: ${remaining > 20 ? '📈 Growing' : remaining > 10 ? '➡️ Stable' : '📉 Needs attention'}`);
-          console.log(`  • Is infinite: ${total > 50 ? '✅ Yes' : '❌ Not yet'}`);
+          console.log(`  • Trend: ${remaining > 1300 ? '📈 Growing' : remaining > 650 ? '➡️ Stable' : '📉 Needs attention'}`);
+          console.log(`  • Is infinite: ${total > 3250 ? '✅ Yes' : '❌ Not yet'}`);
           
           if (consumed > 0) {
             const theoreticalPool = consumed + netGrowth;
@@ -2771,9 +2771,9 @@ export const useBlockchainUtils = () => {
         // Infinite pool specific stats
         cyclesCompleted,
         netGrowth,
-        isInfinite: pool.transactions.length > 50,
-        trend: pool.transactions.length - pool.currentIndex > 20 ? 'growing' : 
-               pool.transactions.length - pool.currentIndex > 10 ? 'stable' : 'attention'
+        isInfinite: pool.transactions.length > 3250,
+        trend: pool.transactions.length - pool.currentIndex > 1300 ? 'growing' : 
+               pool.transactions.length - pool.currentIndex > 650 ? 'stable' : 'attention'
       };
     },
     
@@ -2798,7 +2798,7 @@ export const useBlockchainUtils = () => {
         netGrowth,
         nextRefillAt,
         transactionsToNextRefill,
-        isInfinite: total > 50,
+        isInfinite: total > 3250,
         growthRate: consumed > 0 ? (netGrowth / consumed * 100).toFixed(1) + '%' : '0%',
         poolEfficiency: total > 0 ? (remaining / total * 100).toFixed(1) + '%' : '0%'
       };
