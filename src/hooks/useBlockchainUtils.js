@@ -1137,7 +1137,7 @@ export const useBlockchainUtils = () => {
     }
   };
 
-  // УЛУЧШЕННОЕ умное пополнение пула
+  // ОПТИМИЗИРОВАННОЕ умное пополнение пула с батчевой обработкой
   const extendPool = async (chainId, startNonce, count) => {
     const chainKey = chainId.toString();
     const pool = preSignedPool.current[chainKey];
@@ -1159,9 +1159,17 @@ export const useBlockchainUtils = () => {
       const config = NETWORK_CONFIGS[chainId];
       const embeddedWallet = getEmbeddedWallet();
       
-      // Подписываем новые транзакции
-      for (let i = 0; i < count; i++) {
-        try {
+      // ОПТИМИЗАЦИЯ: Подписываем транзакции батчами для лучшей производительности
+      const batchSize = 5; // Батчи по 5 транзакций
+      const batches = Math.ceil(count / batchSize);
+      
+      for (let batch = 0; batch < batches; batch++) {
+        const batchStart = batch * batchSize;
+        const batchEnd = Math.min(batchStart + batchSize, count);
+        const batchPromises = [];
+        
+        // Создаем промисы для текущего батча
+        for (let i = batchStart; i < batchEnd; i++) {
           const nonce = startNonce + i;
           
           const txData = {
@@ -1176,32 +1184,40 @@ export const useBlockchainUtils = () => {
             gas: 100000n,
           };
 
-          let signedTx;
-          if (chainId === 6342) {
-            signedTx = await walletClient.signTransaction(txData);
-          } else {
-            signedTx = await walletClient.signTransaction(txData);
+          const signPromise = walletClient.signTransaction(txData)
+            .then(signedTx => ({
+              signedTx,
+              _reservedNonce: nonce,
+              timestamp: Date.now()
+            }))
+            .catch(error => {
+              console.error(`Error signing transaction ${i + 1}:`, error);
+              return null;
+            });
+          
+          batchPromises.push(signPromise);
+        }
+        
+        // Выполняем батч параллельно
+        const batchResults = await Promise.all(batchPromises);
+        
+        // Добавляем успешные транзакции
+        batchResults.forEach(result => {
+          if (result) {
+            tempTransactions.push(result);
           }
-          
-          const txWrapper = {
-            signedTx,
-            _reservedNonce: nonce,
-            timestamp: Date.now()
-          };
-          tempTransactions.push(txWrapper);
-          
-          console.log(`Extended pool: signed ${tempTransactions.length}/${count}`);
-        } catch (error) {
-          console.error(`Error signing extension transaction ${i + 1}:`, error);
-          break;
+        });
+        
+        // Небольшая пауза между батчами для предотвращения блокировки
+        if (batch < batches - 1) {
+          await new Promise(resolve => setTimeout(resolve, 10));
         }
       }
       
       // Добавляем новые транзакции в основной пул
       if (pool && tempTransactions.length > 0) {
         pool.transactions.push(...tempTransactions);
-        pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
-        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
+        console.log(`Pool extended successfully. Added ${tempTransactions.length}/${count} transactions. Total: ${pool.transactions.length}`);
         
         // Обновляем nonce manager
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -1232,13 +1248,14 @@ export const useBlockchainUtils = () => {
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
-      // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - более частое и агрессивное
-      // Пополняем каждые 3 транзакции вместо 5 для решения проблемы после 20 прыжков
-      if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
-        console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (solving 20-jump slowdown)`);
+      // 🔄 ОПТИМИЗИРОВАННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - менее частое, но более эффективное
+      // Пополняем каждые 10 транзакций для предотвращения блокировок
+      const remainingTx = pool.transactions.length - pool.currentIndex;
+      if (pool.currentIndex % 10 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill && remainingTx > 5) {
+        console.log(`🔄 OPTIMIZED refilling at ${pool.currentIndex} transactions used (remaining: ${remainingTx})`);
         pool.hasTriggeredRefill = true;
         
-        // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
+        // Пополняем в фоне - неблокирующий подход
         setTimeout(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
@@ -1246,20 +1263,25 @@ export const useBlockchainUtils = () => {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
               
-              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
-              // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
-              console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
-              console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
+              // ОПТИМИЗАЦИЯ: Разумный размер пополнения - не слишком большой
+              const refillSize = Math.min(20, poolConfig.batchSize);
+              console.log(`🚀 OPTIMIZED pool: adding ${refillSize} transactions (remaining: ${remainingTx})`);
               
               await extendPool(chainId, nextNonce, refillSize);
+              
+              // Сбрасываем флаг после небольшой задержки для предотвращения гонки
+              setTimeout(() => {
+                pool.hasTriggeredRefill = false;
+              }, 100);
             }
           } catch (error) {
-            console.error('❌ Error in enhanced pool refill:', error);
-            // В случае ошибки сбрасываем флаг для повторной попытки
-            pool.hasTriggeredRefill = false;
+            console.error('❌ Error in optimized pool refill:', error);
+            // Сбрасываем флаг немедленно для повторной попытки
+            setTimeout(() => {
+              pool.hasTriggeredRefill = false;
+            }, 1000);
           }
-        }, 0);
+        }, 50); // Небольшая задержка для предотвращения блокировки UI
       }
       
       // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
@@ -1357,26 +1379,17 @@ export const useBlockchainUtils = () => {
       const netGrowth = cyclesCompleted * 10; // +10 транзакций каждый цикл
       const predictedGrowth = totalTx + netGrowth;
       
-      // УЛУЧШЕННЫЕ информационные логи каждые 5 транзакций для раннего выявления проблем
-      if (consumedTx % 5 === 0 && consumedTx > 0) {
+      // ОПТИМИЗИРОВАННЫЕ информационные логи каждые 15 транзакций для снижения спама
+      if (consumedTx % 15 === 0 && consumedTx > 0) {
         const performanceGrade = remainingTx > 30 ? '🚀 EXCELLENT' : 
                                remainingTx > 20 ? '✅ GOOD' : 
                                remainingTx > 10 ? '⚠️ WARNING' : '🚨 CRITICAL';
                                
-        console.log(`📊 Enhanced Pool Stats for chain ${chainId} (Jump #${consumedTx}):`);
-        console.log(`  • Consumed: ${consumedTx} transactions`);
-        console.log(`  • Remaining: ${remainingTx} transactions`);
-        console.log(`  • Total pool size: ${totalTx} transactions`);
-        console.log(`  • Pool health: ${performanceGrade}`);
-        console.log(`  • Refill status: ${pool.isRefilling ? '🔄 ACTIVE' : '⏸️ IDLE'}`);
-        console.log(`  • Last refill triggered: ${pool.hasTriggeredRefill ? '✅ YES' : '❌ NO'}`);
+        console.log(`📊 Pool Stats for chain ${chainId} (Jump #${consumedTx}): ${consumedTx} used, ${remainingTx} remaining, ${performanceGrade}`);
         
-        // Специальное предупреждение для проблемной зоны 15-25 прыжков
-        if (consumedTx >= 15 && consumedTx <= 25) {
-          console.warn(`⚠️ CRITICAL ZONE: Jump ${consumedTx}/20+ - monitoring for slowdown issues`);
-          if (remainingTx < 15) {
-            console.error(`🚨 DANGER: Only ${remainingTx} transactions left at jump ${consumedTx}! This causes 5s delays!`);
-          }
+        // Предупреждение только при критически низком уровне
+        if (remainingTx < 10) {
+          console.warn(`⚠️ LOW POOL: Only ${remainingTx} transactions left at jump ${consumedTx}`);
         }
       }
       
