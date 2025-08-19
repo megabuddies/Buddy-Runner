@@ -1345,7 +1345,6 @@ export const useBlockchainUtils = () => {
         console.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length})`);
         throw new Error(`Pre-signed transaction pool exhausted for chain ${chainId}. Only pre-signed transactions are allowed.`);
       }
-    }
 
     // КРИТИЧЕСКАЯ СИТУАЦИЯ: пул транзакций пуст, но игра требует транзакцию
     // Пытаемся экстренно пополнить пул
