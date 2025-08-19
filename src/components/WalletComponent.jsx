@@ -99,7 +99,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         // Для Privy embedded wallets - просто логируем переключение
         // Фактическое переключение происходит в useBlockchainUtils
         console.log(`⚡ INSTANT GAMING MODE ENABLED - игра готова!`);
-        console.log(`Privy embedded wallet automatically configured for ${networkName}`);
+
         setShowNetworks(false);
         return;
       }
@@ -123,7 +123,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
         
         const networkConfig = getNetworkConfig(chainId);
         if (networkConfig) {
-          console.log(`Adding network ${networkName} to wallet...`);
+
           await addNetwork(wallet, networkConfig);
           
           // Small delay to ensure network is added
@@ -144,7 +144,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       // Для Privy embedded wallets игнорируем ошибки переключения
       const isEmbeddedWallet = wallets[0]?.walletClientType === 'privy';
       if (isEmbeddedWallet && error.message.includes('Unsupported chainId')) {
-        console.log('⚡ Privy embedded wallet: Network switching handled automatically');
+
         setShowNetworks(false);
         return;
       }
