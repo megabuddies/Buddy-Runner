@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLogin, usePrivy } from '@privy-io/react-auth';
 import './NetworkSelection.css';
 
-const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
+const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
   const [selectedNetwork, setSelectedNetwork] = useState(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [terminalText, setTerminalText] = useState('');
@@ -58,7 +58,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
     }
   ];
 
-  useEffect(() =&gt; {
+  useEffect(() => {
     const initMessages = [
       'INITIALIZING NETWORK SCANNER...',
       'DETECTING AVAILABLE CHAINS...',
@@ -67,21 +67,21 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
     ];
 
     let messageIndex = 0;
-    const interval = setInterval(() =&gt; {
+    const interval = setInterval(() => {
       setTerminalText(initMessages[messageIndex]);
       messageIndex++;
       if (messageIndex >= initMessages.length) {
         clearInterval(interval);
-        setTimeout(() =&gt; setIsInitializing(false), 500);
+        setTimeout(() => setIsInitializing(false), 500);
       }
     }, 800);
 
-    return () =&gt; clearInterval(interval);
+    return () => clearInterval(interval);
   }, []);
 
   // Hook для отслеживания размеров окна
-  useEffect(() =&gt; {
-    const handleResize = () =&gt; {
+  useEffect(() => {
+    const handleResize = () => {
       setWindowDimensions({
         width: window.innerWidth,
         height: window.innerHeight
@@ -89,11 +89,11 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
     };
 
     window.addEventListener('resize', handleResize);
-    return () =&gt; window.removeEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Debug информация для разработки
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (process.env.NODE_ENV === 'development') {
       console.log('Window dimensions changed:', windowDimensions);
       console.log('Dynamic styles:', getDynamicStyles());
@@ -101,14 +101,14 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
   }, [windowDimensions]);
 
   // Динамические стили на основе размеров окна
-  const getDynamicStyles = () =&gt; {
+  const getDynamicStyles = () => {
     const { width, height } = windowDimensions;
     
     // Определяем тип устройства на основе размеров
     const isMobile = width <= 768;
-    const isTablet = width &gt; 768 && width <= 1024;
-    const isDesktop = width &gt; 1024;
-    const isLargeDesktop = width &gt; 1600;
+    const isTablet = width > 768 && width <= 1024;
+    const isDesktop = width > 1024;
+    const isLargeDesktop = width > 1600;
     
     // Адаптивная ширина контейнера
     let containerWidth;
@@ -155,12 +155,12 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
 
   const { containerStyle, contentStyle, networkGridStyle } = getDynamicStyles();
 
-  const handleNetworkSelect = (network) =&gt; {
+  const handleNetworkSelect = (network) => {
     setSelectedNetwork(network);
     onNetworkSelect(network);
   };
 
-  const handleStartGame = () =&gt; {
+  const handleStartGame = () => {
     if (selectedNetwork) {
       // If web2 option is selected, skip wallet connection entirely
       if (selectedNetwork.isWeb2) {
@@ -181,7 +181,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
   };
 
   // Check if user gets authenticated after login
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (authenticated && user && selectedNetwork) {
       // Auto-proceed to game when authentication completes
       onStartGame(selectedNetwork);
@@ -219,7 +219,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
             </div>
 
             <div className="scanner-text">
-              <span className="terminal-prompt">&gt;</span> {terminalText}
+              <span className="terminal-prompt">></span> {terminalText}
             </div>
           </div>
         </div>
@@ -254,13 +254,13 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
             <div className="briefing-title">MISSION BRIEFING</div>
             <div className="briefing-content">
               <div className="terminal-text">
-                <span className="terminal-prompt">&gt;</span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
+                <span className="terminal-prompt">></span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">&gt;</span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
+                <span className="terminal-prompt">></span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">&gt;</span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
+                <span className="terminal-prompt">></span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
               </div>
             </div>
           </div>
@@ -269,11 +269,11 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
             <div className="selection-title">SELECT TARGET BLOCKCHAIN NETWORK:</div>
             
             <div className="network-grid" style={networkGridStyle}>
-              {networks.map((network) =&gt; (
+              {networks.map((network) => (
                 <div
                   key={network.id}
                   className={`network-card ${selectedNetwork?.id === network.id ? 'selected' : ''}`}
-                  onClick={() =&gt; handleNetworkSelect(network)}
+                  onClick={() => handleNetworkSelect(network)}
                 >
                   <div className="network-header">
                     <div className="network-icon">{network.icon}</div>
@@ -312,10 +312,10 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) =&gt; {
               <div className="launch-section">
                 <div className="launch-info">
                   <div className="terminal-text">
-                    <span className="terminal-prompt">&gt;</span> TARGET NETWORK: {selectedNetwork.name}
+                    <span className="terminal-prompt">></span> TARGET NETWORK: {selectedNetwork.name}
                   </div>
                   <div className="terminal-text">
-                    <span className="terminal-prompt">&gt;</span> MISSION STATUS: READY FOR DEPLOYMENT
+                    <span className="terminal-prompt">></span> MISSION STATUS: READY FOR DEPLOYMENT
                   </div>
                 </div>
                 <button className="launch-button" onClick={handleStartGame}>

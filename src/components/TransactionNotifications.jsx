@@ -8,24 +8,24 @@ const TransactionNotifications = ({
   blockchainStatus, 
   selectedNetwork,
   authenticated 
-}) =&gt; {
+}) => {
   const [notifications, setNotifications] = useState([]);
   const [nextId, setNextId] = useState(1);
   const [lastProcessedTransactionTime, setLastProcessedTransactionTime] = useState(0);
   const [lastPendingCount, setLastPendingCount] = useState(0);
 
   // Добавляем уведомление о транзакции (отслеживаем изменения totalMovements)
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (authenticated && selectedNetwork && !selectedNetwork.isWeb2 && blockchainStatus) {
       // Отслеживаем увеличение totalMovements как индикатор новой транзакции
       const currentMovements = blockchainStatus.totalMovements || 0;
       
       // Если totalMovements увеличился, значит была новая транзакция
-      if (currentMovements &gt; 0) {
+      if (currentMovements > 0) {
         // Проверяем, есть ли новая транзакция по времени
         const currentTransactionTime = blockchainStatus.lastTransactionTime || 0;
         
-        if (currentTransactionTime &gt; lastProcessedTransactionTime && currentTransactionTime &gt; 0) {
+        if (currentTransactionTime > lastProcessedTransactionTime && currentTransactionTime > 0) {
           const notification = {
             id: nextId,
             type: 'transaction',
@@ -36,8 +36,8 @@ const TransactionNotifications = ({
             completedAt: Date.now()
           };
           
-          setNotifications(prev =&gt; [...prev, notification]);
-          setNextId(prev =&gt; prev + 1);
+          setNotifications(prev => [...prev, notification]);
+          setNextId(prev => prev + 1);
           setLastProcessedTransactionTime(currentTransactionTime);
         }
       }
@@ -45,10 +45,10 @@ const TransactionNotifications = ({
   }, [blockchainStatus?.totalMovements, blockchainStatus?.lastTransactionTime, authenticated, selectedNetwork, nextId, lastProcessedTransactionTime]);
 
   // Добавляем уведомление о pending транзакции (отслеживаем увеличение transactionPendingCount)
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
       // Если количество pending транзакций увеличилось, создаем уведомление
-      if (transactionPendingCount &gt; lastPendingCount) {
+      if (transactionPendingCount > lastPendingCount) {
         const notification = {
           id: nextId,
           type: 'transaction',
@@ -58,8 +58,8 @@ const TransactionNotifications = ({
           timestamp: Date.now()
         };
         
-        setNotifications(prev =&gt; [...prev, notification]);
-        setNextId(prev =&gt; prev + 1);
+        setNotifications(prev => [...prev, notification]);
+        setNextId(prev => prev + 1);
         setLastPendingCount(transactionPendingCount);
       } else if (transactionPendingCount < lastPendingCount) {
         // Если количество pending уменьшилось, обновляем счетчик
@@ -69,10 +69,10 @@ const TransactionNotifications = ({
   }, [transactionPendingCount, authenticated, selectedNetwork, nextId, lastPendingCount]);
 
   // Обновляем pending транзакции до completed (только для не-MegaETH сетей)
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (blockchainStatus?.lastTransactionTime && authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
       // Находим pending транзакцию и обновляем её (только если есть pending транзакции)
-      setNotifications(prev =&gt; prev.map(notif =&gt; 
+      setNotifications(prev => prev.map(notif => 
         notif.status === 'pending' && notif.type === 'transaction' 
           ? {
               ...notif,
@@ -86,10 +86,10 @@ const TransactionNotifications = ({
   }, [blockchainStatus?.lastTransactionTime, authenticated, selectedNetwork]);
 
   // Добавляем уведомление об ошибках транзакций
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (blockchainStatus?.lastError && authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
       // Проверяем, что это новая ошибка (по timestamp)
-      const hasRecentError = notifications.some(n =&gt; 
+      const hasRecentError = notifications.some(n => 
         n.type === 'error' && 
         (Date.now() - n.timestamp) < 5000 && // За последние 5 секунд
         n.message.includes(blockchainStatus.lastError.type)
@@ -105,19 +105,19 @@ const TransactionNotifications = ({
           timestamp: Date.now()
         };
         
-        setNotifications(prev =&gt; [...prev, notification]);
-        setNextId(prev =&gt; prev + 1);
+        setNotifications(prev => [...prev, notification]);
+        setNextId(prev => prev + 1);
       }
     }
   }, [blockchainStatus?.lastError?.timestamp, authenticated, selectedNetwork, notifications, nextId]); // Используем timestamp вместо всего объекта
 
   // Добавляем уведомление о высокой производительности
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (blockchainStatus?.averageTransactionTime && 
         blockchainStatus.averageTransactionTime < 1000 && 
         authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
       
-      const hasPerformanceNotif = notifications.some(n =&gt; n.type === 'performance' && (Date.now() - n.timestamp) < 30000);
+      const hasPerformanceNotif = notifications.some(n => n.type === 'performance' && (Date.now() - n.timestamp) < 30000);
       
       if (!hasPerformanceNotif) {
         const notification = {
@@ -129,16 +129,16 @@ const TransactionNotifications = ({
           timestamp: Date.now()
         };
         
-        setNotifications(prev =&gt; [...prev, notification]);
-        setNextId(prev =&gt; prev + 1);
+        setNotifications(prev => [...prev, notification]);
+        setNextId(prev => prev + 1);
       }
     }
   }, [blockchainStatus?.averageTransactionTime, authenticated, selectedNetwork, notifications, nextId]);
 
   // Добавляем уведомление о низком балансе
-  useEffect(() =&gt; {
+  useEffect(() => {
     if (balance && parseFloat(balance) < 0.00005 && authenticated && selectedNetwork && !selectedNetwork.isWeb2) {
-      const hasLowBalanceNotif = notifications.some(n =&gt; n.type === 'low-balance' && n.status !== 'dismissed');
+      const hasLowBalanceNotif = notifications.some(n => n.type === 'low-balance' && n.status !== 'dismissed');
       
       if (!hasLowBalanceNotif) {
         const notification = {
@@ -150,24 +150,24 @@ const TransactionNotifications = ({
           timestamp: Date.now()
         };
         
-        setNotifications(prev =&gt; [...prev, notification]);
-        setNextId(prev =&gt; prev + 1);
+        setNotifications(prev => [...prev, notification]);
+        setNextId(prev => prev + 1);
       }
     }
   }, [balance, authenticated, selectedNetwork, notifications, nextId]);
 
   // Автоматическое удаление старых уведомлений
-  useEffect(() =&gt; {
-    const interval = setInterval(() =&gt; {
-      setNotifications(prev =&gt; {
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNotifications(prev => {
         const now = Date.now();
-        const filtered = prev.filter(notif =&gt; {
+        const filtered = prev.filter(notif => {
           // Удаляем completed уведомления через 3 секунды
-          if (notif.status === 'completed' && notif.completedAt && (now - notif.completedAt) &gt; 3000) {
+          if (notif.status === 'completed' && notif.completedAt && (now - notif.completedAt) > 3000) {
             return false;
           }
           // Удаляем старые уведомления через 10 секунд
-          if ((now - notif.timestamp) &gt; 10000) {
+          if ((now - notif.timestamp) > 10000) {
             return false;
           }
           return true;
@@ -178,14 +178,14 @@ const TransactionNotifications = ({
       });
     }, 2000); // Увеличиваем интервал до 2 секунд
 
-    return () =&gt; clearInterval(interval);
+    return () => clearInterval(interval);
   }, []);
 
-  const dismissNotification = useCallback((id) =&gt; {
-    setNotifications(prev =&gt; prev.filter(notif =&gt; notif.id !== id));
+  const dismissNotification = useCallback((id) => {
+    setNotifications(prev => prev.filter(notif => notif.id !== id));
   }, []);
 
-  const getNotificationIcon = useCallback((type, status) =&gt; {
+  const getNotificationIcon = useCallback((type, status) => {
     if (type === 'transaction') {
       return status === 'pending' ? '⏳' : status === 'completed' ? '✅' : '🔄';
     }
@@ -201,7 +201,7 @@ const TransactionNotifications = ({
     return '📢';
   }, []);
 
-  const getNotificationClass = useCallback((type, status) =&gt; {
+  const getNotificationClass = useCallback((type, status) => {
     if (type === 'transaction') {
       return status === 'pending' ? 'pending' : status === 'completed' ? 'success' : 'info';
     }
@@ -223,7 +223,7 @@ const TransactionNotifications = ({
 
   return (
     <div className="transaction-notifications">
-      {notifications.map((notification) =&gt; (
+      {notifications.map((notification) => (
         <div 
           key={notification.id}
           className={`notification ${getNotificationClass(notification.type, notification.status)}`}
@@ -236,7 +236,7 @@ const TransactionNotifications = ({
               <span className="notification-title">{notification.title}</span>
               <button 
                 className="notification-close"
-                onClick={() =&gt; dismissNotification(notification.id)}
+                onClick={() => dismissNotification(notification.id)}
               >
                 ×
               </button>

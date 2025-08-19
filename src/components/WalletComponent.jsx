@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
 
-const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls = false }) =&gt; {
+const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls = false }) => {
   const { user, authenticated, ready } = usePrivy();
   const { login } = useLogin();
   const { logout } = useLogout();
@@ -16,9 +16,9 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
   ];
 
   // Auto-switch to selected network when wallet connects
-  useEffect(() =&gt; {
-    const autoSwitchNetwork = async () =&gt; {
-      if (authenticated && wallets && wallets.length &gt; 0 && selectedNetwork && !isNetworkSwitching) {
+  useEffect(() => {
+    const autoSwitchNetwork = async () => {
+      if (authenticated && wallets && wallets.length > 0 && selectedNetwork && !isNetworkSwitching) {
         try {
           const wallet = wallets[0];
           
@@ -71,7 +71,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     autoSwitchNetwork();
   }, [authenticated, wallets, selectedNetwork]);
 
-  const handleWalletAction = () =&gt; {
+  const handleWalletAction = () => {
     if (authenticated) {
       logout();
       // Call disconnect callback if provided
@@ -83,14 +83,14 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     }
   };
 
-  const switchNetwork = async (chainId) =&gt; {
+  const switchNetwork = async (chainId) => {
     if (!wallets || wallets.length === 0) return;
     
     setIsNetworkSwitching(true);
     
     try {
       const wallet = wallets[0];
-      const networkName = networks.find(n =&gt; n.id === chainId)?.name || 'Unknown Network';
+      const networkName = networks.find(n => n.id === chainId)?.name || 'Unknown Network';
       
       // Проверяем тип кошелька - для Privy embedded wallets используем другую логику
       const isEmbeddedWallet = wallet.walletClientType === 'privy';
@@ -127,7 +127,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
           await addNetwork(wallet, networkConfig);
           
           // Small delay to ensure network is added
-          await new Promise(resolve =&gt; setTimeout(resolve, 1000));
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
           // Then try to switch again
           console.log(`Switching to ${networkName}...`);
@@ -164,7 +164,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     }
   };
 
-  const getNetworkConfig = (chainId) =&gt; {
+  const getNetworkConfig = (chainId) => {
     const networkConfigs = {
       6342: {
         chainId: '0x18C6', // 6342 in hex
@@ -203,7 +203,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     return networkConfigs[chainId];
   };
 
-  const addNetwork = async (wallet, networkConfig) =&gt; {
+  const addNetwork = async (wallet, networkConfig) => {
     try {
       // Use the wallet's provider to add the network
       const provider = await wallet.getEthersProvider();
@@ -218,29 +218,29 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
     }
   };
 
-  const getCurrentNetwork = () =&gt; {
+  const getCurrentNetwork = () => {
     if (!wallets || wallets.length === 0) return null;
     const wallet = wallets[0];
-    return networks.find(network =&gt; network.id === wallet.chainId);
+    return networks.find(network => network.id === wallet.chainId);
   };
 
-  const formatAddress = (address) =&gt; {
+  const formatAddress = (address) => {
     if (!address) return '';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const getWalletAddress = () =&gt; {
+  const getWalletAddress = () => {
     if (user?.wallet?.address) {
       return user.wallet.address;
     }
     if (user?.linkedAccounts) {
-      const walletAccount = user.linkedAccounts.find(account =&gt; account.type === 'wallet');
+      const walletAccount = user.linkedAccounts.find(account => account.type === 'wallet');
       return walletAccount?.address;
     }
     return null;
   };
 
-  const getUserIdentifier = () =&gt; {
+  const getUserIdentifier = () => {
     if (user?.email?.address) {
       return user.email.address;
     }
@@ -274,11 +274,11 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
           {authenticated ? 'Disconnect' : 'Connect Wallet'}
         </button>
         
-        {authenticated && wallets && wallets.length &gt; 0 && !disableNetworkControls && (
+        {authenticated && wallets && wallets.length > 0 && !disableNetworkControls && (
           <div className="network-selector">
             <button 
               className="network-button"
-              onClick={() =&gt; setShowNetworks(!showNetworks)}
+              onClick={() => setShowNetworks(!showNetworks)}
               disabled={isNetworkSwitching}
             >
               {isNetworkSwitching ? (
@@ -292,13 +292,13 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
             
             {showNetworks && (
               <div className="network-dropdown">
-                {networks.map(network =&gt; (
+                {networks.map(network => (
                   <button
                     key={network.id}
                     className={`network-option ${
                       getCurrentNetwork()?.id === network.id ? 'active' : ''
                     } ${selectedNetwork?.id === network.id ? 'selected-game-network' : ''}`}
-                    onClick={() =&gt; switchNetwork(network.id)}
+                    onClick={() => switchNetwork(network.id)}
                     disabled={isNetworkSwitching}
                   >
                     {isNetworkSwitching ? '🔄' : network.emoji} {network.name}
