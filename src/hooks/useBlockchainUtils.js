@@ -1032,7 +1032,7 @@ export const useBlockchainUtils = () => {
     const maxConsecutiveErrors = 3;
 
     // ПАРАЛЛЕЛЬНОЕ подписание транзакций для максимальной скорости
-    const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
+    const PARALLEL_BATCH_SIZE = 50; // УВЕЛИЧЕНО: Подписываем по 50 транзакций параллельно для 10K пула (было 10)
     console.log(`🚀 Starting parallel pre-signing of ${actualCount} transactions`);
     
     // Сначала подписываем первую транзакцию отдельно для быстрого старта
@@ -1192,7 +1192,7 @@ export const useBlockchainUtils = () => {
       const embeddedWallet = getEmbeddedWallet();
       
       // ПАРАЛЛЕЛЬНОЕ подписание новых транзакций для максимальной скорости
-      const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
+      const PARALLEL_BATCH_SIZE = 50; // УВЕЛИЧЕНО: Подписываем по 50 транзакций параллельно для 10K пула (было 10)
       console.log(`📝 Starting parallel signing of ${count} transactions in batches of ${PARALLEL_BATCH_SIZE}`);
       
       for (let batchStart = 0; batchStart < count; batchStart += PARALLEL_BATCH_SIZE) {
@@ -1293,8 +1293,8 @@ export const useBlockchainUtils = () => {
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
       // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - оптимизированное для длинных сессий
-      // Пополняем каждые 10 транзакций большими батчами для минимизации блокировок
-      if (pool.currentIndex % 10 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      // Пополняем каждые 50 транзакций большими батчами для минимизации блокировок
+      if (pool.currentIndex % 50 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.log(`🔄 OPTIMIZED refilling at ${pool.currentIndex} transactions used`);
         pool.hasTriggeredRefill = true;
         
@@ -1309,11 +1309,13 @@ export const useBlockchainUtils = () => {
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем ЗНАЧИТЕЛЬНО больше транзакций для длинных сессий
               // Используем логарифмическую шкалу для увеличения размера батча
               const usedCount = pool.currentIndex;
-              const baseRefillSize = Math.max(35, poolConfig.batchSize * 2);
-              // После 50 транзакций добавляем еще больше для предотвращения замедления
-              const refillSize = usedCount > 50 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
+              const baseRefillSize = Math.max(200, poolConfig.batchSize * 2);
+              // Прогрессивное увеличение для длинных сессий
+              const refillSize = usedCount > 1000 ? Math.floor(baseRefillSize * 2) : 
+                                 usedCount > 100 ? Math.floor(baseRefillSize * 1.5) : 
+                                 baseRefillSize;
               
-              console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
+              console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 50, net growth +${refillSize-50})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
               await extendPool(chainId, nextNonce, refillSize);
@@ -1328,7 +1330,7 @@ export const useBlockchainUtils = () => {
       
       // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
       const remainingTransactions = pool.transactions.length - pool.currentIndex;
-      if (remainingTransactions <= 5 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      if (remainingTransactions <= 50 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
         pool.hasTriggeredRefill = true;
         
@@ -1338,7 +1340,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(50, poolConfig.batchSize * 2.5);
+              const emergencyRefillSize = Math.max(300, poolConfig.batchSize * 3);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
