@@ -1232,49 +1232,49 @@ export const useBlockchainUtils = () => {
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
-      // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - более частое и агрессивное
-      // Пополняем каждые 3 транзакции вместо 5 для решения проблемы после 20 прыжков
-      if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
-        console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (solving 20-jump slowdown)`);
+      // 🔄 ОПТИМИЗИРОВАННОЕ ПОПОЛНЕНИЕ - только когда действительно нужно
+      // Пополняем только когда остается мало транзакций (< 10) для предотвращения блокировок
+      const remainingTransactions = pool.transactions.length - pool.currentIndex;
+      if (remainingTransactions <= 10 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+        console.log(`🔄 Smart refilling: ${remainingTransactions} transactions remaining, adding more`);
         pool.hasTriggeredRefill = true;
         
-        // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
-        setTimeout(async () => {
+        // Асинхронное пополнение без блокировки основного потока
+        setImmediate(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
               
-              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
-              // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
-              console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
-              console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
+              // Умеренное пополнение для избежания блокировок
+              const refillSize = Math.max(20, poolConfig.batchSize);
+              console.log(`🚀 Adding ${refillSize} transactions to maintain pool`);
               
               await extendPool(chainId, nextNonce, refillSize);
             }
           } catch (error) {
-            console.error('❌ Error in enhanced pool refill:', error);
+            console.error('❌ Error in pool refill:', error);
             // В случае ошибки сбрасываем флаг для повторной попытки
             pool.hasTriggeredRefill = false;
           }
-        }, 0);
+        });
       }
       
       // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
-      const remainingTransactions = pool.transactions.length - pool.currentIndex;
-      if (remainingTransactions <= 5 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      // Используем уже объявленную переменную remainingTransactions
+      if (remainingTransactions <= 3 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
         pool.hasTriggeredRefill = true;
         
-        setTimeout(async () => {
+        // Используем setImmediate для лучшей производительности
+        setImmediate(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(30, poolConfig.batchSize * 2);
+              const emergencyRefillSize = Math.max(25, poolConfig.batchSize * 1.5);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
@@ -1283,7 +1283,7 @@ export const useBlockchainUtils = () => {
             console.error('❌ Emergency refill failed:', error);
             pool.hasTriggeredRefill = false;
           }
-        }, 0);
+        });
       }
 
       return txWrapper.signedTx;
