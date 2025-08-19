@@ -1089,8 +1089,8 @@ export const useBlockchainUtils = () => {
         };
         pool.transactions.push(txWrapper);
         
-        // КРИТИЧНО: Делаем пул доступным сразу же после первой транзакции
-        if (i === 0) {
+        // КРИТИЧНО: Делаем пул доступным после достаточного количества транзакций
+        if (i === 2) { // Ждем 3 транзакции перед активацией
           pool.isReady = true;
           console.log(`🎮 First transaction ready - gaming can begin!`);
           console.log(`✅ Pre-signed transaction pool is now ACTIVE with ${pool.transactions.length} transactions`);
@@ -1248,7 +1248,7 @@ export const useBlockchainUtils = () => {
               
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
               // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
+              const refillSize = 15; // Уменьшено для быстрого пополнения
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
@@ -1274,7 +1274,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(30, poolConfig.batchSize * 2);
+              const emergencyRefillSize = 10; // Уменьшено с 70 для быстрого пополнения
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
@@ -1311,7 +1311,7 @@ export const useBlockchainUtils = () => {
         const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
         
         // Экстренное пополнение с минимальным размером пакета
-        const emergencyBatchSize = Math.min(5, poolConfig.batchSize);
+        const emergencyBatchSize = 5; // Фиксированный малый размер для быстроты
         const nextNonce = manager.pendingNonce;
         
         console.log(`🚨 Emergency pre-signing ${emergencyBatchSize} transactions from nonce ${nextNonce}`);
@@ -1814,10 +1814,11 @@ export const useBlockchainUtils = () => {
             const chainKey = chainId.toString();
             const pool = preSignedPool.current[chainKey];
             if (pool) {
-              console.log('🗑️ Clearing invalid pre-signed transaction pool');
-              pool.transactions = [];
-              pool.currentIndex = 0;
-              pool.isReady = false;
+              console.log('🗑️ Removing invalid transactions from pool');
+              // Удаляем только неиспользованные транзакции с неправильными nonce
+              const validTransactions = pool.transactions.slice(0, pool.currentIndex);
+              pool.transactions = validTransactions;
+              // Не меняем isReady - пул остается активным
               pool.hasTriggeredRefill = false;
               
               // Запускаем пересоздание пула в фоне с правильным nonce
@@ -2025,10 +2026,10 @@ export const useBlockchainUtils = () => {
             const chainKey = chainId.toString();
             const pool = preSignedPool.current[chainKey];
             if (pool) {
-              console.log('🗑️ Clearing invalid pre-signed transaction pool due to nonce error');
-              pool.transactions = [];
-              pool.currentIndex = 0;
-              pool.isReady = false;
+              console.log('🗑️ Removing invalid transactions due to nonce error');
+            // Удаляем только неиспользованные транзакции
+            const validTransactions = pool.transactions.slice(0, pool.currentIndex);
+            pool.transactions = validTransactions;
               pool.hasTriggeredRefill = false;
             }
             
