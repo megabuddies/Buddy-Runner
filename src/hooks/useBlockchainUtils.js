@@ -338,9 +338,9 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 200, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 транзакций
       refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 50, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
+      batchSize: 500, // УВЕЛИЧЕН пропорционально для эффективного пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
@@ -348,9 +348,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
     },
     31337: { // Foundry
-      poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 транзакций
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 30, // Больший размер пакета
+      batchSize: 300, // УВЕЛИЧЕН пропорционально
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
@@ -358,9 +358,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // Уменьшен cooldown
     },
     50311: { // Somnia
-      poolSize: 100, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 транзакций
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 25, // Больший размер пакета
+      batchSize: 250, // УВЕЛИЧЕН пропорционально
       maxRetries: 3,
       retryDelay: 300,
       burstMode: true,
@@ -368,9 +368,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 400 // Уменьшен cooldown
     },
     1313161556: { // RISE
-      poolSize: 50, // Увеличен для pre-signed only
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 транзакций
       refillAt: 0.4,
-      batchSize: 12,
+      batchSize: 120, // УВЕЛИЧЕН пропорционально
       maxRetries: 2,
       retryDelay: 400,
       burstMode: false,
@@ -378,9 +378,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 1500
     },
     default: {
-      poolSize: 60, // Увеличен для pre-signed only
+      poolSize: 10000, // УВЕЛИЧЕН до 10000 транзакций
       refillAt: 0.3, // Раннее пополнение
-      batchSize: 15,
+      batchSize: 150, // УВЕЛИЧЕН пропорционально
       maxRetries: 3,
       retryDelay: 300,
       burstMode: false,
@@ -1309,7 +1309,7 @@ export const useBlockchainUtils = () => {
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем ЗНАЧИТЕЛЬНО больше транзакций для длинных сессий
               // Используем логарифмическую шкалу для увеличения размера батча
               const usedCount = pool.currentIndex;
-              const baseRefillSize = Math.max(35, poolConfig.batchSize * 2);
+              const baseRefillSize = Math.max(500, poolConfig.batchSize * 2);
               // После 50 транзакций добавляем еще больше для предотвращения замедления
               const refillSize = usedCount > 50 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
               
@@ -1338,7 +1338,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(50, poolConfig.batchSize * 2.5);
+              const emergencyRefillSize = Math.max(1000, poolConfig.batchSize * 2.5);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
@@ -1375,7 +1375,7 @@ export const useBlockchainUtils = () => {
         const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
         
         // Экстренное пополнение с минимальным размером пакета
-        const emergencyBatchSize = Math.min(5, poolConfig.batchSize);
+        const emergencyBatchSize = Math.min(100, poolConfig.batchSize);
         const nextNonce = manager.pendingNonce;
         
         console.log(`🚨 Emergency pre-signing ${emergencyBatchSize} transactions from nonce ${nextNonce}`);

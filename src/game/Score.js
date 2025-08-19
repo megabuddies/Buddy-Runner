@@ -78,12 +78,12 @@ export default class Score {
         const cyclesCompleted = Math.floor(pool.used / 5);
         const netGrowth = cyclesCompleted * 10;
         
-        // Dynamic color based on infinite pool logic
-        const poolColor = pool.remaining > 20 ? "#32CD32" : pool.remaining > 10 ? "#7FBC7F" : pool.remaining > 3 ? "#FFA500" : "#FF6347";
+        // Dynamic color based on infinite pool logic - UPDATED FOR 10000 POOL SIZE
+        const poolColor = pool.remaining > 1000 ? "#32CD32" : pool.remaining > 500 ? "#7FBC7F" : pool.remaining > 100 ? "#FFA500" : "#FF6347";
         this.ctx.fillStyle = poolColor;
         
-        // Pool status with infinite indicator
-        const infiniteIndicator = pool.total > 50 ? "∞" : "";
+        // Pool status with infinite indicator - UPDATED FOR 10000 POOL SIZE
+        const infiniteIndicator = pool.total > 1000 ? "∞" : "";
         this.ctx.fillText(
           `Pool: ${pool.remaining}/${pool.total}${infiniteIndicator}`,
           10 * this.scaleRatio,
@@ -100,7 +100,7 @@ export default class Score {
           );
         }
         
-        // Pool status indicator
+        // Pool status indicator - UPDATED FOR 10000 POOL SIZE
         if (!pool.isReady) {
           this.ctx.fillStyle = "#FF6347";
           this.ctx.fillText(
@@ -115,7 +115,7 @@ export default class Score {
             10 * this.scaleRatio,
             blockchainY + 80 * this.scaleRatio
           );
-        } else if (pool.total > 50) {
+        } else if (pool.total > 1000) {
           this.ctx.fillStyle = "#7FBC7F";
           this.ctx.fillText(
             `♾️ Infinite mode`,
