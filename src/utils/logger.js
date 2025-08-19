@@ -1,39 +1,44 @@
 // Система минимизации логов для улучшения производительности игры
 const isDev = import.meta.env.DEV;
 
+// Создаем пустые функции для production
+const noop = () => {};
+
 // В production режиме полностью отключаем консольные логи
 if (!isDev) {
-  // Сохраняем оригинальные методы для критических ошибок
-  const originalError = console.error;
+  // Сохраняем оригинальные методы
+  const originalConsole = {
+    log: console.log,
+    warn: console.warn,
+    info: console.info,
+    debug: console.debug,
+    error: console.error
+  };
   
-  // Полностью переопределяем все консольные методы
-  Object.assign(console, {
-    log: () => {},
-    warn: () => {},
-    info: () => {},
-    debug: () => {},
-    trace: () => {},
-    // Минимизируем даже error логи
-    error: (...args) => {
-      // Показываем только критические системные ошибки
-      const message = args[0];
-      if (typeof message === 'string' && 
-          (message.includes('Failed to load') || 
-           message.includes('Network Error') ||
-           message.includes('🚨 CRITICAL'))) {
-        originalError(...args);
-      }
-    },
-  });
+  // Переопределяем консольные методы
+  console.log = noop;
+  console.warn = noop;
+  console.info = noop;
+  console.debug = noop;
+  console.trace = noop;
   
-  // Дополнительно перехватываем window.console
-  window.console = console;
+  // Минимизируем error логи - показываем только критические
+  console.error = (...args) => {
+    const message = args[0];
+    if (typeof message === 'string' && 
+        (message.includes('Failed to load') || 
+         message.includes('Network Error') ||
+         message.includes('🚨 CRITICAL') ||
+         message.includes('Error during build'))) {
+      originalConsole.error(...args);
+    }
+  };
 }
 
-// Экспортируем условные логгеры для разработки
-export const devLog = isDev ? console.log : () => {};
-export const devWarn = isDev ? console.warn : () => {};
-export const devError = isDev ? console.error : () => {};
+// Экспортируем условные логгеры
+export const devLog = isDev ? console.log.bind(console) : noop;
+export const devWarn = isDev ? console.warn.bind(console) : noop;
+export const devError = isDev ? console.error.bind(console) : noop;
 
 export default {
   log: devLog,

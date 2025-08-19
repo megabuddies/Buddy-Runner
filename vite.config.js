@@ -6,11 +6,6 @@ export default defineConfig({
   publicDir: 'public',
   define: {
     global: 'globalThis',
-    // Отключаем консольные логи в production
-    'console.log': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.log',
-    'console.warn': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.warn',
-    'console.info': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.info',
-    'console.debug': process.env.NODE_ENV === 'production' ? '(() => {})' : 'console.debug',
   },
   server: {
     port: 3000,
