@@ -335,27 +335,27 @@ export const useBlockchainUtils = () => {
   // Кеширование параметров сети для минимизации RPC вызовов
   const chainParamsCache = useRef({});
 
-  // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
+  // PRE-SIGNED ONLY MODE: Массивные пулы для поддержки 10000+ транзакций без замедления
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 200, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
-      refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 50, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
+      poolSize: 1000, // МАССИВНОЕ увеличение для поддержки 10000 транзакций
+      refillAt: 0.10, // ОЧЕНЬ раннее пополнение при 10% использования
+      batchSize: 300, // ОГРОМНЫЙ размер пакета для опережающего пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
-      maxBurstSize: 10, // УВЕЛИЧЕН лимит burst для длинных сессий
-      burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
+      maxBurstSize: 50, // МАССИВНЫЙ лимит burst для длинных сессий
+      burstCooldown: 100 // МИНИМАЛЬНЫЙ cooldown для максимальной скорости
     },
     31337: { // Foundry
-      poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
-      refillAt: 0.2, // Более раннее пополнение
-      batchSize: 30, // Больший размер пакета
+      poolSize: 800, // МАССИВНОЕ увеличение для длинных игровых сессий
+      refillAt: 0.15, // Раннее пополнение
+      batchSize: 200, // Огромный размер пакета
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
-      maxBurstSize: 8, // Увеличен лимит burst
-      burstCooldown: 200 // Уменьшен cooldown
+      maxBurstSize: 40, // Массивный лимит burst
+      burstCooldown: 100 // Минимальный cooldown
     },
     50311: { // Somnia
       poolSize: 100, // УВЕЛИЧЕН для длинных игровых сессий
