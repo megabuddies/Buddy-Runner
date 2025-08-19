@@ -119,7 +119,7 @@ const safeJsonParse = (data) => {
 };
 
 export const useBlockchainUtils = () => {
-  const { authenticated, user, login, logout, isReady } = usePrivy();
+  const { authenticated, user, login, logout, isReady, createWallet } = usePrivy();
   const { wallets } = useWallets();
   
   // Состояние
@@ -620,27 +620,67 @@ export const useBlockchainUtils = () => {
 
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
-    if (!authenticated || !wallets.length) {
+    if (!authenticated) {
       return null;
     }
     
+    // Debug logging to understand wallet structure
+    if (wallets.length > 0) {
+      console.log('Available wallets:', wallets.map(w => ({
+        address: w.address,
+        walletClientType: w.walletClientType,
+        connectorType: w.connectorType,
+        imported: w.imported,
+        isEmbeddedWallet: w.isEmbeddedWallet,
+        // Check all possible properties that might indicate embedded wallet
+        type: w.type,
+        walletType: w.walletType,
+        walletClient: w.walletClient?.name || w.walletClient?.type
+      })));
+    }
+    
     // Look for embedded wallet - Privy creates embedded wallets with specific types
-    const embeddedWallet = wallets.find(wallet => 
-      wallet.walletClientType === 'privy' || 
-      wallet.connectorType === 'embedded' ||
-      wallet.connectorType === 'privy'
-    );
+    // Check multiple properties that might indicate an embedded wallet
+    const embeddedWallet = wallets.find(wallet => {
+      // Most reliable check - embedded wallets have walletClientType 'privy'
+      if (wallet.walletClientType === 'privy') return true;
+      
+      // Additional checks for different Privy versions
+      if (wallet.connectorType === 'embedded') return true;
+      if (wallet.isEmbeddedWallet === true) return true;
+      
+      // Check if it's not an imported/external wallet
+      // Embedded wallets are created by Privy, not imported
+      if (wallet.imported === false && wallet.address !== user?.wallet?.address) return true;
+      
+      return false;
+    });
     
     if (embeddedWallet) {
+      console.log('Found embedded wallet:', embeddedWallet.address);
       return embeddedWallet;
     }
     
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      return wallets[0];
+    // If no embedded wallet found, check if user has embedded wallet in their profile
+    if (user?.wallet?.address && !user?.wallet?.imported) {
+      console.log('Using user embedded wallet from profile:', user.wallet.address);
+      // Create a wallet object that matches expected interface
+      return {
+        address: user.wallet.address,
+        walletClientType: 'privy',
+        getEthereumProvider: async () => {
+          // This will use Privy's internal provider
+          const provider = await window.ethereum;
+          return provider;
+        }
+      };
     }
     
-
+    // If still no embedded wallet, we might need to wait for it to be created
+    console.warn('No embedded wallet found. User login method:', user?.linkedAccounts?.map(a => a.type));
+    console.log('Wallets available:', wallets.length);
+    
+    // Return null - the calling code should handle this case
     return null;
   };
 
@@ -691,50 +731,36 @@ export const useBlockchainUtils = () => {
         })
       });
 
-      // Для MegaETH используем локальное подписание (не RPC)
+      // Для всех сетей используем Privy provider для подписания
       let walletClient;
-      if (chainId === 6342) {
-        // MegaETH: локальное подписание с Privy account
-        walletClient = createWalletClient({
-          account: embeddedWallet.address,
-          chain: publicClient.chain,
-          transport: custom({
-            async request({ method, params }) {
-              if (method === 'eth_signTransaction') {
-                // Локальное подписание через embedded wallet
-                const embeddedWallet = getEmbeddedWallet();
-                if (!embeddedWallet) {
-                  throw new Error('No embedded wallet found for signing');
-                }
-                
-                // Создаем walletClient с embedded wallet
-                const provider = await embeddedWallet.getProvider?.() || 
-                                await embeddedWallet.getEthereumProvider?.() ||
-                                embeddedWallet;
-                
-                if (provider?.request) {
-                  return await provider.request({ method, params });
-                }
-                
-                throw new Error('Unable to get provider for signing');
-              }
-              // Остальные методы идут через публичный RPC
-              return await publicClient.request({ method, params });
-            }
-          })
-        });
-      } else {
-        // Для других сетей используем стандартный подход с улучшенными таймаутами
-        walletClient = createWalletClient({
-          account: embeddedWallet.address,
-          chain: publicClient.chain,
-          transport: http(healthyRpcUrl, {
-            timeout: config.connectionTimeouts.retry,
-            retryCount: 4,
-            retryDelay: ({ count }) => Math.min(1000 * Math.pow(2, count), 5000)
-          })
-        });
+      
+      // Get the Privy provider for the embedded wallet
+      const provider = await embeddedWallet.getEthereumProvider?.();
+      
+      if (!provider) {
+        throw new Error('Unable to get Privy provider for embedded wallet');
       }
+      
+      // Create wallet client using Privy's provider
+      walletClient = createWalletClient({
+        account: embeddedWallet.address,
+        chain: publicClient.chain,
+        transport: custom({
+          async request({ method, params }) {
+            // For signing methods, use Privy's provider
+            if (method === 'eth_sendTransaction' || 
+                method === 'personal_sign' || 
+                method === 'eth_sign' ||
+                method === 'eth_signTypedData' ||
+                method === 'eth_signTypedData_v4') {
+              return await provider.request({ method, params });
+            }
+            
+            // For other methods (like getting balance, nonce, etc), use public RPC
+            return await publicClient.request({ method, params });
+          }
+        })
+      });
 
       const clients = { 
         publicClient, 
