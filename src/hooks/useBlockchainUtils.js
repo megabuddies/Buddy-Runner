@@ -392,7 +392,7 @@ export const useBlockchainUtils = () => {
   // Fallback конфигурация для MegaETH
   const MEGAETH_FALLBACK_CONFIG = {
     // Уменьшаем batch size при проблемах с RPC
-    reducedBatchSize: 1,
+    reducedBatchSize: 1000, // УВЕЛИЧЕН с 1 до 1000 для поддержки больших пулов
     // Увеличиваем задержки
     increasedDelay: 1000,
     // Режим graceful degradation
@@ -999,8 +999,8 @@ export const useBlockchainUtils = () => {
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
     const fallbackConfig = getFallbackConfig(chainId);
     
-    // Применяем конфигурацию
-    let actualCount = Math.min(count, poolConfig.poolSize);
+    // Применяем конфигурацию - УБРАНО ограничение poolSize для поддержки больших пулов
+    let actualCount = count; // Не ограничиваем размером пула
     if (fallbackConfig) {
       actualCount = Math.min(actualCount, fallbackConfig.reducedBatchSize);
       console.log(`Using fallback mode for chain ${chainId}: batch size ${actualCount}`);
