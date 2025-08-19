@@ -1151,6 +1151,7 @@ export const useBlockchainUtils = () => {
     try {
       pool.isRefilling = true;
       console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
+      console.log(`🎯 Using cached gas params for chain ${chainId} (age: ${Math.floor((Date.now() - (chainParamsCache.current[chainId]?.timestamp || 0)) / 1000)}s)`);
       
       // Создаем отдельный временный пул для новых транзакций
       const tempTransactions = [];
@@ -1199,14 +1200,18 @@ export const useBlockchainUtils = () => {
       
       // Добавляем новые транзакции в основной пул
       if (pool && tempTransactions.length > 0) {
+        const oldPoolSize = pool.transactions.length;
         pool.transactions.push(...tempTransactions);
         pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
-        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
+        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length} (added ${tempTransactions.length}, was ${oldPoolSize})`);
+        console.log(`📊 Pool status after extension: ${pool.transactions.length - pool.currentIndex} transactions available`);
         
         // Обновляем nonce manager
         const manager = getNonceManager(chainId, embeddedWallet.address);
         if (manager) {
+          const oldPendingNonce = manager.pendingNonce;
           manager.pendingNonce = Math.max(manager.pendingNonce || 0, startNonce + tempTransactions.length);
+          console.log(`📈 Nonce manager updated: ${oldPendingNonce} -> ${manager.pendingNonce}`);
         }
       }
     } catch (error) {
@@ -1231,11 +1236,13 @@ export const useBlockchainUtils = () => {
       pool.currentIndex++;
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
+      console.log(`📊 Pool status: ${pool.transactions.length - pool.currentIndex} transactions remaining, refilling=${pool.isRefilling}, hasTriggered=${pool.hasTriggeredRefill}`);
 
       // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - более частое и агрессивное
       // Пополняем каждые 3 транзакции вместо 5 для решения проблемы после 20 прыжков
       if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
         console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (solving 20-jump slowdown)`);
+        console.log(`📊 Pool state: ${pool.transactions.length} total, ${pool.currentIndex} used, ${pool.transactions.length - pool.currentIndex} remaining`);
         pool.hasTriggeredRefill = true;
         
         // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
@@ -1248,7 +1255,7 @@ export const useBlockchainUtils = () => {
               
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
               // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
+              const refillSize = Math.max(25, Math.ceil(poolConfig.batchSize * 1.5));
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
@@ -1274,7 +1281,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(30, poolConfig.batchSize * 2);
+              const emergencyRefillSize = Math.max(30, Math.ceil(poolConfig.batchSize * 2));
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
@@ -1879,6 +1886,11 @@ export const useBlockchainUtils = () => {
       const chainKey = chainId.toString();
       const pool = preSignedPool.current[chainKey];
       const hasPreSignedTx = pool && pool.isReady && pool.transactions.length > pool.currentIndex;
+      
+      // Добавляем детальное логирование для отладки
+      if (!hasPreSignedTx) {
+        console.log(`⚠️ No pre-signed transactions available: pool=${!!pool}, ready=${pool?.isReady}, total=${pool?.transactions?.length}, current=${pool?.currentIndex}`);
+      }
       
       if (hasPreSignedTx) {
         // Если есть pre-signed транзакции, разрешаем много параллельных операций
