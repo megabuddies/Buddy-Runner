@@ -17,9 +17,9 @@ const NETWORK_CONFIGS = {
     chainId: 6342,
     sendMethod: 'realtime_sendRawTransaction', // Специальный метод для MegaETH
     connectionTimeouts: {
-      initial: 10000, // 10 seconds for initial connection
-      retry: 3000,    // 3 seconds for retries (быстрые retry для gaming)
-      request: 5000   // 5 seconds for individual requests (для real-time gaming)
+      initial: 8000,  // 8 seconds for initial connection
+      retry: 1500,    // 1.5 seconds for retries (УЛЬТРА-быстрые retry)
+      request: 2000   // 2 seconds for individual requests (КРИТИЧНО: уменьшено с 5 сек!)
     },
     maxConnections: 3, // Limit concurrent connections
   },
@@ -338,14 +338,14 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 150, // УВЕЛИЧЕН для решения проблемы исчерпания после 20 прыжков
-      refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 35, // БОЛЬШИЙ размер пакета для опережающего пополнения
-      maxRetries: 3,
-      retryDelay: 200, // Быстрые retry для MegaETH
+      poolSize: 500, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН для предотвращения истощения после 50+ транзакций
+      refillAt: 0.1, // Очень раннее пополнение при 10% остатке (50 транзакций)
+      batchSize: 100, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН для массивного опережающего пополнения
+      maxRetries: 2, // Уменьшено для быстрых retry
+      retryDelay: 50, // УЛЬТРА-быстрые retry для gaming
       burstMode: true, // Поддержка burst режима
-      maxBurstSize: 10, // УВЕЛИЧЕН лимит burst для длинных сессий
-      burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
+      maxBurstSize: 15, // Увеличен лимит burst для высокой частоты
+      burstCooldown: 50 // Минимальный cooldown для максимальной производительности
     },
     31337: { // Foundry
       poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
@@ -1232,13 +1232,13 @@ export const useBlockchainUtils = () => {
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
-      // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - более частое и агрессивное
-      // Пополняем каждые 3 транзакции вместо 5 для решения проблемы после 20 прыжков
-      if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
-        console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (solving 20-jump slowdown)`);
+      // 🔄 УЛЬТРА-АГРЕССИВНОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ
+      // Пополняем каждую транзакцию для гарантированной бесконечности
+      if (pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
+        console.log(`🔄 ULTRA-AGGRESSIVE refilling at ${pool.currentIndex} transactions used (preventing pool exhaustion)`);
         pool.hasTriggeredRefill = true;
         
-        // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
+        // Пополняем в фоне - добавляем МАССИВНО больше чем потребили
         setTimeout(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
@@ -1246,25 +1246,25 @@ export const useBlockchainUtils = () => {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
               
-              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
-              // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
-              console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
+              // КАРДИНАЛЬНОЕ РЕШЕНИЕ: Добавляем огромное количество транзакций
+              // 1 потребили -> 150+ добавляем для математической бесконечности
+              const refillSize = Math.max(150, poolConfig.batchSize * 2);
+              console.log(`🚀 ULTRA-ENHANCED pool: adding ${refillSize} transactions (consumed 1, net growth +${refillSize-1})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
               await extendPool(chainId, nextNonce, refillSize);
             }
           } catch (error) {
-            console.error('❌ Error in enhanced pool refill:', error);
+            console.error('❌ Error in ultra pool refill:', error);
             // В случае ошибки сбрасываем флаг для повторной попытки
             pool.hasTriggeredRefill = false;
           }
         }, 0);
       }
       
-      // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
+      // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при низком уровне
       const remainingTransactions = pool.transactions.length - pool.currentIndex;
-      if (remainingTransactions <= 5 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      if (remainingTransactions <= 50 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
         pool.hasTriggeredRefill = true;
         
@@ -1274,7 +1274,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(30, poolConfig.batchSize * 2);
+              const emergencyRefillSize = Math.max(200, poolConfig.batchSize * 3);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
@@ -1665,11 +1665,11 @@ export const useBlockchainUtils = () => {
           }
         };
 
-        // Специальная retry логика для MegaETH с быстрыми интервалами
+        // Специальная retry логика для MegaETH с УЛЬТРА-быстрыми интервалами
         response = await retryWithBackoff(
           sendMegaETHTransaction, 
           poolConfig.maxRetries, 
-          100, // Очень быстрый retry для real-time
+          25, // УЛЬТРА-быстрый retry для real-time (25ms)
           chainId
         );
         
