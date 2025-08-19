@@ -338,9 +338,9 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 10000, // УВЕЛИЧЕН до 10000 для решения проблемы после 150 транзакций
+      poolSize: 2000, // УВЕЛИЧЕН в 10 раз для решения проблемы после 150 транзакций
       refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 2500, // ОГРОМНЫЙ размер пакета для опережающего пополнения
+      batchSize: 500, // БОЛЬШОЙ размер пакета для опережающего пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
@@ -348,9 +348,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
     },
     31337: { // Foundry
-      poolSize: 6000, // УВЕЛИЧЕН до 6000 для длинных игровых сессий
+      poolSize: 1200, // УВЕЛИЧЕН в 10 раз для длинных игровых сессий
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 1500, // Огромный размер пакета
+      batchSize: 300, // Большой размер пакета
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
@@ -358,9 +358,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // Уменьшен cooldown
     },
     50311: { // Somnia
-      poolSize: 5000, // УВЕЛИЧЕН до 5000 для длинных игровых сессий
+      poolSize: 1000, // УВЕЛИЧЕН в 10 раз для длинных игровых сессий
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 1250, // Огромный размер пакета
+      batchSize: 250, // Большой размер пакета
       maxRetries: 3,
       retryDelay: 300,
       burstMode: true,
@@ -368,9 +368,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 400 // Уменьшен cooldown
     },
     1313161556: { // RISE
-      poolSize: 2500, // УВЕЛИЧЕН до 2500 для pre-signed only
+      poolSize: 500, // УВЕЛИЧЕН в 10 раз для pre-signed only
       refillAt: 0.4,
-      batchSize: 600,
+      batchSize: 120,
       maxRetries: 2,
       retryDelay: 400,
       burstMode: false,
@@ -378,9 +378,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 1500
     },
     default: {
-      poolSize: 3000, // УВЕЛИЧЕН до 3000 для pre-signed only
+      poolSize: 600, // УВЕЛИЧЕН в 10 раз для pre-signed only
       refillAt: 0.3, // Раннее пополнение
-      batchSize: 750,
+      batchSize: 150,
       maxRetries: 3,
       retryDelay: 300,
       burstMode: false,
