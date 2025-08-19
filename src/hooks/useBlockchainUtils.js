@@ -1200,8 +1200,15 @@ export const useBlockchainUtils = () => {
       // Добавляем новые транзакции в основной пул
       if (pool && tempTransactions.length > 0) {
         pool.transactions.push(...tempTransactions);
-        pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
         console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
+        
+        // Сбрасываем флаг с задержкой, чтобы предотвратить слишком частые пополнения
+        setTimeout(() => {
+          if (pool) {
+            pool.hasTriggeredRefill = false;
+            console.log(`🔄 Refill flag reset - ready for next refill cycle`);
+          }
+        }, 2000); // 2 секунды задержки
         
         // Обновляем nonce manager
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -1232,10 +1239,37 @@ export const useBlockchainUtils = () => {
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
-      // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - для больших пулов (1000+)
-      // Пополняем каждые 50 транзакций для поддержания большого пула
-      if (pool.currentIndex % 50 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
-        console.log(`🔄 LARGE POOL refilling at ${pool.currentIndex} transactions used (maintaining 1000+ pool)`);
+      // 🚨 НЕМЕДЛЕННОЕ ПОПОЛНЕНИЕ если пул становится слишком маленьким
+      const currentRemaining = pool.transactions.length - pool.currentIndex;
+      if (currentRemaining <= 500 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+        console.log(`⚡ IMMEDIATE refill triggered - only ${currentRemaining} transactions remaining`);
+        pool.hasTriggeredRefill = true;
+        
+        // Немедленное пополнение без setTimeout
+        (async () => {
+          try {
+            const embeddedWallet = getEmbeddedWallet();
+            if (embeddedWallet) {
+              const manager = getNonceManager(chainId, embeddedWallet.address);
+              const nextNonce = manager.pendingNonce;
+              const immediateRefillSize = Math.max(400, poolConfig.batchSize * 4);
+              
+              console.log(`⚡ IMMEDIATE REFILL: adding ${immediateRefillSize} transactions`);
+              await extendPool(chainId, nextNonce, immediateRefillSize);
+            }
+          } catch (error) {
+            console.error('❌ Immediate refill failed:', error);
+            setTimeout(() => {
+              if (pool) pool.hasTriggeredRefill = false;
+            }, 1000);
+          }
+        })();
+      }
+
+      // 🔄 АГРЕССИВНОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - каждые 10 транзакций
+      // Пополняем очень часто для предотвращения исчерпания пула
+      if (pool.currentIndex % 10 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
+        console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (preventing pool exhaustion)`);
         pool.hasTriggeredRefill = true;
         
         // Пополняем в фоне - добавляем значительно больше для поддержания большого пула
@@ -1246,10 +1280,10 @@ export const useBlockchainUtils = () => {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
               
-              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для поддержания 1000+ пула
-              // 50 потребили -> 100+ добавляем для гарантированного роста
-              const refillSize = Math.max(100, poolConfig.batchSize);
-              console.log(`🚀 LARGE POOL: adding ${refillSize} transactions (consumed 50, net growth +${refillSize-50})`);
+              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем МНОГО транзакций для опережения потребления
+              // 10 потребили -> 200+ добавляем для гарантированного опережения
+              const refillSize = Math.max(200, poolConfig.batchSize * 2);
+              console.log(`🚀 AGGRESSIVE REFILL: adding ${refillSize} transactions (consumed 10, net growth +${refillSize-10})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
               await extendPool(chainId, nextNonce, refillSize);
@@ -1264,7 +1298,7 @@ export const useBlockchainUtils = () => {
       
       // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
       const remainingTransactions = pool.transactions.length - pool.currentIndex;
-      if (remainingTransactions <= 100 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+      if (remainingTransactions <= 200 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
         pool.hasTriggeredRefill = true;
         
@@ -1274,7 +1308,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(200, poolConfig.batchSize * 2);
+              const emergencyRefillSize = Math.max(300, poolConfig.batchSize * 3);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
@@ -1352,13 +1386,13 @@ export const useBlockchainUtils = () => {
       const totalTx = pool.transactions.length;
       const consumedTx = pool.currentIndex;
       
-      // 📊 Статистика больших пулов (1000+)
-      const cyclesCompleted = Math.floor(consumedTx / 50);
-      const netGrowth = cyclesCompleted * 50; // +50 транзакций каждый цикл
+      // 📊 Статистика больших пулов (1000+) с агрессивным пополнением
+      const cyclesCompleted = Math.floor(consumedTx / 10); // Теперь каждые 10 транзакций
+      const netGrowth = cyclesCompleted * 190; // +190 транзакций каждый цикл (200-10)
       const predictedGrowth = totalTx + netGrowth;
       
-      // УЛУЧШЕННЫЕ информационные логи каждые 50 транзакций для больших пулов
-      if (consumedTx % 50 === 0 && consumedTx > 0) {
+      // УЛУЧШЕННЫЕ информационные логи каждые 20 транзакций для мониторинга
+      if (consumedTx % 20 === 0 && consumedTx > 0) {
         const performanceGrade = remainingTx > 500 ? '🚀 EXCELLENT' : 
                                remainingTx > 300 ? '✅ GOOD' : 
                                remainingTx > 150 ? '⚠️ WARNING' : '🚨 CRITICAL';
@@ -1413,8 +1447,8 @@ export const useBlockchainUtils = () => {
       
     }, 5000); // Проверка каждые 5 секунд для больших пулов
     
-    console.log(`👁️ Started LARGE POOL monitoring for chain ${chainId}`);
-    console.log(`📊 Pool will grow by +50 transactions every 50 consumed (maintaining 1000+ size)`);
+    console.log(`👁️ Started AGGRESSIVE POOL monitoring for chain ${chainId}`);
+    console.log(`📊 Pool will grow by +190 transactions every 10 consumed (aggressive refill mode)`);
     return monitorInterval;
   };
 
@@ -2151,10 +2185,13 @@ export const useBlockchainUtils = () => {
       const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
       const fallbackConfig = getFallbackConfig(chainId);
       
-      let batchSize = poolConfig.poolSize;
+      // Начальный размер пула - достаточно большой, но не весь poolSize сразу
+      let batchSize = Math.min(500, poolConfig.poolSize); // Начинаем с 500 транзакций
       if (fallbackConfig) {
         batchSize = fallbackConfig.reducedBatchSize;
         console.log(`Using fallback batch size: ${batchSize}`);
+      } else {
+        console.log(`Using initial batch size: ${batchSize} (will grow to ${poolConfig.poolSize})`);
       }
       
       // ФОНОВОЕ предподписание
@@ -2570,15 +2607,15 @@ export const useBlockchainUtils = () => {
           if (perf && pool) {
             const consumed = pool.currentIndex;
             const remaining = pool.transactions.length - pool.currentIndex;
-            const cyclesCompleted = Math.floor(consumed / 50);
-            const netGrowth = cyclesCompleted * 50;
+            const cyclesCompleted = Math.floor(consumed / 10);
+            const netGrowth = cyclesCompleted * 190;
             
             console.log(`🎮 ${NETWORK_CONFIGS[chainId]?.name || 'Chain ' + chainId}:`);
             console.log(`  ⚡ Avg Speed: ${Math.round(perf.averageBlockchainTime)}ms`);
             console.log(`  📊 Success Rate: ${perf.successRate.toFixed(1)}%`);
             console.log(`  🎯 Pool Status: ${remaining}/${pool.transactions.length} ready`);
-            console.log(`  🏢 Large Pool: ${consumed} used, +${netGrowth} growth (${cyclesCompleted} cycles)`);
-            console.log(`  📈 Next refill: ${50 - (consumed % 50)} transactions`);
+            console.log(`  🚀 Aggressive Pool: ${consumed} used, +${netGrowth} growth (${cyclesCompleted} cycles)`);
+            console.log(`  📈 Next refill: ${10 - (consumed % 10)} transactions`);
             console.log(`  🚀 Performance: ${perf.averageBlockchainTime < 1000 ? 'INSTANT' : perf.averageBlockchainTime < 3000 ? 'FAST' : 'SLOW'}`);
           } else {
             console.log('📊 No performance data available yet');
@@ -2596,9 +2633,9 @@ export const useBlockchainUtils = () => {
           const consumed = pool.currentIndex;
           const remaining = pool.transactions.length - pool.currentIndex;
           const total = pool.transactions.length;
-          const cyclesCompleted = Math.floor(consumed / 50);
-          const netGrowth = cyclesCompleted * 50;
-          const nextRefillAt = (Math.floor(consumed / 50) + 1) * 50;
+          const cyclesCompleted = Math.floor(consumed / 10);
+          const netGrowth = cyclesCompleted * 190;
+          const nextRefillAt = (Math.floor(consumed / 10) + 1) * 10;
           const transactionsToNextRefill = nextRefillAt - consumed;
           
           console.group(`♾️ Infinite Pool Analysis - Chain ${chainId}`);
@@ -2617,7 +2654,7 @@ export const useBlockchainUtils = () => {
           console.log(`📈 Next Refill:`);
           console.log(`  • Refill trigger at: ${nextRefillAt} consumed`);
           console.log(`  • Transactions until refill: ${transactionsToNextRefill}`);
-          console.log(`  • Will add: +100 transactions`);
+          console.log(`  • Will add: +200 transactions`);
           
           console.log(`🎯 Pool Efficiency:`);
           console.log(`  • Efficiency: ${((remaining / total) * 100).toFixed(1)}%`);
@@ -2696,8 +2733,8 @@ export const useBlockchainUtils = () => {
     getPoolStatus: (chainId) => {
       const pool = preSignedPool.current[chainId?.toString()];
       if (!pool) return null;
-      const cyclesCompleted = Math.floor(pool.currentIndex / 50);
-      const netGrowth = cyclesCompleted * 50;
+      const cyclesCompleted = Math.floor(pool.currentIndex / 10);
+      const netGrowth = cyclesCompleted * 190;
       return {
         total: pool.transactions.length,
         used: pool.currentIndex,
@@ -2721,9 +2758,9 @@ export const useBlockchainUtils = () => {
       const consumed = pool.currentIndex;
       const remaining = pool.transactions.length - pool.currentIndex;
       const total = pool.transactions.length;
-      const cyclesCompleted = Math.floor(consumed / 50);
-      const netGrowth = cyclesCompleted * 50;
-      const nextRefillAt = (Math.floor(consumed / 50) + 1) * 50;
+      const cyclesCompleted = Math.floor(consumed / 10);
+      const netGrowth = cyclesCompleted * 190;
+      const nextRefillAt = (Math.floor(consumed / 10) + 1) * 10;
       const transactionsToNextRefill = nextRefillAt - consumed;
       
       return {
