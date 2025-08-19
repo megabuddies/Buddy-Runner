@@ -94,12 +94,12 @@ export const performanceUtils = {
       }
     }
 
-    // Проверка пула транзакций
-    if (poolStatus?.transactions?.length < 3) {
+    // Проверка пула транзакций для больших пулов (1000+)
+    if (poolStatus?.transactions?.length < 100) {
       recommendations.push({
         type: 'info',
-        message: 'Transaction pool is running low',
-        action: 'Consider pre-signing more transactions'
+        message: 'Large transaction pool is running low',
+        action: 'Consider pre-signing more transactions to maintain 1000+ pool size'
       });
     }
 
