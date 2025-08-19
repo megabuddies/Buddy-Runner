@@ -338,34 +338,34 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 100, // ЗНАЧИТЕЛЬНО увеличен для pre-signed only режима
-      refillAt: 0.2, // Очень раннее пополнение при 20% использования
-      batchSize: 25, // Больший размер пакета для быстрого пополнения
+      poolSize: 150, // УВЕЛИЧЕН для решения проблемы исчерпания после 20 прыжков
+      refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
+      batchSize: 35, // БОЛЬШИЙ размер пакета для опережающего пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
-      maxBurstSize: 5, // Максимум транзакций в burst режиме
-      burstCooldown: 500 // Короткий cooldown для реального времени
+      maxBurstSize: 10, // УВЕЛИЧЕН лимит burst для длинных сессий
+      burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
     },
     31337: { // Foundry
-      poolSize: 80, // Увеличен для pre-signed only
-      refillAt: 0.25,
-      batchSize: 20,
+      poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
+      refillAt: 0.2, // Более раннее пополнение
+      batchSize: 30, // Больший размер пакета
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
-      maxBurstSize: 4,
-      burstCooldown: 300
+      maxBurstSize: 8, // Увеличен лимит burst
+      burstCooldown: 200 // Уменьшен cooldown
     },
     50311: { // Somnia
-      poolSize: 60, // Увеличен для pre-signed only
-      refillAt: 0.3,
-      batchSize: 15,
+      poolSize: 100, // УВЕЛИЧЕН для длинных игровых сессий
+      refillAt: 0.2, // Более раннее пополнение
+      batchSize: 25, // Больший размер пакета
       maxRetries: 3,
       retryDelay: 300,
       burstMode: true,
-      maxBurstSize: 3,
-      burstCooldown: 800
+      maxBurstSize: 6, // Увеличен лимит burst
+      burstCooldown: 400 // Уменьшен cooldown
     },
     1313161556: { // RISE
       poolSize: 50, // Увеличен для pre-signed only
@@ -454,11 +454,11 @@ export const useBlockchainUtils = () => {
       burstManager.burstCount++;
       burstManager.lastBurstTime = now;
 
-      // Если достигли лимита burst, включаем cooldown
-      if (burstManager.burstCount >= config.maxBurstSize) {
-        burstManager.inCooldown = true;
-        console.log(`Burst mode cooldown activated for chain ${chainId} (${config.burstCooldown}ms)`);
-      }
+              // Если достигли лимита burst, включаем КОРОТКИЙ cooldown
+        if (burstManager.burstCount >= config.maxBurstSize) {
+          burstManager.inCooldown = true;
+          console.log(`Burst mode short cooldown activated for chain ${chainId} (${config.burstCooldown}ms) - optimized for long sessions`);
+        }
     }
   };
 
@@ -1241,13 +1241,13 @@ export const useBlockchainUtils = () => {
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
-      // 🔄 ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ каждые 5 транзакций (математически бесконечный пул)
-      // Пополняем БОЛЬШЕ чем потребляем для гарантированного роста пула
-      if (pool.currentIndex % 5 === 0 && !pool.hasTriggeredRefill) {
-        console.log(`🔄 Refilling at ${pool.currentIndex} transactions used (infinite pool strategy)`);
+      // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - более частое и агрессивное
+      // Пополняем каждые 3 транзакции вместо 5 для решения проблемы после 20 прыжков
+      if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
+        console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (solving 20-jump slowdown)`);
         pool.hasTriggeredRefill = true;
         
-        // Пополняем в фоне - добавляем БОЛЬШЕ чем потребили
+        // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
         setTimeout(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
@@ -1255,16 +1255,41 @@ export const useBlockchainUtils = () => {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
               
-              // КРИТИЧНО: Добавляем больше чем потребили (5 потребили -> 15 добавляем)
-              // Это обеспечивает математический рост пула: +10 каждый цикл
-              const refillSize = Math.max(15, poolConfig.batchSize);
-              console.log(`🚀 Infinite pool: adding ${refillSize} transactions (consumed 5, net growth +${refillSize-5})`);
+              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
+              // 3 потребили -> 20+ добавляем для гарантированного опережения
+              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
+              console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
+              console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
               await extendPool(chainId, nextNonce, refillSize);
             }
           } catch (error) {
-            console.error('❌ Error in infinite pool refill:', error);
+            console.error('❌ Error in enhanced pool refill:', error);
             // В случае ошибки сбрасываем флаг для повторной попытки
+            pool.hasTriggeredRefill = false;
+          }
+        }, 0);
+      }
+      
+      // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
+      const remainingTransactions = pool.transactions.length - pool.currentIndex;
+      if (remainingTransactions <= 5 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+        console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
+        pool.hasTriggeredRefill = true;
+        
+        setTimeout(async () => {
+          try {
+            const embeddedWallet = getEmbeddedWallet();
+            if (embeddedWallet) {
+              const manager = getNonceManager(chainId, embeddedWallet.address);
+              const nextNonce = manager.pendingNonce;
+              const emergencyRefillSize = Math.max(30, poolConfig.batchSize * 2);
+              
+              console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
+              await extendPool(chainId, nextNonce, emergencyRefillSize);
+            }
+          } catch (error) {
+            console.error('❌ Emergency refill failed:', error);
             pool.hasTriggeredRefill = false;
           }
         }, 0);
@@ -1341,14 +1366,27 @@ export const useBlockchainUtils = () => {
       const netGrowth = cyclesCompleted * 10; // +10 транзакций каждый цикл
       const predictedGrowth = totalTx + netGrowth;
       
-      // Информационные логи каждые 10 транзакций
-      if (consumedTx % 10 === 0 && consumedTx > 0) {
-        console.log(`📊 Infinite Pool Stats for chain ${chainId}:`);
+      // УЛУЧШЕННЫЕ информационные логи каждые 5 транзакций для раннего выявления проблем
+      if (consumedTx % 5 === 0 && consumedTx > 0) {
+        const performanceGrade = remainingTx > 30 ? '🚀 EXCELLENT' : 
+                               remainingTx > 20 ? '✅ GOOD' : 
+                               remainingTx > 10 ? '⚠️ WARNING' : '🚨 CRITICAL';
+                               
+        console.log(`📊 Enhanced Pool Stats for chain ${chainId} (Jump #${consumedTx}):`);
         console.log(`  • Consumed: ${consumedTx} transactions`);
         console.log(`  • Remaining: ${remainingTx} transactions`);
         console.log(`  • Total pool size: ${totalTx} transactions`);
-        console.log(`  • Growth cycles: ${cyclesCompleted} (+${netGrowth} net growth)`);
-        console.log(`  • Pool trend: ${remainingTx > 20 ? '📈 GROWING' : remainingTx > 10 ? '➡️ STABLE' : '📉 NEEDS ATTENTION'}`);
+        console.log(`  • Pool health: ${performanceGrade}`);
+        console.log(`  • Refill status: ${pool.isRefilling ? '🔄 ACTIVE' : '⏸️ IDLE'}`);
+        console.log(`  • Last refill triggered: ${pool.hasTriggeredRefill ? '✅ YES' : '❌ NO'}`);
+        
+        // Специальное предупреждение для проблемной зоны 15-25 прыжков
+        if (consumedTx >= 15 && consumedTx <= 25) {
+          console.warn(`⚠️ CRITICAL ZONE: Jump ${consumedTx}/20+ - monitoring for slowdown issues`);
+          if (remainingTx < 15) {
+            console.error(`🚨 DANGER: Only ${remainingTx} transactions left at jump ${consumedTx}! This causes 5s delays!`);
+          }
+        }
       }
       
       // Проверка математической корректности бесконечного пула
