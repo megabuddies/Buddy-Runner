@@ -95,7 +95,7 @@ export const performanceUtils = {
     }
 
     // Проверка пула транзакций
-    if (poolStatus?.transactions?.length < 3) {
+    if (poolStatus?.transactions?.length < 150) { // УВЕЛИЧЕНО в 50 раз (3*50)
       recommendations.push({
         type: 'info',
         message: 'Transaction pool is running low',
