@@ -15,7 +15,7 @@ const NETWORK_CONFIGS = {
     contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0', // Updater contract
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 6342,
-    sendMethod: 'realtime_sendRawTransaction', // Специальный метод для MegaETH
+    sendMethod: 'eth_sendRawTransaction', // Переключаемся на стандартный метод, realtime отключен
     connectionTimeouts: {
       initial: 10000, // 10 seconds for initial connection
       retry: 3000,    // 3 seconds for retries (быстрые retry для gaming)
@@ -1247,8 +1247,8 @@ export const useBlockchainUtils = () => {
               const nextNonce = manager.pendingNonce;
               
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
-              // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
+              // Пополняем пул фиксированным размером, избегая чрезмерного расширения
+              const refillSize = poolConfig.batchSize; // без роста объёма пула
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
