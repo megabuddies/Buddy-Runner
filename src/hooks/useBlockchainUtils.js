@@ -15,7 +15,7 @@ const NETWORK_CONFIGS = {
     contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0', // Updater contract
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 6342,
-    sendMethod: 'realtime_sendRawTransaction', // Специальный метод для MegaETH
+    sendMethod: 'eth_sendRawTransaction', // realtime отключен, используем стандартный метод
     connectionTimeouts: {
       initial: 10000, // 10 seconds for initial connection
       retry: 3000,    // 3 seconds for retries (быстрые retry для gaming)
@@ -1002,7 +1002,8 @@ export const useBlockchainUtils = () => {
     // Применяем конфигурацию
     let actualCount = Math.min(count, poolConfig.poolSize);
     if (fallbackConfig) {
-      actualCount = Math.min(actualCount, fallbackConfig.reducedBatchSize);
+      const safeFallbackBatch = Math.max(10, Math.min(poolConfig.batchSize, fallbackConfig.reducedBatchSize || poolConfig.batchSize));
+      actualCount = Math.min(actualCount, safeFallbackBatch);
       console.log(`Using fallback mode for chain ${chainId}: batch size ${actualCount}`);
     }
     
@@ -1148,9 +1149,12 @@ export const useBlockchainUtils = () => {
       return;
     }
     
+    // Безопасный размер пополнения
+    const safeCount = Math.max(1, Math.floor(Number(count)) || 0);
+    
     try {
       pool.isRefilling = true;
-      console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
+      console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${safeCount} transactions`);
       
       // Создаем отдельный временный пул для новых транзакций
       const tempTransactions = [];
@@ -1160,7 +1164,7 @@ export const useBlockchainUtils = () => {
       const embeddedWallet = getEmbeddedWallet();
       
       // Подписываем новые транзакции
-      for (let i = 0; i < count; i++) {
+      for (let i = 0; i < safeCount; i++) {
         try {
           const nonce = startNonce + i;
           
@@ -1175,7 +1179,7 @@ export const useBlockchainUtils = () => {
             type: 'eip1559',
             gas: 100000n,
           };
-
+ 
           let signedTx;
           if (chainId === 6342) {
             signedTx = await walletClient.signTransaction(txData);
@@ -1190,7 +1194,7 @@ export const useBlockchainUtils = () => {
           };
           tempTransactions.push(txWrapper);
           
-          console.log(`Extended pool: signed ${tempTransactions.length}/${count}`);
+          console.log(`Extended pool: signed ${tempTransactions.length}/${safeCount}`);
         } catch (error) {
           console.error(`Error signing extension transaction ${i + 1}:`, error);
           break;
@@ -1248,7 +1252,7 @@ export const useBlockchainUtils = () => {
               
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
               // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
+              const refillSize = Math.max(30, Math.ceil(poolConfig.batchSize * 2));
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
@@ -1341,8 +1345,12 @@ export const useBlockchainUtils = () => {
   };
 
   // МОНИТОРИНГ БЕСКОНЕЧНОГО ПУЛА pre-signed транзакций
+  const poolMonitors = useRef({});
   const startPoolMonitoring = (chainId) => {
     const chainKey = chainId.toString();
+    if (poolMonitors.current[chainKey]) {
+      return poolMonitors.current[chainKey];
+    }
     
     const monitorInterval = setInterval(() => {
       const pool = preSignedPool.current[chainKey];
@@ -1415,6 +1423,7 @@ export const useBlockchainUtils = () => {
     
     console.log(`👁️ Started INFINITE pool monitoring for chain ${chainId}`);
     console.log(`📊 Pool will grow by +10 transactions every 5 consumed (mathematical infinity)`);
+    poolMonitors.current[chainKey] = monitorInterval;
     return monitorInterval;
   };
 
@@ -1588,108 +1597,7 @@ export const useBlockchainUtils = () => {
       let response;
       let txHash;
       
-      if (config.sendMethod === 'realtime_sendRawTransaction') {
-        // 🚀 MegaETH реалтайм метод - МАКСИМАЛЬНАЯ ОПТИМИЗАЦИЯ
-        console.log('🚀 Using MegaETH realtime_sendRawTransaction for instant execution...');
-        
-        const sendMegaETHTransaction = async () => {
-          const controller = new AbortController();
-          const timeoutId = setTimeout(() => controller.abort(), config.connectionTimeouts.request);
-          
-          try {
-            // ИСПРАВЛЕНО: убираем заголовки, вызывающие CORS preflight
-            const response = await fetch(rpcUrl, {
-              method: 'POST',
-              headers: { 
-                'Content-Type': 'application/json'
-                // Убрали все дополнительные заголовки для избежания CORS
-              },
-              body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'realtime_sendRawTransaction',
-                params: [signedTx],
-                id: Date.now()
-              }),
-              signal: controller.signal,
-              mode: 'cors' // Явно указываем CORS режим
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!response.ok) {
-              const errorText = await response.text();
-              throw new Error(`HTTP ${response.status}: ${errorText}`);
-            }
-
-            const jsonResponse = await response.text();
-            const parsedResponse = safeJsonParse(jsonResponse);
-            
-            if (!parsedResponse) {
-              throw new Error('Invalid response format from MegaETH RPC');
-            }
-
-            // Специальная обработка MegaETH ответов
-            if (parsedResponse.error) {
-              // Обработка специфичных ошибок MegaETH
-              if (parsedResponse.error.message?.includes('nonce too low')) {
-                console.log('🔄 MegaETH nonce too low, triggering refresh');
-                throw new Error('nonce too low');
-              } else if (parsedResponse.error.message?.includes('rate limit')) {
-                console.log('⏱️ MegaETH rate limit hit, will retry');
-                throw new Error('rate limit exceeded');
-              } else if (parsedResponse.error.message?.includes('already known')) {
-                console.log('🔄 Transaction already known by network - likely duplicate, treating as success');
-                // Для "already known" ошибок, мы считаем транзакцию успешной
-                // поскольку она уже была отправлена ранее
-                return {
-                  result: {
-                    transactionHash: 'duplicate_tx_' + Date.now(),
-                    status: '0x1',
-                    gasUsed: '0x66f9', 
-                    blockNumber: '0x' + Date.now().toString(16),
-                    from: parsedResponse.error.data?.from || '0x0',
-                    to: parsedResponse.error.data?.to || '0x0'
-                  }
-                };
-              }
-              throw new Error(`MegaETH RPC Error: ${parsedResponse.error.message}`);
-            }
-
-            return parsedResponse;
-          } catch (error) {
-            clearTimeout(timeoutId);
-            if (error.name === 'AbortError') {
-              throw new Error('MegaETH RPC timeout - real-time deadline exceeded');
-            }
-            throw error;
-          }
-        };
-
-        // Специальная retry логика для MegaETH с быстрыми интервалами
-        response = await retryWithBackoff(
-          sendMegaETHTransaction, 
-          poolConfig.maxRetries, 
-          100, // Очень быстрый retry для real-time
-          chainId
-        );
-        
-        if (response.error) {
-          throw new Error(`MegaETH Real-time Error: ${response.error.message}`);
-        }
-        
-        txHash = response.result;
-        console.log('⚡ MegaETH instant transaction hash:', txHash);
-        success = true;
-        
-        // Для MegaETH realtime метод возвращает мгновенное подтверждение
-        return { 
-          hash: txHash, 
-          receipt: response.result,
-          isInstant: true, // Флаг мгновенной обработки
-          network: 'MegaETH'
-        };
-        
-      } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
+      if (config.sendMethod === 'eth_sendRawTransactionSync') {
         // 📦 RISE синхронный метод с оптимизацией
         console.log('📦 Using RISE eth_sendRawTransactionSync for fast execution...');
         
@@ -1947,9 +1855,9 @@ export const useBlockchainUtils = () => {
       let finalResult = txResult;
       
       // Обработка подтверждения в зависимости от сети
-      if (config.sendMethod === 'realtime_sendRawTransaction') {
-        // MegaETH: realtime метод уже возвращает подтверждение
-        console.log('✅ MegaETH instant confirmation:', txResult);
+      if (chainId === 6342) {
+        // MegaETH: считаем отправку мгновенно успешной, подтверждение не ждём
+        console.log('✅ MegaETH instant send (no confirmation wait)');
         finalResult = txResult.receipt || txResult;
         success = true;
         
@@ -2153,7 +2061,7 @@ export const useBlockchainUtils = () => {
       
       let batchSize = poolConfig.poolSize;
       if (fallbackConfig) {
-        batchSize = fallbackConfig.reducedBatchSize;
+        batchSize = Math.max(10, Math.min(poolConfig.batchSize, fallbackConfig.reducedBatchSize || poolConfig.batchSize));
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
@@ -2670,6 +2578,16 @@ export const useBlockchainUtils = () => {
         });
       }, 2000); // Через 2 секунды после загрузки
     }
+  }, []);
+
+  // Очищаем мониторинг при размонтировании
+  useEffect(() => {
+    return () => {
+      Object.values(poolMonitors.current || {}).forEach((id) => {
+        try { clearInterval(id); } catch (e) {}
+      });
+      poolMonitors.current = {};
+    };
   }, []);
 
   return {
