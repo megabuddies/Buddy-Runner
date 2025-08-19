@@ -338,54 +338,54 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 200, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
-      refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 50, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
+      poolSize: 10000, // МАССИВНО УВЕЛИЧЕН для решения проблемы после 150 транзакций (как в PR #85 увеличили до 200)
+      refillAt: 0.02, // СУПЕР раннее пополнение при 2% использования (было 15%)
+      batchSize: 500, // ОГРОМНЫЙ размер пакета для опережающего пополнения (было 50)
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
-      maxBurstSize: 10, // УВЕЛИЧЕН лимит burst для длинных сессий
-      burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
+      maxBurstSize: 50, // МАССИВНО УВЕЛИЧЕН лимит burst для длинных сессий (было 10)
+      burstCooldown: 100 // ЕЩЕ БОЛЬШЕ УМЕНЬШЕН cooldown для минимизации задержек (было 200)
     },
     31337: { // Foundry
-      poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
-      refillAt: 0.2, // Более раннее пополнение
-      batchSize: 30, // Больший размер пакета
+      poolSize: 5000, // МАССИВНО УВЕЛИЧЕН для длинных игровых сессий (было 120)
+      refillAt: 0.05, // Более раннее пополнение при 5% (было 20%)
+      batchSize: 200, // Больший размер пакета (было 30)
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
-      maxBurstSize: 8, // Увеличен лимит burst
-      burstCooldown: 200 // Уменьшен cooldown
+      maxBurstSize: 30, // Увеличен лимит burst (было 8)
+      burstCooldown: 150 // Уменьшен cooldown (было 200)
     },
     50311: { // Somnia
-      poolSize: 100, // УВЕЛИЧЕН для длинных игровых сессий
-      refillAt: 0.2, // Более раннее пополнение
-      batchSize: 25, // Больший размер пакета
+      poolSize: 4000, // МАССИВНО УВЕЛИЧЕН для длинных игровых сессий (было 100)
+      refillAt: 0.05, // Более раннее пополнение при 5% (было 20%)
+      batchSize: 150, // Больший размер пакета (было 25)
       maxRetries: 3,
       retryDelay: 300,
       burstMode: true,
-      maxBurstSize: 6, // Увеличен лимит burst
-      burstCooldown: 400 // Уменьшен cooldown
+      maxBurstSize: 25, // Увеличен лимит burst (было 6)
+      burstCooldown: 300 // Уменьшен cooldown (было 400)
     },
     1313161556: { // RISE
-      poolSize: 50, // Увеличен для pre-signed only
-      refillAt: 0.4,
-      batchSize: 12,
+      poolSize: 2000, // МАССИВНО УВЕЛИЧЕН для pre-signed only (было 50)
+      refillAt: 0.1, // Раннее пополнение при 10% (было 40%)
+      batchSize: 100, // Больший размер пакета (было 12)
       maxRetries: 2,
       retryDelay: 400,
       burstMode: false,
-      maxBurstSize: 2,
-      burstCooldown: 1500
+      maxBurstSize: 10, // Увеличен (было 2)
+      burstCooldown: 1000 // Уменьшен (было 1500)
     },
     default: {
-      poolSize: 60, // Увеличен для pre-signed only
-      refillAt: 0.3, // Раннее пополнение
-      batchSize: 15,
+      poolSize: 3000, // МАССИВНО УВЕЛИЧЕН для pre-signed only (было 60)
+      refillAt: 0.1, // Раннее пополнение при 10% (было 30%)
+      batchSize: 120, // Больший размер пакета (было 15)
       maxRetries: 3,
       retryDelay: 300,
       burstMode: false,
-      maxBurstSize: 2,
-      burstCooldown: 1000
+      maxBurstSize: 10, // Увеличен (было 2)
+      burstCooldown: 800 // Уменьшен (было 1000)
     }
   };
 
