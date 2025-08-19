@@ -1150,6 +1150,9 @@ export const useBlockchainUtils = () => {
     
     try {
       pool.isRefilling = true;
+      // Устанавливаем флаг СРАЗУ при начале пополнения
+      pool.hasTriggeredRefill = true;
+      
       console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
       
       // Создаем отдельный временный пул для новых транзакций
@@ -1159,7 +1162,10 @@ export const useBlockchainUtils = () => {
       const config = NETWORK_CONFIGS[chainId];
       const embeddedWallet = getEmbeddedWallet();
       
-      // Подписываем новые транзакции
+      // Подписываем новые транзакции с улучшенной обработкой ошибок
+      let consecutiveErrors = 0;
+      const maxConsecutiveErrors = 3;
+      
       for (let i = 0; i < count; i++) {
         try {
           const nonce = startNonce + i;
@@ -1178,7 +1184,13 @@ export const useBlockchainUtils = () => {
 
           let signedTx;
           if (chainId === 6342) {
-            signedTx = await walletClient.signTransaction(txData);
+            // Добавляем таймаут для MegaETH подписания
+            signedTx = await Promise.race([
+              walletClient.signTransaction(txData),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Signing timeout')), 3000)
+              )
+            ]);
           } else {
             signedTx = await walletClient.signTransaction(txData);
           }
@@ -1190,17 +1202,28 @@ export const useBlockchainUtils = () => {
           };
           tempTransactions.push(txWrapper);
           
+          // Сбрасываем счетчик ошибок при успехе
+          consecutiveErrors = 0;
+          
           console.log(`Extended pool: signed ${tempTransactions.length}/${count}`);
         } catch (error) {
+          consecutiveErrors++;
           console.error(`Error signing extension transaction ${i + 1}:`, error);
-          break;
+          
+          // Если слишком много подряд идущих ошибок, прекращаем
+          if (consecutiveErrors >= maxConsecutiveErrors) {
+            console.error(`Too many consecutive signing errors (${consecutiveErrors}), stopping refill`);
+            break;
+          }
+          
+          // Для единичных ошибок продолжаем, но с задержкой
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
       
       // Добавляем новые транзакции в основной пул
       if (pool && tempTransactions.length > 0) {
         pool.transactions.push(...tempTransactions);
-        pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
         console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
         
         // Обновляем nonce manager
@@ -1215,6 +1238,8 @@ export const useBlockchainUtils = () => {
     } finally {
       if (pool) {
         pool.isRefilling = false;
+        // Сбрасываем флаг ТОЛЬКО после завершения пополнения (успешного или нет)
+        pool.hasTriggeredRefill = false;
       }
     }
   };
@@ -1234,11 +1259,11 @@ export const useBlockchainUtils = () => {
 
       // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - более частое и агрессивное
       // Пополняем каждые 3 транзакции вместо 5 для решения проблемы после 20 прыжков
-      if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
+      if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (solving 20-jump slowdown)`);
-        pool.hasTriggeredRefill = true;
         
         // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
+        // НЕ УСТАНАВЛИВАЕМ hasTriggeredRefill здесь - это будет сделано в extendPool
         setTimeout(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
@@ -1256,8 +1281,7 @@ export const useBlockchainUtils = () => {
             }
           } catch (error) {
             console.error('❌ Error in enhanced pool refill:', error);
-            // В случае ошибки сбрасываем флаг для повторной попытки
-            pool.hasTriggeredRefill = false;
+            // В случае ошибки НЕ ТРОГАЕМ флаг - он будет сброшен в extendPool
           }
         }, 0);
       }
@@ -1266,8 +1290,8 @@ export const useBlockchainUtils = () => {
       const remainingTransactions = pool.transactions.length - pool.currentIndex;
       if (remainingTransactions <= 5 && !pool.hasTriggeredRefill && !pool.isRefilling) {
         console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
-        pool.hasTriggeredRefill = true;
         
+        // НЕ УСТАНАВЛИВАЕМ hasTriggeredRefill здесь - это будет сделано в extendPool
         setTimeout(async () => {
           try {
             const embeddedWallet = getEmbeddedWallet();
@@ -1281,18 +1305,40 @@ export const useBlockchainUtils = () => {
             }
           } catch (error) {
             console.error('❌ Emergency refill failed:', error);
-            pool.hasTriggeredRefill = false;
+            // В случае ошибки НЕ ТРОГАЕМ флаг - он будет сброшен в extendPool
           }
         }, 0);
       }
 
       return txWrapper.signedTx;
-    } else {
-      // Детальное логирование для отладки
-      if (!pool) {
-        console.log(`❌ No transaction pool exists for chain ${chainId}`);
-        throw new Error(`No pre-signed transaction pool available for chain ${chainId}. Only pre-signed transactions are allowed.`);
-      } else if (!pool.isReady) {
+    }
+    
+    // КРИТИЧЕСКАЯ СИТУАЦИЯ: пул пуст или не готов, но транзакция нужна СЕЙЧАС
+    // Если пул в процессе пополнения, ждем короткое время
+    if (pool && pool.isRefilling) {
+      console.log('⏳ Pool is refilling, waiting briefly for new transactions...');
+      
+      // Ждем до 500ms для завершения пополнения
+      for (let i = 0; i < 5; i++) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
+        // Проверяем, появились ли новые транзакции
+        if (pool.transactions.length > pool.currentIndex) {
+          const txWrapper = pool.transactions[pool.currentIndex];
+          pool.currentIndex++;
+          console.log(`✅ Got transaction after waiting: ${pool.currentIndex}/${pool.transactions.length}`);
+          return txWrapper.signedTx;
+        }
+      }
+      
+      console.warn('⚠️ Pool refill taking too long, continuing with error handling...');
+    }
+    
+    // Детальное логирование для отладки
+    if (!pool) {
+      console.log(`❌ No transaction pool exists for chain ${chainId}`);
+      throw new Error(`No pre-signed transaction pool available for chain ${chainId}. Only pre-signed transactions are allowed.`);
+    } else if (!pool.isReady) {
         console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
         throw new Error(`Pre-signed transaction pool not ready for chain ${chainId}. Wait for initialization to complete.`);
       } else if (pool.transactions.length <= pool.currentIndex) {
@@ -1343,6 +1389,7 @@ export const useBlockchainUtils = () => {
   // МОНИТОРИНГ БЕСКОНЕЧНОГО ПУЛА pre-signed транзакций
   const startPoolMonitoring = (chainId) => {
     const chainKey = chainId.toString();
+    let lastLoggedConsumption = -1; // Предотвращаем дублирование логов
     
     const monitorInterval = setInterval(() => {
       const pool = preSignedPool.current[chainKey];
@@ -1358,7 +1405,10 @@ export const useBlockchainUtils = () => {
       const predictedGrowth = totalTx + netGrowth;
       
       // УЛУЧШЕННЫЕ информационные логи каждые 5 транзакций для раннего выявления проблем
-      if (consumedTx % 5 === 0 && consumedTx > 0) {
+      // ДЕБАУНС: логируем только если это новое значение и не во время рефилла
+      if (consumedTx % 5 === 0 && consumedTx > 0 && consumedTx !== lastLoggedConsumption && !pool.isRefilling) {
+        lastLoggedConsumption = consumedTx;
+        
         const performanceGrade = remainingTx > 30 ? '🚀 EXCELLENT' : 
                                remainingTx > 20 ? '✅ GOOD' : 
                                remainingTx > 10 ? '⚠️ WARNING' : '🚨 CRITICAL';
@@ -1385,25 +1435,10 @@ export const useBlockchainUtils = () => {
         console.error(`🚨 INFINITE POOL VIOLATION: Only ${remainingTx} transactions left!`);
         console.error(`  • This should never happen with infinite pool logic`);
         console.error(`  • Consumed: ${consumedTx}, Total: ${totalTx}, Cycles: ${cyclesCompleted}`);
+        console.error(`  • Emergency refill should be handled by getNextTransaction function`);
         
-        // Экстренное пополнение с большим батчем
-        if (!pool.hasTriggeredRefill) {
-          pool.hasTriggeredRefill = true;
-          console.log('🚨 EMERGENCY: Force-refilling infinite pool...');
-          
-          setTimeout(async () => {
-            try {
-              const embeddedWallet = getEmbeddedWallet();
-              if (embeddedWallet) {
-                const manager = getNonceManager(chainId, embeddedWallet.address);
-                // Большой экстренный батч для восстановления бесконечности
-                await extendPool(chainId, manager.pendingNonce, 25);
-              }
-            } catch (error) {
-              console.error('❌ Emergency infinite pool refill failed:', error);
-            }
-          }, 0);
-        }
+        // НЕ ВЫПОЛНЯЕМ рефилл здесь - это может конфликтовать с основной логикой
+        // Рефилл должен обрабатываться только в getNextTransaction
       }
       
       // Предупреждение если нормальный механизм не работает
@@ -2179,7 +2214,7 @@ export const useBlockchainUtils = () => {
           .catch(error => {
             console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
             enableFallbackMode(chainId);
-            console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
+            console.log('🔄 Enabled reduced batch size fallback mode - game continues smoothly');
           });
       });
       
@@ -2215,7 +2250,7 @@ export const useBlockchainUtils = () => {
       // Даже при ошибке, позволяем игре работать в fallback режиме
       isInitialized.current[chainKey] = true;
       enableFallbackMode(chainId);
-      console.log('🔄 Emergency fallback mode enabled - game will work with realtime signing');
+      console.log('🔄 Emergency fallback mode enabled - reduced batch sizes will be used');
     } finally {
       setIsInitializing(false);
     }
