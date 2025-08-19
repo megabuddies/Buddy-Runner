@@ -216,7 +216,14 @@ const App = () => {
       // Автоматические разрешения для игры 
       mfa: {
         noPromptOnMfaRequired: false
-      }
+      },
+      
+      // Отключение аналитики и телеметрии для производительности
+      analytics: {
+        enabled: false
+      },
+      telemetry: false,
+      disableAnalytics: true
     }
   };
 

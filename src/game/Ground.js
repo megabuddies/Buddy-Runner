@@ -12,7 +12,7 @@ export default class Ground {
 
     this.groundImage = new Image();
     this.groundImage.src = "assets/ground.png";
-    this.groundImage.onerror = () => console.error('Failed to load ground.png');
+    this.groundImage.onerror = () => // console.error('Failed to load ground.png');
   }
 
   update(gameSpeed, frameTimeDelta) {

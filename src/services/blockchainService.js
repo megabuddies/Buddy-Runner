@@ -1,6 +1,8 @@
 // PRE-SIGNED TRANSACTIONS ONLY - Используем только предварительно подписанные транзакции
 // Этот сервис больше не создает транзакции через ethers.js, а использует pre-signed пул
 
+import { blockchainLogger as logger } from '../utils/logger.js';
+
 // Contract addresses for different networks
 const CONTRACT_ADDRESSES = {
   6342: "0x0000000000000000000000000000000000000000",  // MegaETH Testnet - Deploy contract here
@@ -29,27 +31,27 @@ class BlockchainService {
 
       this.chainId = chainId;
 
-      console.log(`Blockchain service initialized for pre-signed transactions on chain ${this.chainId}`);
+      logger.info(`Blockchain service initialized for pre-signed transactions on chain ${this.chainId}`);
       return true;
     } catch (error) {
-      console.error('Failed to initialize blockchain service:', error);
+      logger.error('Failed to initialize blockchain service:', error);
       return false;
     }
   }
 
   async startGame() {
     if (!this.blockchainUtils) {
-      console.error('BlockchainUtils not set, cannot use pre-signed transactions');
+      logger.error('BlockchainUtils not set, cannot use pre-signed transactions');
       return { success: false, error: 'Pre-signed transaction system not available' };
     }
 
     try {
-      console.log('Starting game with pre-signed transaction...');
+      logger.debug('Starting game with pre-signed transaction...');
       
       // Используем pre-signed транзакцию через blockchainUtils
       const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
       
-      console.log('Game started with pre-signed transaction:', result);
+      logger.debug('Game started with pre-signed transaction:', result);
       
       return { 
         success: true, 
@@ -57,14 +59,14 @@ class BlockchainService {
         blockchainTime: result.blockchainTime
       };
     } catch (error) {
-      console.error('Failed to start game with pre-signed transaction:', error);
+      logger.error('Failed to start game with pre-signed transaction:', error);
       return { success: false, error: error.message };
     }
   }
 
   async makeMovement() {
     if (!this.blockchainUtils) {
-      console.warn('BlockchainUtils not set, simulating movement');
+      logger.warn('BlockchainUtils not set, simulating movement');
       return { success: true, simulated: true };
     }
 
@@ -95,7 +97,7 @@ class BlockchainService {
         try {
           // Используем pre-signed транзакцию для движения
           const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
-          console.log('Movement sent with pre-signed transaction:', result);
+          logger.debug('Movement sent with pre-signed transaction:', result);
 
           item.resolve({ 
             success: true, 
@@ -104,7 +106,7 @@ class BlockchainService {
             pending: false // Pre-signed транзакции обрабатываются быстрее
           });
         } catch (error) {
-          console.error('Pre-signed movement transaction failed:', error);
+          logger.error('Pre-signed movement transaction failed:', error);
           item.resolve({ 
             success: false, 
             error: error.message 
@@ -112,7 +114,7 @@ class BlockchainService {
         }
       }
     } catch (error) {
-      console.error('Error processing pre-signed transaction queue:', error);
+      logger.error('Error processing pre-signed transaction queue:', error);
     }
 
     this.isProcessingQueue = false;
@@ -125,17 +127,17 @@ class BlockchainService {
 
   async endGame() {
     if (!this.blockchainUtils) {
-      console.warn('BlockchainUtils not set, cannot end game on-chain');
+      logger.warn('BlockchainUtils not set, cannot end game on-chain');
       return { success: false, error: 'Pre-signed transaction system not available' };
     }
 
     try {
-      console.log('Ending game with pre-signed transaction...');
+      logger.debug('Ending game with pre-signed transaction...');
       
       // Используем pre-signed транзакцию для завершения игры
       const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
       
-      console.log('Game ended with pre-signed transaction:', result);
+      logger.debug('Game ended with pre-signed transaction:', result);
       
       return { 
         success: true, 
@@ -143,7 +145,7 @@ class BlockchainService {
         blockchainTime: result.blockchainTime
       };
     } catch (error) {
-      console.error('Failed to end game with pre-signed transaction:', error);
+      logger.error('Failed to end game with pre-signed transaction:', error);
       return { success: false, error: error.message };
     }
   }
@@ -151,14 +153,14 @@ class BlockchainService {
   async getPlayerSession(address) {
     // В режиме pre-signed транзакций данные сессии недоступны через контракт
     // Возвращаем mock данные или получаем из локального состояния
-    console.warn('Player session data not available in pre-signed only mode');
+    logger.warn('Player session data not available in pre-signed only mode');
     return null;
   }
 
   async getPlayerHighScore(address) {
     // В режиме pre-signed транзакций хай-скор недоступен через контракт
     // Возвращаем mock данные или получаем из локального состояния
-    console.warn('High score data not available in pre-signed only mode');
+    logger.warn('High score data not available in pre-signed only mode');
     return 0;
   }
 

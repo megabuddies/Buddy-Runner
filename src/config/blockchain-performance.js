@@ -1,3 +1,5 @@
+import { performanceLogger as logger } from '../utils/logger.js';
+
 // Конфигурация для мониторинга производительности блокчейна
 export const PERFORMANCE_CONFIG = {
   // Мониторинг RPC эндпоинтов
@@ -63,7 +65,7 @@ export const performanceUtils = {
   // Логирование метрик производительности
   logPerformanceMetric: (chainId, metric, value, metadata = {}) => {
     const timestamp = new Date().toISOString();
-    console.log(`[PERF-${chainId}] ${timestamp} ${metric}: ${value}`, metadata);
+    logger.debug(`[PERF-${chainId}] ${timestamp} ${metric}: ${value}`, metadata);
   },
 
   // Создание отчета о состоянии системы

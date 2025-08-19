@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
+import { blockchainLogger as logger } from '../utils/logger.js';
 
 // Конфигурация сетей
 const NETWORK_CONFIGS = {
@@ -113,7 +114,7 @@ const safeJsonParse = (data) => {
     }
     return data;
   } catch (error) {
-    console.warn('Failed to parse JSON response:', error.message, 'Data:', data);
+    logger.warn('Failed to parse JSON response:', error.message, 'Data:', data);
     return null;
   }
 };
@@ -176,7 +177,7 @@ export const useBlockchainUtils = () => {
       
       localStorage.setItem(GLOBAL_CACHE_KEY, JSON.stringify(cacheData));
     } catch (error) {
-      console.warn('Failed to save global cache:', error);
+      logger.warn('Failed to save global cache:', error);
     }
   };
 
@@ -206,17 +207,17 @@ export const useBlockchainUtils = () => {
         // Проверяем и загружаем только актуальные данные
         if (parsed.gasParams && (now - parsed.gasParams.timestamp) < CACHE_EXPIRY.gasParams) {
           gasParams.current = deserializeBigInt(parsed.gasParams.data);
-          console.log('🎯 Loaded cached gas parameters from storage');
+          logger.log('🎯 Loaded cached gas parameters from storage');
         }
         
         if (parsed.chainParams && (now - parsed.chainParams.timestamp) < CACHE_EXPIRY.chainParams) {
           chainParamsCache.current = parsed.chainParams.data;
-          console.log('🎯 Loaded cached chain parameters from storage');
+          logger.log('🎯 Loaded cached chain parameters from storage');
         }
         
         if (parsed.rpcHealth && (now - parsed.rpcHealth.timestamp) < CACHE_EXPIRY.rpcHealth) {
           rpcHealthStatus.current = parsed.rpcHealth.data;
-          console.log('🎯 Loaded cached RPC health from storage');
+          logger.log('🎯 Loaded cached RPC health from storage');
         }
         
         if (parsed.nonceCache && (now - parsed.nonceCache.timestamp) < CACHE_EXPIRY.nonce) {
@@ -230,11 +231,11 @@ export const useBlockchainUtils = () => {
               };
             }
           });
-          console.log('🎯 Loaded cached nonce data from storage');
+          logger.log('🎯 Loaded cached nonce data from storage');
         }
       }
     } catch (error) {
-      console.warn('Failed to load global cache:', error);
+      logger.warn('Failed to load global cache:', error);
     }
   };
 
@@ -258,7 +259,7 @@ export const useBlockchainUtils = () => {
           if (timeSinceLastFailure > cb.timeout) {
             cb.state = 'HALF_OPEN';
             cb.failures = 0;
-            console.log(`🔄 Auto-reset circuit breaker for chain ${chainId} - trying again`);
+            logger.log(`🔄 Auto-reset circuit breaker for chain ${chainId} - trying again`);
           }
         }
       });
@@ -457,7 +458,7 @@ export const useBlockchainUtils = () => {
               // Если достигли лимита burst, включаем КОРОТКИЙ cooldown
         if (burstManager.burstCount >= config.maxBurstSize) {
           burstManager.inCooldown = true;
-          console.log(`Burst mode short cooldown activated for chain ${chainId} (${config.burstCooldown}ms) - optimized for long sessions`);
+          logger.log(`Burst mode short cooldown activated for chain ${chainId} (${config.burstCooldown}ms) - optimized for long sessions`);
         }
     }
   };
@@ -554,7 +555,7 @@ export const useBlockchainUtils = () => {
     }
 
     // Если все endpoints нездоровы, возвращаем первый (возможно, проблема временная)
-    console.warn(`All RPC endpoints for chain ${chainId} appear unhealthy, using primary`);
+    logger.warn(`All RPC endpoints for chain ${chainId} appear unhealthy, using primary`);
     return health.endpoints[0].url;
   };
 
@@ -576,7 +577,7 @@ export const useBlockchainUtils = () => {
       endpoint.consecutiveFailures++;
       if (endpoint.consecutiveFailures >= 3) {
         endpoint.healthy = false;
-        console.warn(`Marking RPC endpoint as unhealthy: ${rpcUrl} (${endpoint.consecutiveFailures} failures)`);
+        logger.warn(`Marking RPC endpoint as unhealthy: ${rpcUrl} (${endpoint.consecutiveFailures} failures)`);
       }
     }
   };
@@ -609,7 +610,7 @@ export const useBlockchainUtils = () => {
     const state = fallbackState.current[chainId];
     if (state) {
       state.degradedMode = true;
-      console.log(`Enabled fallback mode for chain ${chainId}`);
+      logger.log(`Enabled fallback mode for chain ${chainId}`);
     }
   };
 
@@ -663,7 +664,7 @@ export const useBlockchainUtils = () => {
     try {
       // Получаем здоровый RPC endpoint
       const healthyRpcUrl = await getHealthyRpcEndpoint(chainId);
-      console.log(`Using RPC endpoint for chain ${chainId}: ${healthyRpcUrl}`);
+      logger.log(`Using RPC endpoint for chain ${chainId}: ${healthyRpcUrl}`);
 
       // Получаем соединение из пула
       const releaseConnection = getConnectionFromPool(chainId, healthyRpcUrl);
@@ -745,14 +746,14 @@ export const useBlockchainUtils = () => {
       };
       clientCache.current[cacheKey] = clients;
 
-      console.log(`Created clients for chain ${chainId}:`, {
+      logger.log(`Created clients for chain ${chainId}:`, {
         publicRPC: healthyRpcUrl,
         signingMethod: chainId === 6342 ? 'Local Privy' : 'RPC'
       });
 
       return clients;
     } catch (error) {
-      console.error(`Error creating clients for chain ${chainId}:`, error);
+      logger.error(`Error creating clients for chain ${chainId}:`, error);
       throw error;
     }
   };
@@ -784,7 +785,7 @@ export const useBlockchainUtils = () => {
     // Если есть активный пул предподписанных транзакций, используем его базовый nonce
     if (pool && pool.isReady && !forceRefresh) {
       const poolNonce = pool.baseNonce + pool.currentIndex;
-      console.log(`🎯 Using pool-based nonce ${poolNonce} for ${address} on chain ${chainId} (pool: ${pool.currentIndex}/${pool.transactions.length})`);
+      logger.log(`🎯 Using pool-based nonce ${poolNonce} for ${address} on chain ${chainId} (pool: ${pool.currentIndex}/${pool.transactions.length})`);
       return poolNonce;
     }
     
@@ -800,7 +801,7 @@ export const useBlockchainUtils = () => {
         
         // Если обновление заблокировано слишком долго, принудительно сбрасываем флаг
         if (manager.isUpdating) {
-          console.warn('⚠️ Nonce update timeout, forcing reset');
+          logger.warn('⚠️ Nonce update timeout, forcing reset');
           manager.isUpdating = false;
         }
       }
@@ -824,31 +825,31 @@ export const useBlockchainUtils = () => {
           if (forceRefresh) {
             manager.currentNonce = networkNonce;
             manager.pendingNonce = networkNonce;
-            console.log(`🔄 Force refresh: nonce updated for ${address} on chain ${chainId}: ${previousNonce} → ${networkNonce}`);
+            logger.log(`🔄 Force refresh: nonce updated for ${address} on chain ${chainId}: ${previousNonce} → ${networkNonce}`);
           } else if (networkNonce > previousNonce) {
             manager.currentNonce = networkNonce;
             manager.pendingNonce = networkNonce;
-            console.log(`🔄 Nonce updated for ${address} on chain ${chainId}: ${previousNonce} → ${networkNonce}`);
+            logger.log(`🔄 Nonce updated for ${address} on chain ${chainId}: ${previousNonce} → ${networkNonce}`);
           } else {
             // Если сетевой nonce меньше, используем наш локальный (возможно есть pending транзакции)
             manager.pendingNonce = manager.currentNonce;
-            console.log(`🔄 Keeping local nonce for ${address} on chain ${chainId}: ${manager.currentNonce} (network: ${networkNonce})`);
+            logger.log(`🔄 Keeping local nonce for ${address} on chain ${chainId}: ${manager.currentNonce} (network: ${networkNonce})`);
           }
           
           manager.lastUpdate = now;
           
         } catch (error) {
-          console.error('❌ Error updating nonce:', error);
+          logger.error('❌ Error updating nonce:', error);
           // Если не удалось получить nonce из сети
           if (manager.currentNonce !== null) {
             // При ошибке не увеличиваем nonce, просто логируем
-            console.warn(`⚠️ Using cached nonce ${manager.currentNonce} due to network error`);
+            logger.warn(`⚠️ Using cached nonce ${manager.currentNonce} due to network error`);
             manager.pendingNonce = manager.currentNonce;
           } else {
             // Если nonce вообще не инициализирован, начинаем с 0
             manager.currentNonce = 0;
             manager.pendingNonce = 0;
-            console.warn(`⚠️ Initializing nonce to 0 due to network error`);
+            logger.warn(`⚠️ Initializing nonce to 0 due to network error`);
           }
         } finally {
           manager.isUpdating = false;
@@ -860,7 +861,7 @@ export const useBlockchainUtils = () => {
     const nextNonce = manager.pendingNonce;
     manager.pendingNonce += 1;
     
-    console.log(`🎯 Allocated nonce ${nextNonce} for ${address} on chain ${chainId}`);
+    logger.log(`🎯 Allocated nonce ${nextNonce} for ${address} on chain ${chainId}`);
     return nextNonce;
   };
 
@@ -878,7 +879,7 @@ export const useBlockchainUtils = () => {
       const maxAge = chainId === 6342 ? 2 * 60 * 1000 : CACHE_EXPIRY.gasParams;
       
       if (age < maxAge) {
-        console.log(`🎯 Using cached gas params for chain ${chainId} (age: ${Math.round(age/1000)}s)`);
+        logger.log(`🎯 Using cached gas params for chain ${chainId} (age: ${Math.round(age/1000)}s)`);
         return cached;
       }
     }
@@ -891,7 +892,7 @@ export const useBlockchainUtils = () => {
       // Специальные ОПТИМИЗИРОВАННЫЕ параметры для разных сетей
       if (chainId === 6342) {
         // MegaETH Testnet - максимально оптимизированные параметры для real-time
-        console.log('⚡ Using ultra-optimized gas parameters for MegaETH real-time gaming');
+        logger.log('⚡ Using ultra-optimized gas parameters for MegaETH real-time gaming');
         maxFeePerGas = parseGwei('0.001'); // Снижено до 1 mwei для максимальной скорости
         maxPriorityFeePerGas = parseGwei('0.0005'); // 0.5 mwei priority
         
@@ -907,7 +908,7 @@ export const useBlockchainUtils = () => {
           maxFeePerGas = gasPrice * 2n; // 2x для запаса
           maxPriorityFeePerGas = parseGwei('1'); // 1 gwei priority
         } catch (error) {
-          console.warn('Failed to get dynamic gas price, using fallback:', error);
+          logger.warn('Failed to get dynamic gas price, using fallback:', error);
           // Fallback значения
           maxFeePerGas = parseGwei('20');
           maxPriorityFeePerGas = parseGwei('2');
@@ -922,18 +923,18 @@ export const useBlockchainUtils = () => {
       
       gasParams.current[cacheKey] = params;
       
-      console.log(`⚡ Gas params for chain ${chainId}: {maxFeePerGas: ${Number(maxFeePerGas) / 1e9} gwei, maxPriorityFeePerGas: ${Number(maxPriorityFeePerGas) / 1e9} gwei}`);
+      logger.log(`⚡ Gas params for chain ${chainId}: {maxFeePerGas: ${Number(maxFeePerGas) / 1e9} gwei, maxPriorityFeePerGas: ${Number(maxPriorityFeePerGas) / 1e9} gwei}`);
       
       // Сохраняем в глобальный кеш асинхронно
       setTimeout(saveGlobalCache, 100);
       
       return params;
     } catch (error) {
-      console.error('Error getting gas params:', error);
+      logger.error('Error getting gas params:', error);
       
       // Возвращаем кешированные данные если есть, даже если устарели
       if (gasParams.current[cacheKey]) {
-        console.log('🔄 Using stale cached gas params due to error');
+        logger.log('🔄 Using stale cached gas params due to error');
         return gasParams.current[cacheKey];
       }
       
@@ -979,10 +980,10 @@ export const useBlockchainUtils = () => {
         delete chainParamsCache.current[cacheKey];
       }, cacheTime);
 
-      console.log(`Cached chain params for ${chainId}:`, params);
+      logger.log(`Cached chain params for ${chainId}:`, params);
       return params;
     } catch (error) {
-      console.error('Error getting chain params:', error);
+      logger.error('Error getting chain params:', error);
       // Возвращаем базовые параметры если RPC недоступен
       return {
         chainId: chainId,
@@ -1003,10 +1004,10 @@ export const useBlockchainUtils = () => {
     let actualCount = Math.min(count, poolConfig.poolSize);
     if (fallbackConfig) {
       actualCount = Math.min(actualCount, fallbackConfig.reducedBatchSize);
-      console.log(`Using fallback mode for chain ${chainId}: batch size ${actualCount}`);
+      logger.log(`Using fallback mode for chain ${chainId}: batch size ${actualCount}`);
     }
     
-    console.log(`Pre-signing ${actualCount} transactions for chain ${chainId} starting from nonce ${startNonce}`);
+    logger.log(`Pre-signing ${actualCount} transactions for chain ${chainId} starting from nonce ${startNonce}`);
     
     if (!preSignedPool.current[chainKey]) {
       preSignedPool.current[chainKey] = {
@@ -1023,7 +1024,7 @@ export const useBlockchainUtils = () => {
     const { walletClient } = await createClients(chainId);
     const gasParams = await getGasParams(chainId);
 
-    console.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(gasParams.maxFeePerGas) / 10**9}, maxPriorityFeePerGasGwei: ${Number(gasParams.maxPriorityFeePerGas) / 10**9}}`);
+    logger.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(gasParams.maxFeePerGas) / 10**9}, maxPriorityFeePerGasGwei: ${Number(gasParams.maxPriorityFeePerGas) / 10**9}}`);
 
     const config = NETWORK_CONFIGS[chainId];
     const embeddedWallet = getEmbeddedWallet();
@@ -1033,7 +1034,7 @@ export const useBlockchainUtils = () => {
 
     // ПАРАЛЛЕЛЬНОЕ подписание транзакций для максимальной скорости
     const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
-    console.log(`🚀 Starting parallel pre-signing of ${actualCount} transactions`);
+    logger.log(`🚀 Starting parallel pre-signing of ${actualCount} transactions`);
     
     // Сначала подписываем первую транзакцию отдельно для быстрого старта
     try {
@@ -1060,13 +1061,13 @@ export const useBlockchainUtils = () => {
       
       // КРИТИЧНО: Делаем пул доступным сразу же после первой транзакции
       pool.isReady = true;
-      console.log(`🎮 First transaction ready - gaming can begin!`);
-      console.log(`✅ Pre-signed transaction pool is now ACTIVE with 1 transaction`);
+      logger.log(`🎮 First transaction ready - gaming can begin!`);
+      logger.log(`✅ Pre-signed transaction pool is now ACTIVE with 1 transaction`);
       
       // Запускаем проактивный мониторинг пула
       startPoolMonitoring(chainId);
     } catch (error) {
-      console.error('Failed to sign first transaction:', error);
+      logger.error('Failed to sign first transaction:', error);
       throw error;
     }
     
@@ -1122,11 +1123,11 @@ export const useBlockchainUtils = () => {
               timestamp: Date.now()
             };
           } catch (error) {
-            console.error(`Error signing transaction with nonce ${nonce}:`, error);
+            logger.error(`Error signing transaction with nonce ${nonce}:`, error);
             
             // Для rate limiting ошибок, просто логируем но продолжаем
             if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403 || error.message?.includes('not whitelisted')) {
-              console.log('Rate limit/403/not whitelisted detected during pre-signing, skipping transaction');
+              logger.log('Rate limit/403/not whitelisted detected during pre-signing, skipping transaction');
               return null;
             }
             
@@ -1144,7 +1145,7 @@ export const useBlockchainUtils = () => {
       const successfulTxs = batchResults.filter(tx => tx !== null);
       pool.transactions.push(...successfulTxs);
       
-      console.log(`Pre-signed batch ${Math.floor((batchStart - 1) / PARALLEL_BATCH_SIZE) + 1}/${Math.ceil((actualCount - 1) / PARALLEL_BATCH_SIZE)} - total ${pool.transactions.length}/${actualCount}`);
+      logger.log(`Pre-signed batch ${Math.floor((batchStart - 1) / PARALLEL_BATCH_SIZE) + 1}/${Math.ceil((actualCount - 1) / PARALLEL_BATCH_SIZE)} - total ${pool.transactions.length}/${actualCount}`);
       
       // Добавляем небольшую задержку между батчами для предотвращения rate limiting
       if (batchEnd < actualCount) {
@@ -1155,11 +1156,11 @@ export const useBlockchainUtils = () => {
       }
     }
 
-    console.log(`Successfully pre-signed ${pool.transactions.length} transactions`);
+    logger.log(`Successfully pre-signed ${pool.transactions.length} transactions`);
     
     // Если мы в fallback режиме и у нас есть хотя бы одна транзакция, это успех
     if (fallbackConfig && pool.transactions.length > 0) {
-      console.log('Fallback mode: minimum transactions ready for gaming');
+      logger.log('Fallback mode: minimum transactions ready for gaming');
     }
     
     // Обновляем nonce manager чтобы учесть использованные nonces
@@ -1176,13 +1177,13 @@ export const useBlockchainUtils = () => {
     
     // Предотвращаем параллельные пополнения
     if (!pool || pool.isRefilling) {
-      console.log('Pool extension already in progress, skipping');
+      logger.log('Pool extension already in progress, skipping');
       return;
     }
     
     try {
       pool.isRefilling = true;
-      console.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
+      logger.log(`Extending pool for chain ${chainId} from nonce ${startNonce} with ${count} transactions`);
       
       // Создаем отдельный временный пул для новых транзакций
       const tempTransactions = [];
@@ -1193,7 +1194,7 @@ export const useBlockchainUtils = () => {
       
       // ПАРАЛЛЕЛЬНОЕ подписание новых транзакций для максимальной скорости
       const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
-      console.log(`📝 Starting parallel signing of ${count} transactions in batches of ${PARALLEL_BATCH_SIZE}`);
+      logger.log(`📝 Starting parallel signing of ${count} transactions in batches of ${PARALLEL_BATCH_SIZE}`);
       
       for (let batchStart = 0; batchStart < count; batchStart += PARALLEL_BATCH_SIZE) {
         const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, count);
@@ -1227,7 +1228,7 @@ export const useBlockchainUtils = () => {
                 timestamp: Date.now()
               };
             } catch (error) {
-              console.error(`Error signing extension transaction with nonce ${nonce}:`, error);
+              logger.error(`Error signing extension transaction with nonce ${nonce}:`, error);
               return null;
             }
           };
@@ -1242,11 +1243,11 @@ export const useBlockchainUtils = () => {
         const successfulTxs = batchResults.filter(tx => tx !== null);
         tempTransactions.push(...successfulTxs);
         
-        console.log(`Extended pool: signed batch ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}/${Math.ceil(count / PARALLEL_BATCH_SIZE)} - total ${tempTransactions.length}/${count}`);
+        logger.log(`Extended pool: signed batch ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}/${Math.ceil(count / PARALLEL_BATCH_SIZE)} - total ${tempTransactions.length}/${count}`);
         
         // Если в батче были ошибки, прерываем процесс
         if (successfulTxs.length < batchSize) {
-          console.warn(`⚠️ Only ${successfulTxs.length}/${batchSize} transactions signed in batch, stopping extension`);
+          logger.warn(`⚠️ Only ${successfulTxs.length}/${batchSize} transactions signed in batch, stopping extension`);
           break;
         }
       }
@@ -1254,7 +1255,7 @@ export const useBlockchainUtils = () => {
       // Добавляем новые транзакции в основной пул
       if (pool && tempTransactions.length > 0) {
         pool.transactions.push(...tempTransactions);
-        console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
+        logger.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
         
         // Обновляем nonce manager
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -1270,7 +1271,7 @@ export const useBlockchainUtils = () => {
         }, 1000); // Небольшая задержка для предотвращения частых пополнений
       }
     } catch (error) {
-      console.error('Error extending transaction pool:', error);
+      logger.error('Error extending transaction pool:', error);
       // Не бросаем ошибку, просто логируем - игра может продолжаться в realtime режиме
     } finally {
       if (pool) {
@@ -1290,12 +1291,12 @@ export const useBlockchainUtils = () => {
       const txWrapper = pool.transactions[pool.currentIndex];
       pool.currentIndex++;
 
-      console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
+      logger.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
       // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - оптимизированное для длинных сессий
       // Пополняем каждые 10 транзакций большими батчами для минимизации блокировок
       if (pool.currentIndex % 10 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill && !pool.isRefilling) {
-        console.log(`🔄 OPTIMIZED refilling at ${pool.currentIndex} transactions used`);
+        logger.log(`🔄 OPTIMIZED refilling at ${pool.currentIndex} transactions used`);
         pool.hasTriggeredRefill = true;
         
         // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
@@ -1313,13 +1314,13 @@ export const useBlockchainUtils = () => {
               // После 50 транзакций добавляем еще больше для предотвращения замедления
               const refillSize = usedCount > 50 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
               
-              console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
-              console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
+              logger.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
+              logger.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
               await extendPool(chainId, nextNonce, refillSize);
             }
           } catch (error) {
-            console.error('❌ Error in enhanced pool refill:', error);
+            logger.error('❌ Error in enhanced pool refill:', error);
             // В случае ошибки сбрасываем флаг для повторной попытки
             pool.hasTriggeredRefill = false;
           }
@@ -1329,7 +1330,7 @@ export const useBlockchainUtils = () => {
       // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Экстренное пополнение при критически низком уровне
       const remainingTransactions = pool.transactions.length - pool.currentIndex;
       if (remainingTransactions <= 5 && !pool.hasTriggeredRefill && !pool.isRefilling) {
-        console.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
+        logger.warn(`🚨 CRITICAL: Only ${remainingTransactions} transactions left, emergency refill!`);
         pool.hasTriggeredRefill = true;
         
         setTimeout(async () => {
@@ -1340,11 +1341,11 @@ export const useBlockchainUtils = () => {
               const nextNonce = manager.pendingNonce;
               const emergencyRefillSize = Math.max(50, poolConfig.batchSize * 2.5);
               
-              console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
+              logger.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
             }
           } catch (error) {
-            console.error('❌ Emergency refill failed:', error);
+            logger.error('❌ Emergency refill failed:', error);
             pool.hasTriggeredRefill = false;
           }
         }, 0);
@@ -1354,13 +1355,13 @@ export const useBlockchainUtils = () => {
     } else {
       // Детальное логирование для отладки
       if (!pool) {
-        console.log(`❌ No transaction pool exists for chain ${chainId}`);
+        logger.log(`❌ No transaction pool exists for chain ${chainId}`);
         throw new Error(`No pre-signed transaction pool available for chain ${chainId}. Only pre-signed transactions are allowed.`);
       } else if (!pool.isReady) {
-        console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
+        logger.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
         throw new Error(`Pre-signed transaction pool not ready for chain ${chainId}. Wait for initialization to complete.`);
       } else if (pool.transactions.length <= pool.currentIndex) {
-        console.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length})`);
+        logger.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length})`);
         throw new Error(`Pre-signed transaction pool exhausted for chain ${chainId}. Only pre-signed transactions are allowed.`);
       }
     }
@@ -1368,7 +1369,7 @@ export const useBlockchainUtils = () => {
     // КРИТИЧЕСКАЯ СИТУАЦИЯ: пул транзакций пуст, но игра требует транзакцию
     // Пытаемся экстренно пополнить пул
     try {
-      console.error('🚨 CRITICAL: Pre-signed pool empty! Attempting emergency refill...');
+      logger.error('🚨 CRITICAL: Pre-signed pool empty! Attempting emergency refill...');
       const embeddedWallet = getEmbeddedWallet();
       if (embeddedWallet) {
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -1378,7 +1379,7 @@ export const useBlockchainUtils = () => {
         const emergencyBatchSize = Math.min(5, poolConfig.batchSize);
         const nextNonce = manager.pendingNonce;
         
-        console.log(`🚨 Emergency pre-signing ${emergencyBatchSize} transactions from nonce ${nextNonce}`);
+        logger.log(`🚨 Emergency pre-signing ${emergencyBatchSize} transactions from nonce ${nextNonce}`);
         await preSignBatch(chainId, nextNonce, emergencyBatchSize);
         
         // Повторная попытка получить транзакцию
@@ -1386,12 +1387,12 @@ export const useBlockchainUtils = () => {
         if (pool && pool.isReady && pool.transactions.length > pool.currentIndex) {
           const txWrapper = pool.transactions[pool.currentIndex];
           pool.currentIndex++;
-          console.log(`✅ Emergency transaction obtained: ${pool.currentIndex}/${pool.transactions.length}`);
+          logger.log(`✅ Emergency transaction obtained: ${pool.currentIndex}/${pool.transactions.length}`);
           return txWrapper.signedTx;
         }
       }
     } catch (emergencyError) {
-      console.error('❌ Emergency refill failed:', emergencyError);
+      logger.error('❌ Emergency refill failed:', emergencyError);
     }
     
     // REALTIME ТРАНЗАКЦИИ ОТКЛЮЧЕНЫ - используем только pre-signed
@@ -1427,33 +1428,33 @@ export const useBlockchainUtils = () => {
                                remainingTx > 20 ? '✅ GOOD' : 
                                remainingTx > 10 ? '⚠️ WARNING' : '🚨 CRITICAL';
                                
-        console.log(`📊 Enhanced Pool Stats for chain ${chainId} (Jump #${consumedTx}):`);
-        console.log(`  • Consumed: ${consumedTx} transactions`);
-        console.log(`  • Remaining: ${remainingTx} transactions`);
-        console.log(`  • Total pool size: ${totalTx} transactions`);
-        console.log(`  • Pool health: ${performanceGrade}`);
-        console.log(`  • Refill status: ${pool.isRefilling ? '🔄 ACTIVE' : '⏸️ IDLE'}`);
-        console.log(`  • Last refill triggered: ${pool.hasTriggeredRefill ? '✅ YES' : '❌ NO'}`);
+        logger.log(`📊 Enhanced Pool Stats for chain ${chainId} (Jump #${consumedTx}):`);
+        logger.log(`  • Consumed: ${consumedTx} transactions`);
+        logger.log(`  • Remaining: ${remainingTx} transactions`);
+        logger.log(`  • Total pool size: ${totalTx} transactions`);
+        logger.log(`  • Pool health: ${performanceGrade}`);
+        logger.log(`  • Refill status: ${pool.isRefilling ? '🔄 ACTIVE' : '⏸️ IDLE'}`);
+        logger.log(`  • Last refill triggered: ${pool.hasTriggeredRefill ? '✅ YES' : '❌ NO'}`);
         
         // Специальное предупреждение для проблемной зоны 15-25 прыжков
         if (consumedTx >= 15 && consumedTx <= 25) {
-          console.warn(`⚠️ CRITICAL ZONE: Jump ${consumedTx}/20+ - monitoring for slowdown issues`);
+          logger.warn(`⚠️ CRITICAL ZONE: Jump ${consumedTx}/20+ - monitoring for slowdown issues`);
           if (remainingTx < 15) {
-            console.error(`🚨 DANGER: Only ${remainingTx} transactions left at jump ${consumedTx}! This causes 5s delays!`);
+            logger.error(`🚨 DANGER: Only ${remainingTx} transactions left at jump ${consumedTx}! This causes 5s delays!`);
           }
         }
       }
       
       // Проверка математической корректности бесконечного пула
       if (remainingTx <= 3 && !pool.isRefilling) {
-        console.error(`🚨 INFINITE POOL VIOLATION: Only ${remainingTx} transactions left!`);
-        console.error(`  • This should never happen with infinite pool logic`);
-        console.error(`  • Consumed: ${consumedTx}, Total: ${totalTx}, Cycles: ${cyclesCompleted}`);
+        logger.error(`🚨 INFINITE POOL VIOLATION: Only ${remainingTx} transactions left!`);
+        logger.error(`  • This should never happen with infinite pool logic`);
+        logger.error(`  • Consumed: ${consumedTx}, Total: ${totalTx}, Cycles: ${cyclesCompleted}`);
         
         // Экстренное пополнение с большим батчем
         if (!pool.hasTriggeredRefill) {
           pool.hasTriggeredRefill = true;
-          console.log('🚨 EMERGENCY: Force-refilling infinite pool...');
+          logger.log('🚨 EMERGENCY: Force-refilling infinite pool...');
           
           setTimeout(async () => {
             try {
@@ -1464,7 +1465,7 @@ export const useBlockchainUtils = () => {
                 await extendPool(chainId, manager.pendingNonce, 25);
               }
             } catch (error) {
-              console.error('❌ Emergency infinite pool refill failed:', error);
+              logger.error('❌ Emergency infinite pool refill failed:', error);
             }
           }, 0);
         }
@@ -1472,13 +1473,13 @@ export const useBlockchainUtils = () => {
       
       // Предупреждение если нормальный механизм не работает
       if (remainingTx <= 8 && consumedTx > 10) {
-        console.warn(`⚠️ INFINITE POOL: Low remaining transactions (${remainingTx}) - check refill mechanism`);
+        logger.warn(`⚠️ INFINITE POOL: Low remaining transactions (${remainingTx}) - check refill mechanism`);
       }
       
     }, 3000); // Проверка каждые 3 секунды (реже для бесконечного пула)
     
-    console.log(`👁️ Started INFINITE pool monitoring for chain ${chainId}`);
-    console.log(`📊 Pool will grow by +10 transactions every 5 consumed (mathematical infinity)`);
+    logger.log(`👁️ Started INFINITE pool monitoring for chain ${chainId}`);
+    logger.log(`📊 Pool will grow by +10 transactions every 5 consumed (mathematical infinity)`);
     return monitorInterval;
   };
 
@@ -1489,7 +1490,7 @@ export const useBlockchainUtils = () => {
       const embeddedWallet = getEmbeddedWallet();
       
       if (!embeddedWallet) {
-        console.error('No embedded wallet available for balance check');
+        logger.error('No embedded wallet available for balance check');
         return '0';
       }
       
@@ -1499,10 +1500,10 @@ export const useBlockchainUtils = () => {
       
       const balanceEth = (Number(balance) / 10**18).toFixed(4);
       setBalance(balanceEth);
-      console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
+      logger.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
       return balanceEth;
     } catch (error) {
-      console.error('Error checking balance:', error);
+      logger.error('Error checking balance:', error);
       // Return 0 balance and let the system continue
       setBalance('0');
       return '0';
@@ -1521,12 +1522,12 @@ export const useBlockchainUtils = () => {
         const timeSinceLastCall = Date.now() - parseInt(lastFaucetCall);
         if (timeSinceLastCall < FAUCET_COOLDOWN) {
           const remainingTime = Math.ceil((FAUCET_COOLDOWN - timeSinceLastCall) / 1000);
-          console.log(`⏱️ Faucet cooldown: ${remainingTime}s remaining`);
+          logger.log(`⏱️ Faucet cooldown: ${remainingTime}s remaining`);
           throw new Error(`Faucet is on cooldown. Try again in ${remainingTime} seconds.`);
         }
       }
       
-      console.log('💰 Calling optimized faucet for address:', address);
+      logger.log('💰 Calling optimized faucet for address:', address);
       
       // Создаем контроллер для timeout
       const controller = new AbortController();
@@ -1563,7 +1564,7 @@ export const useBlockchainUtils = () => {
             errorMessage = `Rate limit exceeded. Try again in ${retryAfter} seconds.`;
           } else if (errorData.code === 'ALREADY_SUFFICIENT') {
             // Если баланс уже достаточный, это не ошибка
-            console.log('💰 Balance already sufficient, skipping faucet');
+            logger.log('💰 Balance already sufficient, skipping faucet');
             return { 
               success: true, 
               message: 'Sufficient balance already available',
@@ -1571,7 +1572,7 @@ export const useBlockchainUtils = () => {
             };
           }
         } catch (parseError) {
-          console.error('Failed to parse faucet error response:', parseError);
+          logger.error('Failed to parse faucet error response:', parseError);
           
           // Обработка HTTP статусов
           if (response.status === 429) {
@@ -1590,19 +1591,19 @@ export const useBlockchainUtils = () => {
       // Сохраняем время последнего успешного вызова
       localStorage.setItem(cacheKey, Date.now().toString());
       
-      console.log('💰 Faucet success:', result);
+      logger.log('💰 Faucet success:', result);
       
       // Если faucet возвращает txHash, ждем немного и обновляем баланс
       if (result.txHash) {
-        console.log('⏳ Waiting for faucet transaction to be processed...');
+        logger.log('⏳ Waiting for faucet transaction to be processed...');
         
         // Асинхронно обновляем баланс через 3 секунды
         setTimeout(async () => {
           try {
             await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
+            logger.log('✅ Balance updated after faucet transaction');
           } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
+            logger.warn('Failed to update balance after faucet:', error);
           }
         }, 3000);
       }
@@ -1614,7 +1615,7 @@ export const useBlockchainUtils = () => {
       };
       
     } catch (error) {
-      console.error('❌ Faucet error:', error);
+      logger.error('❌ Faucet error:', error);
       
       // Обработка timeout ошибок
       if (error.name === 'AbortError') {
@@ -1654,7 +1655,7 @@ export const useBlockchainUtils = () => {
       
       if (config.sendMethod === 'realtime_sendRawTransaction') {
         // 🚀 MegaETH реалтайм метод - МАКСИМАЛЬНАЯ ОПТИМИЗАЦИЯ
-        console.log('🚀 Using MegaETH realtime_sendRawTransaction for instant execution...');
+        logger.log('🚀 Using MegaETH realtime_sendRawTransaction for instant execution...');
         
         const sendMegaETHTransaction = async () => {
           const controller = new AbortController();
@@ -1696,13 +1697,13 @@ export const useBlockchainUtils = () => {
             if (parsedResponse.error) {
               // Обработка специфичных ошибок MegaETH
               if (parsedResponse.error.message?.includes('nonce too low')) {
-                console.log('🔄 MegaETH nonce too low, triggering refresh');
+                logger.log('🔄 MegaETH nonce too low, triggering refresh');
                 throw new Error('nonce too low');
               } else if (parsedResponse.error.message?.includes('rate limit')) {
-                console.log('⏱️ MegaETH rate limit hit, will retry');
+                logger.log('⏱️ MegaETH rate limit hit, will retry');
                 throw new Error('rate limit exceeded');
               } else if (parsedResponse.error.message?.includes('already known')) {
-                console.log('🔄 Transaction already known by network - likely duplicate, treating as success');
+                logger.log('🔄 Transaction already known by network - likely duplicate, treating as success');
                 // Для "already known" ошибок, мы считаем транзакцию успешной
                 // поскольку она уже была отправлена ранее
                 return {
@@ -1742,7 +1743,7 @@ export const useBlockchainUtils = () => {
         }
         
         txHash = response.result;
-        console.log('⚡ MegaETH instant transaction hash:', txHash);
+        logger.log('⚡ MegaETH instant transaction hash:', txHash);
         success = true;
         
         // Для MegaETH realtime метод возвращает мгновенное подтверждение
@@ -1755,7 +1756,7 @@ export const useBlockchainUtils = () => {
         
       } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
         // 📦 RISE синхронный метод с оптимизацией
-        console.log('📦 Using RISE eth_sendRawTransactionSync for fast execution...');
+        logger.log('📦 Using RISE eth_sendRawTransactionSync for fast execution...');
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), config.connectionTimeouts.retry);
@@ -1787,7 +1788,7 @@ export const useBlockchainUtils = () => {
           
           if (result.error) {
             if (result.error.message?.includes('nonce too low')) {
-              console.log('🔄 RISE nonce too low detected');
+              logger.log('🔄 RISE nonce too low detected');
               throw new Error('nonce too low');
             }
             throw new Error(result.error.message || 'RISE transaction failed');
@@ -1810,7 +1811,7 @@ export const useBlockchainUtils = () => {
         
       } else {
         // 🔗 Стандартная отправка с улучшенной обработкой
-        console.log('🔗 Using standard eth_sendRawTransaction...');
+        logger.log('🔗 Using standard eth_sendRawTransaction...');
         
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), config.connectionTimeouts.retry);
@@ -1842,7 +1843,7 @@ export const useBlockchainUtils = () => {
           
           if (result.error) {
             if (result.error.message?.includes('nonce too low')) {
-              console.log('🔄 Standard RPC nonce too low detected');
+              logger.log('🔄 Standard RPC nonce too low detected');
               throw new Error('nonce too low');
             }
             throw new Error(result.error.message || 'Transaction failed');
@@ -1863,13 +1864,13 @@ export const useBlockchainUtils = () => {
         }
       }
     } catch (error) {
-      console.error('❌ Send transaction error:', error);
+      logger.error('❌ Send transaction error:', error);
       
       // Специальная обработка ошибок nonce для всех сетей
       if (error.message?.includes('nonce too low')) {
         const embeddedWallet = getEmbeddedWallet();
         if (embeddedWallet) {
-          console.log('🔄 Refreshing nonce due to "nonce too low" error');
+          logger.log('🔄 Refreshing nonce due to "nonce too low" error');
           try {
             // Принудительно обновляем nonce с сети
             await getNextNonce(chainId, embeddedWallet.address, true);
@@ -1878,7 +1879,7 @@ export const useBlockchainUtils = () => {
             const chainKey = chainId.toString();
             const pool = preSignedPool.current[chainKey];
             if (pool) {
-              console.log('🗑️ Clearing invalid pre-signed transaction pool');
+              logger.log('🗑️ Clearing invalid pre-signed transaction pool');
               pool.transactions = [];
               pool.currentIndex = 0;
               pool.isReady = false;
@@ -1894,7 +1895,7 @@ export const useBlockchainUtils = () => {
                     blockTag: 'pending'
                   });
                   
-                  console.log(`🔄 Recreating pool with actual network nonce: ${actualNonce}`);
+                  logger.log(`🔄 Recreating pool with actual network nonce: ${actualNonce}`);
                   
                   // Обновляем менеджер nonce
                   const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -1905,14 +1906,14 @@ export const useBlockchainUtils = () => {
                   // Пересоздаем пул с правильным nonce
                   const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
                   await preSignBatch(chainId, actualNonce, poolConfig.batchSize);
-                  console.log(`✅ Pre-signed transaction pool recreated with correct nonces starting from ${actualNonce}`);
+                  logger.log(`✅ Pre-signed transaction pool recreated with correct nonces starting from ${actualNonce}`);
                 } catch (recreateError) {
-                  console.error('❌ Failed to recreate transaction pool:', recreateError);
+                  logger.error('❌ Failed to recreate transaction pool:', recreateError);
                 }
               }, 100);
             }
           } catch (nonceError) {
-            console.error('Failed to refresh nonce:', nonceError);
+            logger.error('Failed to refresh nonce:', nonceError);
           }
         }
       }
@@ -1925,7 +1926,7 @@ export const useBlockchainUtils = () => {
       
       // Логируем производительность
       if (success) {
-        console.log(`✅ Transaction sent successfully in ${responseTime}ms via ${config.sendMethod}`);
+        logger.log(`✅ Transaction sent successfully in ${responseTime}ms via ${config.sendMethod}`);
       }
     }
   };
@@ -1947,13 +1948,13 @@ export const useBlockchainUtils = () => {
       if (hasPreSignedTx) {
         // Если есть pre-signed транзакции, разрешаем много параллельных операций
         if (transactionPendingCount.current > 10) {
-          console.log('🚫 Maximum MegaETH throughput reached, throttling');
+          logger.log('🚫 Maximum MegaETH throughput reached, throttling');
           throw new Error('Transaction throughput limit reached');
         }
       } else {
         // Если нет pre-signed, более строгий лимит
         if (transactionPendingCount.current > 2) {
-          console.log('🚫 Too many concurrent realtime transactions');
+          logger.log('🚫 Too many concurrent realtime transactions');
           throw new Error('Realtime transaction limit reached');
         }
       }
@@ -1972,7 +1973,7 @@ export const useBlockchainUtils = () => {
     
     // Проверяем, можем ли использовать burst режим
     if (config.burstMode && canExecuteBurst(chainId)) {
-      console.log('🚀 Using burst mode for transaction');
+      logger.log('🚀 Using burst mode for transaction');
       return await queueBurstTransaction(chainId, async () => {
         return await executeTransaction(chainId, startTime);
       });
@@ -2001,11 +2002,11 @@ export const useBlockchainUtils = () => {
         throw new Error('Failed to get transaction for sending');
       }
       
-      console.log('⚡ Sending instant on-chain jump transaction...');
+      logger.log('⚡ Sending instant on-chain jump transaction...');
       
       // Отправляем транзакцию с улучшенной обработкой ошибок
       const txResult = await sendRawTransaction(chainId, signedTx);
-      console.log('📡 Transaction sent:', txResult);
+      logger.log('📡 Transaction sent:', txResult);
 
       const config = NETWORK_CONFIGS[chainId];
       let finalResult = txResult;
@@ -2013,19 +2014,19 @@ export const useBlockchainUtils = () => {
       // Обработка подтверждения в зависимости от сети
       if (config.sendMethod === 'realtime_sendRawTransaction') {
         // MegaETH: realtime метод уже возвращает подтверждение
-        console.log('✅ MegaETH instant confirmation:', txResult);
+        logger.log('✅ MegaETH instant confirmation:', txResult);
         finalResult = txResult.receipt || txResult;
         success = true;
         
       } else if (config.sendMethod === 'eth_sendRawTransactionSync') {
         // RISE: синхронный метод уже подтвержден
-        console.log('✅ RISE sync confirmation:', txResult);
+        logger.log('✅ RISE sync confirmation:', txResult);
         finalResult = txResult.receipt || txResult;
         success = true;
         
       } else {
         // Стандартные сети: ждём подтверждения с таймаутом
-        console.log('⏳ Waiting for transaction confirmation...');
+        logger.log('⏳ Waiting for transaction confirmation...');
         try {
           const { publicClient } = await createClients(chainId);
           const receipt = await Promise.race([
@@ -2037,11 +2038,11 @@ export const useBlockchainUtils = () => {
               setTimeout(() => reject(new Error('Transaction confirmation timeout')), 35000)
             )
           ]);
-          console.log('✅ Transaction confirmed:', receipt);
+          logger.log('✅ Transaction confirmed:', receipt);
           finalResult = receipt;
           success = true;
         } catch (confirmError) {
-          console.warn('⚠️ Transaction confirmation failed, but transaction may still be valid:', confirmError);
+          logger.warn('⚠️ Transaction confirmation failed, but transaction may still be valid:', confirmError);
           // Не бросаем ошибку - транзакция может быть валидной, просто подтверждение не получили
           finalResult = txResult;
           success = true; // Считаем успешной если отправлена
@@ -2051,11 +2052,11 @@ export const useBlockchainUtils = () => {
       // Рассчитываем время блокчейна для Real-Time Gaming метрик
       blockchainTime = performance.now() - startTime;
       
-      console.log(`🎮 Jump transaction completed in ${Math.round(blockchainTime)}ms:`, finalResult);
+      logger.log(`🎮 Jump transaction completed in ${Math.round(blockchainTime)}ms:`, finalResult);
       
       // Записываем метрики производительности
       const metrics = recordPerformanceMetric(chainId, blockchainTime, success);
-      console.log(`📊 Performance: Avg ${Math.round(metrics.averageBlockchainTime)}ms, Success Rate ${metrics.successRate.toFixed(1)}%`);
+      logger.log(`📊 Performance: Avg ${Math.round(metrics.averageBlockchainTime)}ms, Success Rate ${metrics.successRate.toFixed(1)}%`);
       
       // Возвращаем результат с метриками для интеграции в игру
       return {
@@ -2070,7 +2071,7 @@ export const useBlockchainUtils = () => {
       };
       
     } catch (error) {
-      console.error('❌ Error sending on-chain movement:', error);
+      logger.error('❌ Error sending on-chain movement:', error);
       
       // Записываем неудачную метрику
       blockchainTime = performance.now() - startTime;
@@ -2078,7 +2079,7 @@ export const useBlockchainUtils = () => {
       
       // Обработка специфичных ошибок для улучшения UX
       if (error.message?.includes('nonce too low')) {
-        console.log('🔄 Nonce too low detected, refreshing nonce and retrying...');
+        logger.log('🔄 Nonce too low detected, refreshing nonce and retrying...');
         try {
           // Получаем кошелек и обновляем nonce принудительно
           const wallet = getEmbeddedWallet();
@@ -2089,24 +2090,24 @@ export const useBlockchainUtils = () => {
             const chainKey = chainId.toString();
             const pool = preSignedPool.current[chainKey];
             if (pool) {
-              console.log('🗑️ Clearing invalid pre-signed transaction pool due to nonce error');
+              logger.log('🗑️ Clearing invalid pre-signed transaction pool due to nonce error');
               pool.transactions = [];
               pool.currentIndex = 0;
               pool.isReady = false;
               pool.hasTriggeredRefill = false;
             }
             
-            console.log('✅ Nonce refreshed, please try again');
+            logger.log('✅ Nonce refreshed, please try again');
           } else {
-            console.error('❌ No wallet available for nonce refresh');
+            logger.error('❌ No wallet available for nonce refresh');
           }
         } catch (nonceError) {
-          console.error('❌ Failed to refresh nonce:', nonceError);
+          logger.error('❌ Failed to refresh nonce:', nonceError);
         }
       } else if (error.message?.includes('context deadline exceeded')) {
-        console.log('⏰ Network timeout detected, transaction may still be processing...');
+        logger.log('⏰ Network timeout detected, transaction may still be processing...');
       } else if (error.message?.includes('insufficient funds')) {
-        console.log('💰 Insufficient funds detected, consider calling faucet...');
+        logger.log('💰 Insufficient funds detected, consider calling faucet...');
       }
       
       throw new Error(`Blockchain transaction error: ${error.message}`);
@@ -2127,7 +2128,7 @@ export const useBlockchainUtils = () => {
 
     try {
       setIsInitializing(true);
-      console.log('🚀 Starting instant blockchain initialization for chain:', chainId);
+      logger.log('🚀 Starting instant blockchain initialization for chain:', chainId);
 
       // Wait for embedded wallet to be created (with retry)
       let embeddedWallet = null;
@@ -2152,7 +2153,7 @@ export const useBlockchainUtils = () => {
       // Для Privy embedded wallets пропускаем переключение сети
       // Используем логику bypass для избежания ошибок Privy
       if (embeddedWallet.walletClientType === 'privy') {
-        console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
+        logger.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
         // Сразу переходим к инициализации без переключения сети
       }
 
@@ -2181,24 +2182,24 @@ export const useBlockchainUtils = () => {
         nonceManager.pendingNonce = initialNonce;
         nonceManager.lastUpdate = Date.now();
 
-        console.log('💰 Current balance:', currentBalance);
-        console.log('🎯 Starting nonce:', initialNonce);
+        logger.log('💰 Current balance:', currentBalance);
+        logger.log('🎯 Starting nonce:', initialNonce);
 
         // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
         if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
+          logger.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
           // НЕБЛОКИРУЮЩИЙ faucet вызов
           callFaucet(embeddedWallet.address, chainId)
             .then(() => {
-              console.log('✅ Background faucet completed');
+              logger.log('✅ Background faucet completed');
               // Обновляем баланс через 5 секунд
               setTimeout(() => checkBalance(chainId), 5000);
               // Обновляем nonce после faucet
               return getNextNonce(chainId, embeddedWallet.address, true);
             })
             .catch(faucetError => {
-              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
+              logger.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
             });
         }
         
@@ -2209,7 +2210,7 @@ export const useBlockchainUtils = () => {
 
       // 2. НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
       isInitialized.current[chainKey] = true;
-      console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
+      logger.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
       
       // 3. Pre-signing в ФОНОВОМ режиме (не блокируем игру)
       const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
@@ -2218,12 +2219,12 @@ export const useBlockchainUtils = () => {
       let batchSize = poolConfig.poolSize;
       if (fallbackConfig) {
         batchSize = fallbackConfig.reducedBatchSize;
-        console.log(`Using fallback batch size: ${batchSize}`);
+        logger.log(`Using fallback batch size: ${batchSize}`);
       }
       
       // ФОНОВОЕ предподписание
       const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
-        console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+        logger.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
         
         // Резервируем nonces для pre-signing
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -2235,15 +2236,15 @@ export const useBlockchainUtils = () => {
           .then(() => {
             const pool = preSignedPool.current[chainKey];
             if (pool && pool.transactions.length > 0) {
-              console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
+              logger.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
             } else {
-              console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
+              logger.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
             }
           })
           .catch(error => {
-            console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
+            logger.warn('⚠️ Background pre-signing failed (non-blocking):', error);
             enableFallbackMode(chainId);
-            console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
+            logger.log('🔄 Enabled realtime fallback mode - game continues smoothly');
           });
       });
       
@@ -2253,33 +2254,33 @@ export const useBlockchainUtils = () => {
       
              // Запускаем pre-signing в фоне
        preSigningPromise.catch(error => {
-         console.warn('Background pre-signing error (non-critical):', error);
+         logger.warn('Background pre-signing error (non-critical):', error);
        });
       
       // Ждем только базовую инициализацию (баланс + nonce)
       await balanceAndNoncePromise;
       
-      console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
+      logger.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
       
       if (fallbackConfig) {
-        console.log('⚠️ Running in fallback mode - reduced performance expected');
+        logger.log('⚠️ Running in fallback mode - reduced performance expected');
       } else {
-        console.log('🚀 Full performance mode activating in background...');
+        logger.log('🚀 Full performance mode activating in background...');
       }
       
       // Остальные задачи выполняются в фоне
       Promise.all(initializationPromises.slice(1)).then(() => {
-        console.log('✅ Full blockchain optimization complete');
+        logger.log('✅ Full blockchain optimization complete');
       }).catch(error => {
-        console.warn('⚠️ Some background optimizations failed (non-critical):', error);
+        logger.warn('⚠️ Some background optimizations failed (non-critical):', error);
       });
       
     } catch (error) {
-      console.error('❌ Critical initialization error:', error);
+      logger.error('❌ Critical initialization error:', error);
       // Даже при ошибке, позволяем игре работать в fallback режиме
       isInitialized.current[chainKey] = true;
       enableFallbackMode(chainId);
-      console.log('🔄 Emergency fallback mode enabled - game will work with realtime signing');
+      logger.log('🔄 Emergency fallback mode enabled - game will work with realtime signing');
     } finally {
       setIsInitializing(false);
     }
@@ -2299,7 +2300,7 @@ export const useBlockchainUtils = () => {
       setContractNumber(Number(number));
       return Number(number);
     } catch (error) {
-      console.error('Error reading contract number:', error);
+      logger.error('Error reading contract number:', error);
       return 0;
     }
   };
@@ -2336,7 +2337,7 @@ export const useBlockchainUtils = () => {
         } else {
           // Переходим в состояние HALF_OPEN для тестирования
           circuitBreaker.state = 'HALF_OPEN';
-          console.log(`Circuit breaker for chain ${chainId} entering HALF_OPEN state`);
+          logger.log(`Circuit breaker for chain ${chainId} entering HALF_OPEN state`);
         }
       }
     }
@@ -2364,7 +2365,7 @@ export const useBlockchainUtils = () => {
           // Переводим в OPEN состояние если превышен порог
           if (circuitBreaker.failures >= circuitBreaker.threshold) {
             circuitBreaker.state = 'OPEN';
-            console.warn(`Circuit breaker OPENED for chain ${chainId} after ${circuitBreaker.failures} failures`);
+            logger.warn(`Circuit breaker OPENED for chain ${chainId} after ${circuitBreaker.failures} failures`);
           }
         }
         
@@ -2395,14 +2396,14 @@ export const useBlockchainUtils = () => {
 
         if (isLastRetry || isNonRetryableError || !isRetryableError) {
           if (isNonRetryableError) {
-            console.log(`Non-retryable error encountered: ${error.message}`);
+            logger.log(`Non-retryable error encountered: ${error.message}`);
           }
           throw error;
         }
 
         // Circuit breaker может заставить нас остановиться раньше
         if (circuitBreaker && circuitBreaker.state === 'OPEN') {
-          console.log(`Circuit breaker is OPEN, stopping retries for chain ${chainId}`);
+          logger.log(`Circuit breaker is OPEN, stopping retries for chain ${chainId}`);
           break;
         }
 
@@ -2410,7 +2411,7 @@ export const useBlockchainUtils = () => {
         const jitter = Math.random() * 1000;
         const delay = Math.min(baseDelay * Math.pow(2, i) + jitter, 30000); // Максимум 30 секунд
         
-        console.log(`Retry attempt ${i + 1}/${maxRetries} after ${Math.round(delay)}ms delay due to:`, error.message);
+        logger.log(`Retry attempt ${i + 1}/${maxRetries} after ${Math.round(delay)}ms delay due to:`, error.message);
         await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
@@ -2435,14 +2436,14 @@ export const useBlockchainUtils = () => {
           cb.state = 'OPEN';
           cb.failures = cb.threshold;
           cb.lastFailureTime = Date.now();
-          console.log(`Force opened circuit breaker for chain ${chainId}`);
+          logger.log(`Force opened circuit breaker for chain ${chainId}`);
         },
         
         resetCircuitBreaker: (chainId) => {
           const cb = getCircuitBreaker(chainId);
           cb.state = 'CLOSED';
           cb.failures = 0;
-          console.log(`Reset circuit breaker for chain ${chainId}`);
+          logger.log(`Reset circuit breaker for chain ${chainId}`);
         },
         
         clearTransactionPool: (chainId) => {
@@ -2450,7 +2451,7 @@ export const useBlockchainUtils = () => {
           if (preSignedPool.current[chainKey]) {
             preSignedPool.current[chainKey].transactions = [];
             preSignedPool.current[chainKey].currentIndex = 0;
-            console.log(`Cleared transaction pool for chain ${chainId}`);
+            logger.log(`Cleared transaction pool for chain ${chainId}`);
           }
         },
         
@@ -2479,8 +2480,8 @@ export const useBlockchainUtils = () => {
         }
       };
       
-      console.log('🔧 Blockchain debug utilities loaded. Use window.blockchainDebug for monitoring.');
-      console.log('📊 Example: window.blockchainDebug.generateHealthReport(6342)');
+      logger.log('🔧 Blockchain debug utilities loaded. Use window.blockchainDebug for monitoring.');
+      logger.log('📊 Example: window.blockchainDebug.generateHealthReport(6342)');
     }
   }, []);
 
@@ -2512,14 +2513,14 @@ export const useBlockchainUtils = () => {
           cb.state = 'OPEN';
           cb.failures = cb.threshold;
           cb.lastFailureTime = Date.now();
-          console.log(`Force opened circuit breaker for chain ${chainId}`);
+          logger.log(`Force opened circuit breaker for chain ${chainId}`);
         },
         
         resetCircuitBreaker: (chainId) => {
           const cb = getCircuitBreaker(chainId);
           cb.state = 'CLOSED';
           cb.failures = 0;
-          console.log(`Reset circuit breaker for chain ${chainId}`);
+          logger.log(`Reset circuit breaker for chain ${chainId}`);
         },
         
         clearTransactionPool: (chainId) => {
@@ -2527,7 +2528,7 @@ export const useBlockchainUtils = () => {
           if (preSignedPool.current[chainKey]) {
             preSignedPool.current[chainKey].transactions = [];
             preSignedPool.current[chainKey].currentIndex = 0;
-            console.log(`Cleared transaction pool for chain ${chainId}`);
+            logger.log(`Cleared transaction pool for chain ${chainId}`);
           }
         },
         
@@ -2616,11 +2617,11 @@ export const useBlockchainUtils = () => {
           
           console.group(`📊 Performance Report - ${report.network} (Chain ${chainId})`);
           console.table(report.performance);
-          console.log('🔗 RPC Health:', report.rpcEndpoints);
-          console.log('🎯 Transaction Pool:', report.transactionPool);
-          console.log('⚡ Circuit Breaker:', report.circuitBreaker);
-          console.log('🚀 Burst State:', report.burstState);
-          console.log('💾 Global Cache:', report.globalCache);
+          logger.log('🔗 RPC Health:', report.rpcEndpoints);
+          logger.log('🎯 Transaction Pool:', report.transactionPool);
+          logger.log('⚡ Circuit Breaker:', report.circuitBreaker);
+          logger.log('🚀 Burst State:', report.burstState);
+          logger.log('💾 Global Cache:', report.globalCache);
           console.groupEnd();
           
           return report;
@@ -2637,15 +2638,15 @@ export const useBlockchainUtils = () => {
             const cyclesCompleted = Math.floor(consumed / 5);
             const netGrowth = cyclesCompleted * 10;
             
-            console.log(`🎮 ${NETWORK_CONFIGS[chainId]?.name || 'Chain ' + chainId}:`);
-            console.log(`  ⚡ Avg Speed: ${Math.round(perf.averageBlockchainTime)}ms`);
-            console.log(`  📊 Success Rate: ${perf.successRate.toFixed(1)}%`);
-            console.log(`  🎯 Pool Status: ${remaining}/${pool.transactions.length} ready`);
-            console.log(`  ♾️  Infinite Pool: ${consumed} used, +${netGrowth} growth (${cyclesCompleted} cycles)`);
-            console.log(`  📈 Next refill: ${5 - (consumed % 5)} transactions`);
-            console.log(`  🚀 Performance: ${perf.averageBlockchainTime < 1000 ? 'INSTANT' : perf.averageBlockchainTime < 3000 ? 'FAST' : 'SLOW'}`);
+            logger.log(`🎮 ${NETWORK_CONFIGS[chainId]?.name || 'Chain ' + chainId}:`);
+            logger.log(`  ⚡ Avg Speed: ${Math.round(perf.averageBlockchainTime)}ms`);
+            logger.log(`  📊 Success Rate: ${perf.successRate.toFixed(1)}%`);
+            logger.log(`  🎯 Pool Status: ${remaining}/${pool.transactions.length} ready`);
+            logger.log(`  ♾️  Infinite Pool: ${consumed} used, +${netGrowth} growth (${cyclesCompleted} cycles)`);
+            logger.log(`  📈 Next refill: ${5 - (consumed % 5)} transactions`);
+            logger.log(`  🚀 Performance: ${perf.averageBlockchainTime < 1000 ? 'INSTANT' : perf.averageBlockchainTime < 3000 ? 'FAST' : 'SLOW'}`);
           } else {
-            console.log('📊 No performance data available yet');
+            logger.log('📊 No performance data available yet');
           }
         },
         
@@ -2653,7 +2654,7 @@ export const useBlockchainUtils = () => {
         infinitePoolStats: (chainId) => {
           const pool = preSignedPool.current[chainId?.toString()];
           if (!pool) {
-            console.log('❌ No pool found for chain', chainId);
+            logger.log('❌ No pool found for chain', chainId);
             return;
           }
           
@@ -2666,34 +2667,34 @@ export const useBlockchainUtils = () => {
           const transactionsToNextRefill = nextRefillAt - consumed;
           
           console.group(`♾️ Infinite Pool Analysis - Chain ${chainId}`);
-          console.log(`📊 Current Status:`);
-          console.log(`  • Total transactions: ${total}`);
-          console.log(`  • Consumed: ${consumed}`);
-          console.log(`  • Remaining: ${remaining}`);
-          console.log(`  • Pool ready: ${pool.isReady ? '✅' : '❌'}`);
-          console.log(`  • Refilling: ${pool.isRefilling ? '🔄' : '⏸️'}`);
+          logger.log(`📊 Current Status:`);
+          logger.log(`  • Total transactions: ${total}`);
+          logger.log(`  • Consumed: ${consumed}`);
+          logger.log(`  • Remaining: ${remaining}`);
+          logger.log(`  • Pool ready: ${pool.isReady ? '✅' : '❌'}`);
+          logger.log(`  • Refilling: ${pool.isRefilling ? '🔄' : '⏸️'}`);
           
-          console.log(`🔄 Growth Cycles:`);
-          console.log(`  • Completed cycles: ${cyclesCompleted}`);
-          console.log(`  • Net growth: +${netGrowth} transactions`);
-          console.log(`  • Growth rate: ${consumed > 0 ? ((netGrowth / consumed) * 100).toFixed(1) : 0}%`);
+          logger.log(`🔄 Growth Cycles:`);
+          logger.log(`  • Completed cycles: ${cyclesCompleted}`);
+          logger.log(`  • Net growth: +${netGrowth} transactions`);
+          logger.log(`  • Growth rate: ${consumed > 0 ? ((netGrowth / consumed) * 100).toFixed(1) : 0}%`);
           
-          console.log(`📈 Next Refill:`);
-          console.log(`  • Refill trigger at: ${nextRefillAt} consumed`);
-          console.log(`  • Transactions until refill: ${transactionsToNextRefill}`);
-          console.log(`  • Will add: +15 transactions`);
+          logger.log(`📈 Next Refill:`);
+          logger.log(`  • Refill trigger at: ${nextRefillAt} consumed`);
+          logger.log(`  • Transactions until refill: ${transactionsToNextRefill}`);
+          logger.log(`  • Will add: +15 transactions`);
           
-          console.log(`🎯 Pool Efficiency:`);
-          console.log(`  • Efficiency: ${((remaining / total) * 100).toFixed(1)}%`);
-          console.log(`  • Trend: ${remaining > 20 ? '📈 Growing' : remaining > 10 ? '➡️ Stable' : '📉 Needs attention'}`);
-          console.log(`  • Is infinite: ${total > 50 ? '✅ Yes' : '❌ Not yet'}`);
+          logger.log(`🎯 Pool Efficiency:`);
+          logger.log(`  • Efficiency: ${((remaining / total) * 100).toFixed(1)}%`);
+          logger.log(`  • Trend: ${remaining > 20 ? '📈 Growing' : remaining > 10 ? '➡️ Stable' : '📉 Needs attention'}`);
+          logger.log(`  • Is infinite: ${total > 50 ? '✅ Yes' : '❌ Not yet'}`);
           
           if (consumed > 0) {
             const theoreticalPool = consumed + netGrowth;
-            console.log(`🧮 Mathematical Verification:`);
-            console.log(`  • Theoretical pool size: ${theoreticalPool}`);
-            console.log(`  • Actual pool size: ${total}`);
-            console.log(`  • Difference: ${total - theoreticalPool} (should be positive)`);
+            logger.log(`🧮 Mathematical Verification:`);
+            logger.log(`  • Theoretical pool size: ${theoreticalPool}`);
+            logger.log(`  • Actual pool size: ${total}`);
+            logger.log(`  • Difference: ${total - theoreticalPool} (should be positive)`);
           }
           
           console.groupEnd();
@@ -2707,20 +2708,20 @@ export const useBlockchainUtils = () => {
               cb.state = 'CLOSED';
               cb.failures = 0;
               cb.lastFailureTime = 0;
-              console.log(`✅ Force reset circuit breaker for chain ${chainId}`);
+              logger.log(`✅ Force reset circuit breaker for chain ${chainId}`);
             }
           });
-          console.log('🚀 All circuit breakers reset - ready for gaming!');
+          logger.log('🚀 All circuit breakers reset - ready for gaming!');
         }
       };
       
-      console.log('🔧 Blockchain debug utilities loaded. Use window.blockchainDebug for monitoring.');
-      console.log('📊 Examples:');
-      console.log('  • window.blockchainDebug.generatePerformanceReport(6342)');
-      console.log('  • window.blockchainDebug.quickStats(6342)');
-      console.log('  • window.blockchainDebug.infinitePoolStats(6342) // 🆕 Infinite pool analysis');
-      console.log('  • window.blockchainDebug.getPerformanceMetrics(6342)');
-      console.log('  • window.blockchainDebug.forceResetAllCircuitBreakers() // Экстренный сброс');
+      logger.log('🔧 Blockchain debug utilities loaded. Use window.blockchainDebug for monitoring.');
+      logger.log('📊 Examples:');
+      logger.log('  • window.blockchainDebug.generatePerformanceReport(6342)');
+      logger.log('  • window.blockchainDebug.quickStats(6342)');
+      logger.log('  • window.blockchainDebug.infinitePoolStats(6342) // 🆕 Infinite pool analysis');
+      logger.log('  • window.blockchainDebug.getPerformanceMetrics(6342)');
+      logger.log('  • window.blockchainDebug.forceResetAllCircuitBreakers() // Экстренный сброс');
       
       // АВТОМАТИЧЕСКИЙ сброс circuit breakers при первой загрузке
       setTimeout(() => {
@@ -2729,7 +2730,7 @@ export const useBlockchainUtils = () => {
           if (cb && cb.state === 'OPEN') {
             cb.state = 'CLOSED';
             cb.failures = 0;
-            console.log(`🔄 Auto-reset circuit breaker for chain ${chainId} on page load`);
+            logger.log(`🔄 Auto-reset circuit breaker for chain ${chainId} on page load`);
           }
         });
       }, 2000); // Через 2 секунды после загрузки
