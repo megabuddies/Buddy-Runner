@@ -15,7 +15,7 @@ const NETWORK_CONFIGS = {
     contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0', // Updater contract
     faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
     chainId: 6342,
-    sendMethod: 'eth_sendRawTransaction', // Переключаемся на стандартный метод, realtime отключен
+    sendMethod: 'realtime_sendRawTransaction', // Возвращаем realtime для мгновенного подтверждения
     connectionTimeouts: {
       initial: 10000, // 10 seconds for initial connection
       retry: 3000,    // 3 seconds for retries (быстрые retry для gaming)
