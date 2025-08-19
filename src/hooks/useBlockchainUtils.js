@@ -338,9 +338,9 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 150, // УВЕЛИЧЕН для решения проблемы исчерпания после 20 прыжков
+      poolSize: 200, // УВЕЛИЧЕН еще больше для решения проблемы после 52 транзакций
       refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 35, // БОЛЬШИЙ размер пакета для опережающего пополнения
+      batchSize: 50, // ЗНАЧИТЕЛЬНО БОЛЬШИЙ размер пакета для опережающего пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
@@ -1031,95 +1031,127 @@ export const useBlockchainUtils = () => {
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
 
-    // Подписываем транзакции по одной и делаем их доступными сразу
-    for (let i = 0; i < actualCount; i++) {
-      try {
-        // Добавляем задержку между подписаниями
-        const delay = fallbackConfig ? fallbackConfig.increasedDelay : poolConfig.retryDelay;
-        if (delay > 0 && i > 0) {
-          await new Promise(resolve => setTimeout(resolve, delay));
-        }
-        
-        // Используем зарезервированный nonce для пре-подписания
+    // ПАРАЛЛЕЛЬНОЕ подписание транзакций для максимальной скорости
+    const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
+    console.log(`🚀 Starting parallel pre-signing of ${actualCount} transactions`);
+    
+    // Сначала подписываем первую транзакцию отдельно для быстрого старта
+    try {
+      const firstNonce = startNonce;
+      const firstTxData = {
+        account: embeddedWallet.address,
+        to: config.contractAddress,
+        data: '0xa2e62045',
+        nonce: firstNonce,
+        maxFeePerGas: gasParams.maxFeePerGas,
+        maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+        value: 0n,
+        type: 'eip1559',
+        gas: 100000n,
+      };
+      
+      const firstSignedTx = await walletClient.signTransaction(firstTxData);
+      
+      pool.transactions.push({
+        signedTx: firstSignedTx,
+        _reservedNonce: firstNonce,
+        timestamp: Date.now()
+      });
+      
+      // КРИТИЧНО: Делаем пул доступным сразу же после первой транзакции
+      pool.isReady = true;
+      console.log(`🎮 First transaction ready - gaming can begin!`);
+      console.log(`✅ Pre-signed transaction pool is now ACTIVE with 1 transaction`);
+      
+      // Запускаем проактивный мониторинг пула
+      startPoolMonitoring(chainId);
+    } catch (error) {
+      console.error('Failed to sign first transaction:', error);
+      throw error;
+    }
+    
+    // Подписываем остальные транзакции параллельными батчами
+    for (let batchStart = 1; batchStart < actualCount; batchStart += PARALLEL_BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, actualCount);
+      const batchSize = batchEnd - batchStart;
+      
+      // Создаем массив промисов для параллельного подписания
+      const signingPromises = [];
+      
+      for (let i = batchStart; i < batchEnd; i++) {
         const nonce = startNonce + i;
         
-        const txData = {
-          account: embeddedWallet.address,
-          to: config.contractAddress,
-          data: '0xa2e62045',
-          nonce,
-          maxFeePerGas: gasParams.maxFeePerGas,
-          maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-          value: 0n,
-          type: 'eip1559',
-          gas: 100000n,
-        };
+        const signTransaction = async () => {
+          try {
+            const txData = {
+              account: embeddedWallet.address,
+              to: config.contractAddress,
+              data: '0xa2e62045',
+              nonce,
+              maxFeePerGas: gasParams.maxFeePerGas,
+              maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+              value: 0n,
+              type: 'eip1559',
+              gas: 100000n,
+            };
 
-        let signedTx;
-        
-        // Разные методы подписания для разных сетей
-        if (chainId === 6342) {
-          // MegaETH: используем прямое подписание через Privy
-          console.log(`Signing transaction ${i + 1} locally for MegaETH`);
-          signedTx = await retryWithBackoff(
-            async () => {
-              // Прямое подписание через embedded wallet
-              return await walletClient.signTransaction(txData);
-            },
-            fallbackConfig ? 1 : poolConfig.maxRetries,
-            poolConfig.retryDelay,
-            chainId
-          );
-        } else {
-          // Другие сети: используем walletClient
-          console.log(`Signing transaction ${i + 1} via RPC for chain ${chainId}`);
-          signedTx = await retryWithBackoff(
-            () => walletClient.signTransaction(txData),
-            fallbackConfig ? 1 : poolConfig.maxRetries,
-            poolConfig.retryDelay,
-            chainId
-          );
-        }
-        
-        // Добавляем nonce к подписанной транзакции для отслеживания
-        const txWrapper = {
-          signedTx,
-          _reservedNonce: nonce,
-          timestamp: Date.now()
+            let signedTx;
+            
+            // Разные методы подписания для разных сетей
+            if (chainId === 6342) {
+              // MegaETH: используем прямое подписание
+              signedTx = await retryWithBackoff(
+                async () => await walletClient.signTransaction(txData),
+                fallbackConfig ? 1 : poolConfig.maxRetries,
+                poolConfig.retryDelay,
+                chainId
+              );
+            } else {
+              // Другие сети: используем walletClient
+              signedTx = await retryWithBackoff(
+                () => walletClient.signTransaction(txData),
+                fallbackConfig ? 1 : poolConfig.maxRetries,
+                poolConfig.retryDelay,
+                chainId
+              );
+            }
+            
+            return {
+              signedTx,
+              _reservedNonce: nonce,
+              timestamp: Date.now()
+            };
+          } catch (error) {
+            console.error(`Error signing transaction with nonce ${nonce}:`, error);
+            
+            // Для rate limiting ошибок, просто логируем но продолжаем
+            if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403 || error.message?.includes('not whitelisted')) {
+              console.log('Rate limit/403/not whitelisted detected during pre-signing, skipping transaction');
+              return null;
+            }
+            
+            return null;
+          }
         };
-        pool.transactions.push(txWrapper);
         
-        // КРИТИЧНО: Делаем пул доступным сразу же после первой транзакции
-        if (i === 0) {
-          pool.isReady = true;
-          console.log(`🎮 First transaction ready - gaming can begin!`);
-          console.log(`✅ Pre-signed transaction pool is now ACTIVE with ${pool.transactions.length} transactions`);
-          
-          // Запускаем проактивный мониторинг пула
-          startPoolMonitoring(chainId);
+        signingPromises.push(signTransaction());
+      }
+      
+      // Ждем завершения всех транзакций в батче
+      const batchResults = await Promise.all(signingPromises);
+      
+      // Добавляем успешно подписанные транзакции
+      const successfulTxs = batchResults.filter(tx => tx !== null);
+      pool.transactions.push(...successfulTxs);
+      
+      console.log(`Pre-signed batch ${Math.floor((batchStart - 1) / PARALLEL_BATCH_SIZE) + 1}/${Math.ceil((actualCount - 1) / PARALLEL_BATCH_SIZE)} - total ${pool.transactions.length}/${actualCount}`);
+      
+      // Добавляем небольшую задержку между батчами для предотвращения rate limiting
+      if (batchEnd < actualCount) {
+        const delay = fallbackConfig ? fallbackConfig.increasedDelay : Math.min(poolConfig.retryDelay, 100);
+        if (delay > 0) {
+          await new Promise(resolve => setTimeout(resolve, delay));
         }
-        
-        consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
-        console.log(`Signed transaction ${pool.transactions.length}/${actualCount}`);
-      } catch (error) {
-        console.error(`Error signing transaction ${i + 1}:`, error);
-        consecutiveErrors++;
-        
-        // Для rate limiting ошибок, просто логируем но продолжаем
-        if (error.message?.includes('rate limit') || error.status === 429 || error.status === 403 || error.message?.includes('not whitelisted')) {
-          console.log('Rate limit/403/not whitelisted detected during pre-signing, continuing with next transaction');
-          // НЕ активируем fallback режим - просто пропускаем эту транзакцию
-          continue;
-        }
-        
-        // Если слишком много ошибок подряд, прерываем batch но НЕ активируем fallback
-        if (consecutiveErrors >= maxConsecutiveErrors) {
-          console.log(`Too many consecutive errors (${consecutiveErrors}), stopping batch signing but keeping realtime mode available`);
-          break;
-        }
-        
-        // Для других ошибок, продолжаем со следующей транзакцией
-        continue;
       }
     }
 
@@ -1159,40 +1191,62 @@ export const useBlockchainUtils = () => {
       const config = NETWORK_CONFIGS[chainId];
       const embeddedWallet = getEmbeddedWallet();
       
-      // Подписываем новые транзакции
-      for (let i = 0; i < count; i++) {
-        try {
+      // ПАРАЛЛЕЛЬНОЕ подписание новых транзакций для максимальной скорости
+      const PARALLEL_BATCH_SIZE = 10; // Подписываем по 10 транзакций параллельно
+      console.log(`📝 Starting parallel signing of ${count} transactions in batches of ${PARALLEL_BATCH_SIZE}`);
+      
+      for (let batchStart = 0; batchStart < count; batchStart += PARALLEL_BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, count);
+        const batchSize = batchEnd - batchStart;
+        
+        // Создаем массив промисов для параллельного подписания
+        const signingPromises = [];
+        
+        for (let i = batchStart; i < batchEnd; i++) {
           const nonce = startNonce + i;
           
-          const txData = {
-            account: embeddedWallet.address,
-            to: config.contractAddress,
-            data: '0xa2e62045',
-            nonce,
-            maxFeePerGas: gasParams.maxFeePerGas,
-            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
-            value: 0n,
-            type: 'eip1559',
-            gas: 100000n,
-          };
+          const signTransaction = async () => {
+            try {
+              const txData = {
+                account: embeddedWallet.address,
+                to: config.contractAddress,
+                data: '0xa2e62045',
+                nonce,
+                maxFeePerGas: gasParams.maxFeePerGas,
+                maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+                value: 0n,
+                type: 'eip1559',
+                gas: 100000n,
+              };
 
-          let signedTx;
-          if (chainId === 6342) {
-            signedTx = await walletClient.signTransaction(txData);
-          } else {
-            signedTx = await walletClient.signTransaction(txData);
-          }
-          
-          const txWrapper = {
-            signedTx,
-            _reservedNonce: nonce,
-            timestamp: Date.now()
+              const signedTx = await walletClient.signTransaction(txData);
+              
+              return {
+                signedTx,
+                _reservedNonce: nonce,
+                timestamp: Date.now()
+              };
+            } catch (error) {
+              console.error(`Error signing extension transaction with nonce ${nonce}:`, error);
+              return null;
+            }
           };
-          tempTransactions.push(txWrapper);
           
-          console.log(`Extended pool: signed ${tempTransactions.length}/${count}`);
-        } catch (error) {
-          console.error(`Error signing extension transaction ${i + 1}:`, error);
+          signingPromises.push(signTransaction());
+        }
+        
+        // Ждем завершения всех транзакций в батче
+        const batchResults = await Promise.all(signingPromises);
+        
+        // Добавляем успешно подписанные транзакции
+        const successfulTxs = batchResults.filter(tx => tx !== null);
+        tempTransactions.push(...successfulTxs);
+        
+        console.log(`Extended pool: signed batch ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}/${Math.ceil(count / PARALLEL_BATCH_SIZE)} - total ${tempTransactions.length}/${count}`);
+        
+        // Если в батче были ошибки, прерываем процесс
+        if (successfulTxs.length < batchSize) {
+          console.warn(`⚠️ Only ${successfulTxs.length}/${batchSize} transactions signed in batch, stopping extension`);
           break;
         }
       }
@@ -1200,7 +1254,6 @@ export const useBlockchainUtils = () => {
       // Добавляем новые транзакции в основной пул
       if (pool && tempTransactions.length > 0) {
         pool.transactions.push(...tempTransactions);
-        pool.hasTriggeredRefill = false; // Сбрасываем флаг для следующего пополнения
         console.log(`Pool extended successfully. Total transactions: ${pool.transactions.length}`);
         
         // Обновляем nonce manager
@@ -1208,6 +1261,13 @@ export const useBlockchainUtils = () => {
         if (manager) {
           manager.pendingNonce = Math.max(manager.pendingNonce || 0, startNonce + tempTransactions.length);
         }
+        
+        // Сбрасываем флаг только после успешного добавления достаточного количества транзакций
+        setTimeout(() => {
+          if (pool) {
+            pool.hasTriggeredRefill = false;
+          }
+        }, 1000); // Небольшая задержка для предотвращения частых пополнений
       }
     } catch (error) {
       console.error('Error extending transaction pool:', error);
@@ -1232,10 +1292,10 @@ export const useBlockchainUtils = () => {
 
       console.log(`🎯 Using pre-signed transaction ${pool.currentIndex}/${pool.transactions.length} (nonce: ${txWrapper._reservedNonce})`);
 
-      // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - более частое и агрессивное
-      // Пополняем каждые 3 транзакции вместо 5 для решения проблемы после 20 прыжков
-      if (pool.currentIndex % 3 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill) {
-        console.log(`🔄 AGGRESSIVE refilling at ${pool.currentIndex} transactions used (solving 20-jump slowdown)`);
+      // 🔄 УЛУЧШЕННОЕ ПРЕВЕНТИВНОЕ ПОПОЛНЕНИЕ - оптимизированное для длинных сессий
+      // Пополняем каждые 10 транзакций большими батчами для минимизации блокировок
+      if (pool.currentIndex % 10 === 0 && pool.currentIndex > 0 && !pool.hasTriggeredRefill && !pool.isRefilling) {
+        console.log(`🔄 OPTIMIZED refilling at ${pool.currentIndex} transactions used`);
         pool.hasTriggeredRefill = true;
         
         // Пополняем в фоне - добавляем ЗНАЧИТЕЛЬНО больше чем потребили
@@ -1246,9 +1306,13 @@ export const useBlockchainUtils = () => {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
               
-              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
-              // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
+              // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем ЗНАЧИТЕЛЬНО больше транзакций для длинных сессий
+              // Используем логарифмическую шкалу для увеличения размера батча
+              const usedCount = pool.currentIndex;
+              const baseRefillSize = Math.max(35, poolConfig.batchSize * 2);
+              // После 50 транзакций добавляем еще больше для предотвращения замедления
+              const refillSize = usedCount > 50 ? Math.floor(baseRefillSize * 1.5) : baseRefillSize;
+              
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
@@ -1274,7 +1338,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(30, poolConfig.batchSize * 2);
+              const emergencyRefillSize = Math.max(50, poolConfig.batchSize * 2.5);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
