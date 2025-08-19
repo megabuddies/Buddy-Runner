@@ -2,38 +2,38 @@ import React, { useEffect, useState } from 'react';
 import { useLogin, usePrivy } from '@privy-io/react-auth';
 import './WalletConnection.css';
 
-const WalletConnection = ({ onWalletConnected }) => {
+const WalletConnection = ({ onWalletConnected }) =&gt; {
   const { user, authenticated, ready } = usePrivy();
   const { login } = useLogin();
   const [loadingText, setLoadingText] = useState('INITIALIZING');
   const [dots, setDots] = useState('');
 
-  useEffect(() => {
+  useEffect(() =&gt; {
     if (authenticated && user) {
       onWalletConnected();
     }
   }, [authenticated, user, onWalletConnected]);
 
-  useEffect(() => {
-    const dotInterval = setInterval(() => {
-      setDots(prev => {
+  useEffect(() =&gt; {
+    const dotInterval = setInterval(() =&gt; {
+      setDots(prev =&gt; {
         if (prev.length >= 3) return '';
         return prev + '.';
       });
     }, 500);
 
-    const textInterval = setInterval(() => {
+    const textInterval = setInterval(() =&gt; {
       const texts = ['INITIALIZING', 'LOADING SYSTEMS', 'CONNECTING', 'SYNCING'];
       setLoadingText(texts[Math.floor(Math.random() * texts.length)]);
     }, 2000);
 
-    return () => {
+    return () =&gt; {
       clearInterval(dotInterval);
       clearInterval(textInterval);
     };
   }, []);
 
-  const handleConnect = () => {
+  const handleConnect = () =&gt; {
     login();
   };
 
@@ -69,7 +69,7 @@ const WalletConnection = ({ onWalletConnected }) => {
             </div>
 
             <div className="terminal-text">
-              <span className="terminal-prompt">></span> System initialization in progress...
+              <span className="terminal-prompt">&gt;</span> System initialization in progress...
             </div>
           </div>
         </div>
@@ -105,13 +105,13 @@ const WalletConnection = ({ onWalletConnected }) => {
             <h2 className="connection-title">AUTHENTICATION REQUIRED</h2>
             <div className="terminal-content">
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> CONNECT YOUR WALLET TO ACCESS THE GAME
+                <span className="terminal-prompt">&gt;</span> CONNECT YOUR WALLET TO ACCESS THE GAME
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> ALL SCORES WILL BE STORED ON-CHAIN
+                <span className="terminal-prompt">&gt;</span> ALL SCORES WILL BE STORED ON-CHAIN
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> SECURE BLOCKCHAIN AUTHENTICATION
+                <span className="terminal-prompt">&gt;</span> SECURE BLOCKCHAIN AUTHENTICATION
               </div>
             </div>
             
@@ -145,10 +145,10 @@ const WalletConnection = ({ onWalletConnected }) => {
 
             <div className="security-info">
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> SECURITY: 256-BIT ENCRYPTION
+                <span className="terminal-prompt">&gt;</span> SECURITY: 256-BIT ENCRYPTION
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> NETWORK: MEGAETH COMPATIBLE
+                <span className="terminal-prompt">&gt;</span> NETWORK: MEGAETH COMPATIBLE
               </div>
             </div>
           </div>

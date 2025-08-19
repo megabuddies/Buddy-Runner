@@ -6,7 +6,7 @@ import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
 import './App.css';
 
-const App = () => {
+const App = () =&gt; {
   const appId = 'cme84q0og02aalc0bh9blzwa9';
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
@@ -227,11 +227,11 @@ const App = () => {
     }
   };
 
-  const handleNetworkSelect = (network) => {
+  const handleNetworkSelect = (network) =&gt; {
     setSelectedNetwork(network);
   };
 
-  const handleStartGame = (network) => {
+  const handleStartGame = (network) =&gt; {
     setSelectedNetwork(network);
     // For blockchain networks, require authentication first
     if (!network.isWeb2) {
@@ -241,20 +241,20 @@ const App = () => {
     }
   };
 
-  const handleWalletConnected = () => {
+  const handleWalletConnected = () =&gt; {
     setGameState('game');
   };
 
-  const handleBackToNetworkSelection = () => {
+  const handleBackToNetworkSelection = () =&gt; {
     setGameState('network-selection');
     setSelectedNetwork(null);
   };
 
-  const handleBackToWalletConnection = () => {
+  const handleBackToWalletConnection = () =&gt; {
     setGameState('wallet-connection');
   };
 
-  const handleDisconnect = () => {
+  const handleDisconnect = () =&gt; {
     // Reset state and return to network selection
     setGameState('network-selection');
     setSelectedNetwork(null);
@@ -307,7 +307,7 @@ const App = () => {
                   <div className="title">
                     Buddy Runner
                     {selectedNetwork && selectedNetwork.isWeb2 && (
-                      <span className="web2-mode"> - Classic Mode</span>
+                      <span className="web2-mode"&gt; - Classic Mode</span>
                     )}
                   </div>
                 </div>

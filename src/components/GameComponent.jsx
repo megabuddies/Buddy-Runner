@@ -10,7 +10,7 @@ import Score from '../game/Score.js';
 import '../styles/PrivyWalletStatus.css';
 import '../styles/TransactionNotifications.css';
 
-const GameComponent = ({ selectedNetwork }) => {
+const GameComponent = ({ selectedNetwork }) =&gt; {
   const canvasRef = useRef(null);
   const gameRef = useRef({});
   const { user, authenticated } = usePrivy();
@@ -55,7 +55,7 @@ const GameComponent = ({ selectedNetwork }) => {
   const blockchainFunctionsRef = useRef({});
   
   // Update refs when blockchain functions change
-  useEffect(() => {
+  useEffect(() =&gt; {
     blockchainFunctionsRef.current = {
       sendUpdate,
       getContractNumber,
@@ -84,10 +84,10 @@ const GameComponent = ({ selectedNetwork }) => {
   ];
 
   // Инициализация блокчейн данных
-  const initializeBlockchain = async () => {
+  const initializeBlockchain = async () =&gt; {
     if (!isReady || !selectedNetwork || selectedNetwork.isWeb2) {
       console.log('Skipping blockchain initialization - Web2 mode or not ready');
-      setBlockchainStatus(prev => ({ 
+      setBlockchainStatus(prev =&gt; ({ 
         ...prev, 
         initialized: false,
         networkName: selectedNetwork?.name || 'Web2 Mode'
@@ -115,7 +115,7 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log('Blockchain initialization complete');
     } catch (error) {
       console.error('Failed to initialize blockchain:', error);
-      setBlockchainStatus(prev => ({ 
+      setBlockchainStatus(prev =&gt; ({ 
         ...prev, 
         initialized: false,
         contractAvailable: false
@@ -124,7 +124,7 @@ const GameComponent = ({ selectedNetwork }) => {
   };
 
   // Обработка ончейн прыжка с Real-Time Gaming архитектурой
-  const handleOnChainMovement = useCallback(async () => {
+  const handleOnChainMovement = useCallback(async () =&gt; {
     const { sendUpdate, getContractNumber, selectedNetwork, blockchainInitialized } = blockchainFunctionsRef.current;
     
     // Проверяем, поддерживает ли сеть ончейн функциональность
@@ -137,13 +137,13 @@ const GameComponent = ({ selectedNetwork }) => {
     // Для MegaETH позволяем высокий параллелизм
     if (selectedNetwork?.chainId === 6342) {
       // Для MegaETH разрешаем до 8 одновременных транзакций
-      if (pendingTransactionCount.current > 8) {
+      if (pendingTransactionCount.current &gt; 8) {
         console.log('🚫 Maximum MegaETH transaction throughput reached:', pendingTransactionCount.current);
         return;
       }
       // Дополнительная проверка: если транзакция висит больше 10 секунд, сбрасываем счетчик
       const now = Date.now();
-      if (lastTransactionTime.current && (now - lastTransactionTime.current) > 10000) {
+      if (lastTransactionTime.current && (now - lastTransactionTime.current) &gt; 10000) {
         console.log('🔄 Resetting pending count due to timeout, was:', pendingTransactionCount.current);
         pendingTransactionCount.current = 0;
       }
@@ -212,7 +212,7 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log(`🎯 Jump completed: ${gameResult.blockchainTime}ms blockchain time, ${gameResult.isInstant ? 'INSTANT' : 'PENDING'} confirmation`);
       
       // Обновляем статистику
-      setBlockchainStatus(prev => ({
+      setBlockchainStatus(prev =&gt; ({
         ...prev,
         totalMovements: prev.totalMovements + 1,
         onChainScore: prev.onChainScore + 1,
@@ -222,7 +222,7 @@ const GameComponent = ({ selectedNetwork }) => {
       }));
 
       // Обновляем номер из контракта
-      setTimeout(async () => {
+      setTimeout(async () =&gt; {
         try {
           await getContractNumber(selectedNetwork.id);
         } catch (error) {
@@ -252,7 +252,7 @@ const GameComponent = ({ selectedNetwork }) => {
         lastTransactionTime.current = Date.now() + 1000; // Блокируем транзакции на 1 секунду
         
         // Агрессивно сбрасываем счетчик pending транзакций при ошибке nonce
-        if (pendingTransactionCount.current > 0) {
+        if (pendingTransactionCount.current &gt; 0) {
           console.log(`🔄 Resetting pending count from ${pendingTransactionCount.current} to 0 due to nonce error`);
           pendingTransactionCount.current = 0;
         }
@@ -274,7 +274,7 @@ const GameComponent = ({ selectedNetwork }) => {
       console.error(`🚨 Blockchain Error [${errorType}]:`, errorMessage);
       
       // Обновляем статистику ошибок (можно добавить в blockchainStatus)
-      setBlockchainStatus(prev => ({
+      setBlockchainStatus(prev =&gt; ({
         ...prev,
         lastError: {
           type: errorType,
@@ -298,7 +298,7 @@ const GameComponent = ({ selectedNetwork }) => {
   }, []); // Empty dependency array - function is stable now
 
   // Manual faucet call function
-  const handleManualFaucet = async () => {
+  const handleManualFaucet = async () =&gt; {
     if (!selectedNetwork || selectedNetwork.isWeb2 || !isReady) {
       return;
     }
@@ -315,7 +315,7 @@ const GameComponent = ({ selectedNetwork }) => {
       await callFaucet(embeddedWallet.address, selectedNetwork.id);
       
       // Wait and refresh balance
-      setTimeout(async () => {
+      setTimeout(async () =&gt; {
         await checkBalance(selectedNetwork.id);
       }, 3000);
 
@@ -329,7 +329,7 @@ const GameComponent = ({ selectedNetwork }) => {
   };
 
   // Get wallet information for display
-  const getWalletInfo = () => {
+  const getWalletInfo = () =&gt; {
     // For web2 mode, return special identifier
     if (selectedNetwork && selectedNetwork.isWeb2) {
       return {
@@ -360,13 +360,13 @@ const GameComponent = ({ selectedNetwork }) => {
   };
 
   // Get wallet address
-  const getWalletAddress = () => {
+  const getWalletAddress = () =&gt; {
     if (!authenticated || !wallets || wallets.length === 0) return null;
     return wallets[0]?.address || null;
   };
 
   // Initialize blockchain when component mounts or network changes
-  useEffect(() => {
+  useEffect(() =&gt; {
     // Skip blockchain initialization for web2 mode
     if (selectedNetwork && selectedNetwork.isWeb2) {
       console.log('Web2 mode selected, skipping blockchain initialization');
@@ -382,7 +382,7 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     // Only initialize if we have proper authentication and embedded wallet
-    if (selectedNetwork && isReady && authenticated && wallets.length > 0) {
+    if (selectedNetwork && isReady && authenticated && wallets.length &gt; 0) {
       console.log('Initializing blockchain for:', selectedNetwork.name);
 
       initializeBlockchain();
@@ -392,10 +392,10 @@ const GameComponent = ({ selectedNetwork }) => {
   }, [selectedNetwork, isReady, authenticated, wallets]);
 
   // Update blockchain status from hook
-  useEffect(() => {
+  useEffect(() =&gt; {
     if (selectedNetwork && !selectedNetwork.isWeb2) {
       const poolStatus = getPoolStatus(selectedNetwork.id);
-      setBlockchainStatus(prev => ({
+      setBlockchainStatus(prev =&gt; ({
         ...prev,
         pendingTransactions: transactionPending ? 1 : 0,
         poolStatus: poolStatus
@@ -403,7 +403,7 @@ const GameComponent = ({ selectedNetwork }) => {
     }
   }, [transactionPending, selectedNetwork, getPoolStatus]);
 
-  useEffect(() => {
+  useEffect(() =&gt; {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -453,10 +453,10 @@ const GameComponent = ({ selectedNetwork }) => {
         game.scaleRatio
       );
 
-      const carrotImages = CARROT_CONFIG.map(carrot => {
+      const carrotImages = CARROT_CONFIG.map(carrot =&gt; {
         const image = new Image();
         image.src = carrot.imageSrc;
-        image.onerror = () => console.error(`Failed to load ${carrot.imageSrc}`);
+        image.onerror = () =&gt; console.error(`Failed to load ${carrot.imageSrc}`);
         return {
           image: image,
           width: carrot.width * game.scaleRatio,
@@ -509,7 +509,7 @@ const GameComponent = ({ selectedNetwork }) => {
       ctx.font = `${restartFontSize}px monospace`;
       ctx.fillStyle = "#929397";
       ctx.fillText(
-        "> PRESS ANY KEY TO RESTART",
+        "&gt; PRESS ANY KEY TO RESTART",
         canvas.width / 2,
         canvas.height / 2 + restartFontSize
       );
@@ -521,7 +521,7 @@ const GameComponent = ({ selectedNetwork }) => {
         ctx.font = `${walletFontSize}px monospace`;
         ctx.fillStyle = "#1391ff";
         ctx.fillText(
-          `> PILOT: ${walletInfo.identifier}`,
+          `&gt; PILOT: ${walletInfo.identifier}`,
           canvas.width / 2,
           canvas.height / 2 + restartFontSize + walletFontSize + 20
         );
@@ -529,14 +529,14 @@ const GameComponent = ({ selectedNetwork }) => {
         // Show blockchain stats
         ctx.fillStyle = "#929397";
         ctx.fillText(
-          `> NETWORK: ${blockchainStatus.networkName}`,
+          `&gt; NETWORK: ${blockchainStatus.networkName}`,
           canvas.width / 2,
           canvas.height / 2 + restartFontSize + walletFontSize * 2 + 25
         );
         
-        if (blockchainStatus.totalMovements > 0) {
+        if (blockchainStatus.totalMovements &gt; 0) {
           ctx.fillText(
-            `> ON-CHAIN MOVES: ${blockchainStatus.totalMovements}`,
+            `&gt; ON-CHAIN MOVES: ${blockchainStatus.totalMovements}`,
             canvas.width / 2,
             canvas.height / 2 + restartFontSize + walletFontSize * 3 + 30
           );
@@ -555,7 +555,7 @@ const GameComponent = ({ selectedNetwork }) => {
       ctx.shadowColor = "#929397";
       ctx.shadowBlur = 5;
       ctx.fillText(
-        "> PRESS ANY KEY TO START MISSION",
+        "&gt; PRESS ANY KEY TO START MISSION",
         canvas.width / 2,
         canvas.height / 2
       );
@@ -571,7 +571,7 @@ const GameComponent = ({ selectedNetwork }) => {
         ctx.shadowColor = "#1391ff";
         ctx.shadowBlur = 3;
         ctx.fillText(
-          `> PILOT AUTHENTICATED: ${walletInfo.identifier}`,
+          `&gt; PILOT AUTHENTICATED: ${walletInfo.identifier}`,
           canvas.width / 2,
           canvas.height / 2 + fontSize + 20
         );
@@ -580,7 +580,7 @@ const GameComponent = ({ selectedNetwork }) => {
         // Show network status
         ctx.fillStyle = "#929397";
         ctx.fillText(
-          `> TARGET NETWORK: ${blockchainStatus.networkName}`,
+          `&gt; TARGET NETWORK: ${blockchainStatus.networkName}`,
           canvas.width / 2,
           canvas.height / 2 + fontSize + statusFontSize + 25
         );
@@ -588,14 +588,14 @@ const GameComponent = ({ selectedNetwork }) => {
         if (blockchainStatus.initialized) {
           ctx.fillStyle = "#28a745";
           ctx.fillText(
-            "> BLOCKCHAIN CONNECTION: ACTIVE",
+            "&gt; BLOCKCHAIN CONNECTION: ACTIVE",
             canvas.width / 2,
             canvas.height / 2 + fontSize + statusFontSize * 2 + 30
           );
         } else {
           ctx.fillStyle = "#ffc107";
           ctx.fillText(
-            "> BLOCKCHAIN CONNECTION: SIMULATED MODE",
+            "&gt; BLOCKCHAIN CONNECTION: SIMULATED MODE",
             canvas.width / 2,
             canvas.height / 2 + fontSize + statusFontSize * 2 + 30
           );
@@ -603,7 +603,7 @@ const GameComponent = ({ selectedNetwork }) => {
       } else {
         ctx.fillStyle = "#ef5435";
         ctx.fillText(
-          "> WARNING: NO PILOT AUTHENTICATED",
+          "&gt; WARNING: NO PILOT AUTHENTICATED",
           canvas.width / 2,
           canvas.height / 2 + fontSize + 20
         );
@@ -662,8 +662,8 @@ const GameComponent = ({ selectedNetwork }) => {
     function setupGameReset() {
       if (!game.hasAddedEventListenersForRestart) {
         game.hasAddedEventListenersForRestart = true;
-        setTimeout(() => {
-          const resetHandler = () => {
+        setTimeout(() =&gt; {
+          const resetHandler = () =&gt; {
             reset();
             document.removeEventListener("keyup", resetHandler);
             document.removeEventListener("touchstart", resetHandler);
@@ -745,7 +745,7 @@ const GameComponent = ({ selectedNetwork }) => {
     setScreen();
     
     // Handle resize
-    const handleResize = () => setTimeout(setScreen, 500);
+    const handleResize = () =&gt; setTimeout(setScreen, 500);
     window.addEventListener("resize", handleResize);
     
     if (screen.orientation) {
@@ -753,7 +753,7 @@ const GameComponent = ({ selectedNetwork }) => {
     }
 
     // Initial input handlers
-    const initialKeyHandler = () => {
+    const initialKeyHandler = () =&gt; {
       reset();
       document.removeEventListener("keyup", initialKeyHandler);
       document.removeEventListener("touchstart", initialKeyHandler);
@@ -765,7 +765,7 @@ const GameComponent = ({ selectedNetwork }) => {
     // Start game loop
     animationId = requestAnimationFrame(gameLoop);
 
-    return () => {
+    return () =&gt; {
       if (animationId) {
         cancelAnimationFrame(animationId);
       }

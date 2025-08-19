@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
 
-const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
+const PrivyWalletStatus = ({ selectedNetwork, className = "" }) =&gt; {
   const { user, authenticated } = usePrivy();
   const { wallets } = useWallets();
   const { 
@@ -17,8 +17,8 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
   // Получение информации о embedded wallet
-  useEffect(() => {
-    if (authenticated && wallets.length > 0) {
+  useEffect(() =&gt; {
+    if (authenticated && wallets.length &gt; 0) {
       const embeddedWallet = getEmbeddedWallet();
       if (embeddedWallet) {
         setWalletInfo({
@@ -31,9 +31,9 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
   }, [authenticated, wallets, getEmbeddedWallet]);
 
   // Обновление статуса пула транзакций
-  useEffect(() => {
+  useEffect(() =&gt; {
     if (selectedNetwork && selectedNetwork.id !== 'select') {
-      const updatePoolStatus = () => {
+      const updatePoolStatus = () =&gt; {
         try {
           const status = getPoolStatus(selectedNetwork.id);
           const infiniteStats = getInfinitePoolStats(selectedNetwork.id);
@@ -49,7 +49,7 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
 
       updatePoolStatus();
       const interval = setInterval(updatePoolStatus, 1000);
-      return () => clearInterval(interval);
+      return () =&gt; clearInterval(interval);
     }
   }, [selectedNetwork, getPoolStatus, getInfinitePoolStats]);
 
@@ -57,17 +57,17 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
     return null;
   }
 
-  const formatAddress = (address) => {
+  const formatAddress = (address) =&gt; {
     if (!address) return '';
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = (status) =&gt; {
     if (!status) return 'text-gray-400';
     
-    if (status.isReady && status.totalTransactions > 10) {
+    if (status.isReady && status.totalTransactions &gt; 10) {
       return 'text-green-400';
-    } else if (status.isReady && status.totalTransactions > 5) {
+    } else if (status.isReady && status.totalTransactions &gt; 5) {
       return 'text-yellow-400';
     } else if (status.isReady) {
       return 'text-orange-400';
@@ -76,12 +76,12 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
     }
   };
 
-  const getStatusIcon = (status) => {
+  const getStatusIcon = (status) =&gt; {
     if (!status) return '⏳';
     
-    if (status.isReady && status.totalTransactions > 10) {
+    if (status.isReady && status.totalTransactions &gt; 10) {
       return '🚀';
-    } else if (status.isReady && status.totalTransactions > 5) {
+    } else if (status.isReady && status.totalTransactions &gt; 5) {
       return '⚡';
     } else if (status.isReady) {
       return '⚠️';
@@ -94,7 +94,7 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
     <div className={`privy-wallet-status ${className}`}>
       <div 
         className="status-header"
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() =&gt; setIsExpanded(!isExpanded)}
         style={{ cursor: 'pointer' }}
       >
         <div className="wallet-info">
