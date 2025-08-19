@@ -384,15 +384,10 @@ const GameComponent = ({ selectedNetwork }) => {
     // Only initialize if we have proper authentication and embedded wallet
     if (selectedNetwork && isReady && authenticated && wallets.length > 0) {
       console.log('Initializing blockchain for:', selectedNetwork.name);
-      console.log('Authentication status:', { authenticated, wallets: wallets.length, isReady });
+
       initializeBlockchain();
     } else {
-      console.log('Waiting for authentication and embedded wallet creation...', {
-        selectedNetwork: !!selectedNetwork,
-        isReady,
-        authenticated,
-        wallets: wallets.length
-      });
+
     }
   }, [selectedNetwork, isReady, authenticated, wallets]);
 

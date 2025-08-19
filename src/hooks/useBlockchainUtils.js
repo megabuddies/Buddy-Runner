@@ -621,15 +621,8 @@ export const useBlockchainUtils = () => {
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
     if (!authenticated || !wallets.length) {
-      console.log('Not authenticated or no wallets available');
       return null;
     }
-    
-    console.log('Available wallets:', wallets.map(w => ({ 
-      address: w.address, 
-      walletClientType: w.walletClientType, 
-      connectorType: w.connectorType 
-    })));
     
     // Look for embedded wallet - Privy creates embedded wallets with specific types
     const embeddedWallet = wallets.find(wallet => 
@@ -639,17 +632,15 @@ export const useBlockchainUtils = () => {
     );
     
     if (embeddedWallet) {
-      console.log('Found embedded wallet:', embeddedWallet.address);
       return embeddedWallet;
     }
     
     // If no embedded wallet found, use the first available wallet
     if (wallets.length > 0) {
-      console.log('No embedded wallet found, using first available wallet:', wallets[0].address);
       return wallets[0];
     }
     
-    console.log('No wallets available');
+
     return null;
   };
 
@@ -2082,7 +2073,7 @@ export const useBlockchainUtils = () => {
       while (!embeddedWallet && retries < maxRetries) {
         embeddedWallet = getEmbeddedWallet();
         if (!embeddedWallet) {
-          console.log(`Waiting for embedded wallet creation... (attempt ${retries + 1}/${maxRetries})`);
+
           await new Promise(resolve => setTimeout(resolve, 1000));
           retries++;
         }
@@ -2092,7 +2083,7 @@ export const useBlockchainUtils = () => {
         throw new Error('No embedded wallet available');
       }
 
-      console.log('✅ Using embedded wallet address:', embeddedWallet.address);
+
 
       // Для Privy embedded wallets пропускаем переключение сети
       // Используем логику bypass для избежания ошибок Privy
