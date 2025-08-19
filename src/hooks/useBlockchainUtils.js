@@ -338,9 +338,9 @@ export const useBlockchainUtils = () => {
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ
-      poolSize: 150, // УВЕЛИЧЕН для решения проблемы исчерпания после 20 прыжков
+      poolSize: 1000, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН для начального пула (минимум тысяча транзакций)
       refillAt: 0.15, // БОЛЕЕ раннее пополнение при 15% использования
-      batchSize: 35, // БОЛЬШИЙ размер пакета для опережающего пополнения
+      batchSize: 100, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН размер пакета для пополнения
       maxRetries: 3,
       retryDelay: 200, // Быстрые retry для MegaETH
       burstMode: true, // Поддержка burst режима
@@ -348,9 +348,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // УМЕНЬШЕН cooldown для минимизации задержек
     },
     31337: { // Foundry
-      poolSize: 120, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 1000, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН для начального пула
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 30, // Больший размер пакета
+      batchSize: 100, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН размер пакета
       maxRetries: 3,
       retryDelay: 150,
       burstMode: true,
@@ -358,9 +358,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 200 // Уменьшен cooldown
     },
     50311: { // Somnia
-      poolSize: 100, // УВЕЛИЧЕН для длинных игровых сессий
+      poolSize: 1000, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН для начального пула
       refillAt: 0.2, // Более раннее пополнение
-      batchSize: 25, // Больший размер пакета
+      batchSize: 100, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН размер пакета
       maxRetries: 3,
       retryDelay: 300,
       burstMode: true,
@@ -368,9 +368,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 400 // Уменьшен cooldown
     },
     1313161556: { // RISE
-      poolSize: 50, // Увеличен для pre-signed only
+      poolSize: 1000, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН для начального пула
       refillAt: 0.4,
-      batchSize: 12,
+      batchSize: 50, // УВЕЛИЧЕН размер пакета
       maxRetries: 2,
       retryDelay: 400,
       burstMode: false,
@@ -378,9 +378,9 @@ export const useBlockchainUtils = () => {
       burstCooldown: 1500
     },
     default: {
-      poolSize: 60, // Увеличен для pre-signed only
+      poolSize: 1000, // ЗНАЧИТЕЛЬНО УВЕЛИЧЕН для начального пула
       refillAt: 0.3, // Раннее пополнение
-      batchSize: 15,
+      batchSize: 50, // УВЕЛИЧЕН размер пакета
       maxRetries: 3,
       retryDelay: 300,
       burstMode: false,
@@ -1029,14 +1029,23 @@ export const useBlockchainUtils = () => {
     const embeddedWallet = getEmbeddedWallet();
     
     let consecutiveErrors = 0;
-    const maxConsecutiveErrors = 3;
+    const maxConsecutiveErrors = 10; // Увеличено для большей устойчивости при подписании большого пула
 
     // Подписываем транзакции по одной и делаем их доступными сразу
     for (let i = 0; i < actualCount; i++) {
       try {
-        // Добавляем задержку между подписаниями
-        const delay = fallbackConfig ? fallbackConfig.increasedDelay : poolConfig.retryDelay;
-        if (delay > 0 && i > 0) {
+        // Добавляем задержку между подписаниями для избежания rate limiting
+        // Для больших пулов используем адаптивную задержку
+        let delay = fallbackConfig ? fallbackConfig.increasedDelay : poolConfig.retryDelay;
+        
+        // Уменьшаем задержку для первых транзакций, увеличиваем для последующих
+        if (i > 0) {
+          if (i < 100) {
+            delay = Math.min(delay, 50); // Быстрее для первых 100 транзакций
+          } else if (i % 50 === 0) {
+            // Небольшая пауза каждые 50 транзакций для избежания rate limiting
+            delay = Math.max(delay, 500);
+          }
           await new Promise(resolve => setTimeout(resolve, delay));
         }
         
@@ -1100,7 +1109,13 @@ export const useBlockchainUtils = () => {
         }
         
         consecutiveErrors = 0; // Сбрасываем счетчик ошибок при успехе
-        console.log(`Signed transaction ${pool.transactions.length}/${actualCount}`);
+        
+        // Детальное логирование для больших пулов
+        if (pool.transactions.length % 100 === 0 || pool.transactions.length === actualCount) {
+          console.log(`📊 Pre-signing progress: ${pool.transactions.length}/${actualCount} transactions (${Math.round((pool.transactions.length / actualCount) * 100)}%)`);
+        } else if (pool.transactions.length % 10 === 0) {
+          console.log(`Signed transaction ${pool.transactions.length}/${actualCount}`);
+        }
       } catch (error) {
         console.error(`Error signing transaction ${i + 1}:`, error);
         consecutiveErrors++;
@@ -1247,8 +1262,8 @@ export const useBlockchainUtils = () => {
               const nextNonce = manager.pendingNonce;
               
               // РЕШЕНИЕ ПРОБЛЕМЫ: Добавляем больше транзакций для длинных сессий
-              // 3 потребили -> 20+ добавляем для гарантированного опережения
-              const refillSize = Math.max(25, poolConfig.batchSize * 1.5);
+              // 3 потребили -> 100+ добавляем для гарантированного опережения
+              const refillSize = Math.max(100, poolConfig.batchSize * 3);
               console.log(`🚀 ENHANCED pool: adding ${refillSize} transactions (consumed 3, net growth +${refillSize-3})`);
               console.log(`📊 Pool status before refill: ${pool.transactions.length - pool.currentIndex} remaining`);
               
@@ -1274,7 +1289,7 @@ export const useBlockchainUtils = () => {
             if (embeddedWallet) {
               const manager = getNonceManager(chainId, embeddedWallet.address);
               const nextNonce = manager.pendingNonce;
-              const emergencyRefillSize = Math.max(30, poolConfig.batchSize * 2);
+              const emergencyRefillSize = Math.max(200, poolConfig.batchSize * 6);
               
               console.log(`🆘 EMERGENCY refill: adding ${emergencyRefillSize} transactions`);
               await extendPool(chainId, nextNonce, emergencyRefillSize);
