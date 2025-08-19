@@ -106,10 +106,11 @@ const App = () => {
         noPromptOnSignature: true, // Отключаем промпты для подписи
         showWalletUiOnNotConnected: false, // Не показываем UI если не подключен
         showWalletLoginFirst: false, // Отключаем первоначальное отображение кошелька
+        waitForTransactionConfirmation: false, // Ускоряем транзакции
       },
       
-      // Login methods optimized for gaming
-      loginMethods: ['email', 'wallet', 'google', 'discord', 'twitter'],
+      // Login methods optimized for gaming (prioritize non-wallet methods for embedded wallet creation)
+      loginMethods: ['email', 'google', 'discord', 'twitter', 'wallet'],
       
       // МГНОВЕННЫЕ настройки сети
       defaultChain: megaethTestnet, // MegaETH как приоритетная сеть

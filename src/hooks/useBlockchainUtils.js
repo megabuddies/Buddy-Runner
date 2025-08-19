@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
 
 // Конфигурация сетей
@@ -121,6 +121,7 @@ const safeJsonParse = (data) => {
 export const useBlockchainUtils = () => {
   const { authenticated, user, login, logout, isReady } = usePrivy();
   const { wallets } = useWallets();
+  const { createWallet } = useCreateWallet();
   
   // Состояние
   const [isInitializing, setIsInitializing] = useState(false);
@@ -618,9 +619,71 @@ export const useBlockchainUtils = () => {
     return state?.degradedMode ? state : null;
   };
 
+  // Функция для обеспечения создания embedded wallet
+  const ensureEmbeddedWallet = async () => {
+    if (!authenticated || !user) {
+      console.log('❌ User not authenticated, cannot create embedded wallet');
+      return null;
+    }
+
+    console.log('🔍 Current wallets:', wallets.map(w => ({
+      address: w.address,
+      walletClientType: w.walletClientType,
+      connectorType: w.connectorType
+    })));
+
+    // Проверяем, есть ли уже embedded wallet
+    const existingEmbeddedWallet = wallets.find(wallet => 
+      wallet.walletClientType === 'privy' || 
+      wallet.connectorType === 'embedded' ||
+      wallet.connectorType === 'privy'
+    );
+
+    if (existingEmbeddedWallet) {
+      console.log('✅ Found existing embedded wallet:', existingEmbeddedWallet.address);
+      return existingEmbeddedWallet;
+    }
+
+    // Если embedded wallet не найден, создаем новый
+    console.log('🔧 Creating new embedded wallet...');
+    try {
+      await createWallet();
+      console.log('✅ Embedded wallet creation initiated');
+      
+      // Ждем немного для обновления списка кошельков
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      // Проверяем еще раз
+      const newEmbeddedWallet = wallets.find(wallet => 
+        wallet.walletClientType === 'privy' || 
+        wallet.connectorType === 'embedded' ||
+        wallet.connectorType === 'privy'
+      );
+      
+      if (newEmbeddedWallet) {
+        console.log('✅ New embedded wallet created:', newEmbeddedWallet.address);
+        return newEmbeddedWallet;
+      } else {
+        console.warn('⚠️ Embedded wallet creation may still be in progress');
+        console.log('🔍 Wallets after creation attempt:', wallets.map(w => ({
+          address: w.address,
+          walletClientType: w.walletClientType,
+          connectorType: w.connectorType
+        })));
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Failed to create embedded wallet:', error);
+      if (error.message) {
+        console.error('Error details:', error.message);
+      }
+      return null;
+    }
+  };
+
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
-    if (!authenticated || !wallets.length) {
+    if (!authenticated) {
       return null;
     }
     
@@ -635,12 +698,8 @@ export const useBlockchainUtils = () => {
       return embeddedWallet;
     }
     
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      return wallets[0];
-    }
-    
-
+    // ВАЖНО: НЕ используем внешний кошелек! Только embedded wallets для игры
+    console.warn('🚨 No embedded wallet found. External wallets are not supported for gaming.');
     return null;
   };
 
@@ -2129,22 +2188,27 @@ export const useBlockchainUtils = () => {
       setIsInitializing(true);
       console.log('🚀 Starting instant blockchain initialization for chain:', chainId);
 
-      // Wait for embedded wallet to be created (with retry)
-      let embeddedWallet = null;
-      let retries = 0;
-      const maxRetries = 10;
+      // Ensure embedded wallet is created and available
+      console.log('🔧 Ensuring embedded wallet is available...');
+      let embeddedWallet = await ensureEmbeddedWallet();
       
-      while (!embeddedWallet && retries < maxRetries) {
-        embeddedWallet = getEmbeddedWallet();
-        if (!embeddedWallet) {
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          retries++;
+      if (!embeddedWallet) {
+        // Fallback: wait and retry with existing detection
+        console.log('⏳ Waiting for embedded wallet to be available...');
+        let retries = 0;
+        const maxRetries = 15; // Увеличиваем количество попыток
+        
+        while (!embeddedWallet && retries < maxRetries) {
+          embeddedWallet = getEmbeddedWallet();
+          if (!embeddedWallet) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            retries++;
+          }
         }
       }
 
       if (!embeddedWallet) {
-        throw new Error('No embedded wallet available');
+        throw new Error('No embedded wallet available. Please ensure embedded wallets are enabled in Privy configuration.');
       }
 
 
@@ -2753,6 +2817,7 @@ export const useBlockchainUtils = () => {
     
     // Утилиты
     getEmbeddedWallet,
+    ensureEmbeddedWallet,
     isAuthenticated: authenticated,
     isReady: authenticated && wallets.length > 0,
     

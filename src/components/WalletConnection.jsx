@@ -1,18 +1,46 @@
 import React, { useEffect, useState } from 'react';
-import { useLogin, usePrivy } from '@privy-io/react-auth';
+import { useLogin, usePrivy, useCreateWallet } from '@privy-io/react-auth';
 import './WalletConnection.css';
 
 const WalletConnection = ({ onWalletConnected }) => {
   const { user, authenticated, ready } = usePrivy();
   const { login } = useLogin();
+  const { createWallet } = useCreateWallet();
   const [loadingText, setLoadingText] = useState('INITIALIZING');
   const [dots, setDots] = useState('');
+  const [isCreatingWallet, setIsCreatingWallet] = useState(false);
 
   useEffect(() => {
-    if (authenticated && user) {
-      onWalletConnected();
-    }
-  }, [authenticated, user, onWalletConnected]);
+    const handleAuthentication = async () => {
+      if (authenticated && user && !isCreatingWallet) {
+        setIsCreatingWallet(true);
+        setLoadingText('CREATING GAMING WALLET');
+        
+        try {
+          // Небольшая задержка для обеспечения полной инициализации Privy
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Попытка создать embedded wallet (это безопасно - если он уже существует, ничего не произойдет)
+          console.log('🔧 Ensuring embedded wallet exists for gaming...');
+          await createWallet();
+          console.log('✅ Embedded wallet creation process completed');
+          
+          // Дополнительная задержка для обеспечения готовности кошелька
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          onWalletConnected();
+        } catch (error) {
+          console.log('ℹ️ Embedded wallet may already exist or creation is in progress:', error.message);
+          // Продолжаем в любом случае - возможно, кошелек уже существует
+          onWalletConnected();
+        } finally {
+          setIsCreatingWallet(false);
+        }
+      }
+    };
+
+    handleAuthentication();
+  }, [authenticated, user, onWalletConnected, createWallet, isCreatingWallet]);
 
   useEffect(() => {
     const dotInterval = setInterval(() => {
@@ -23,8 +51,13 @@ const WalletConnection = ({ onWalletConnected }) => {
     }, 500);
 
     const textInterval = setInterval(() => {
-      const texts = ['INITIALIZING', 'LOADING SYSTEMS', 'CONNECTING', 'SYNCING'];
-      setLoadingText(texts[Math.floor(Math.random() * texts.length)]);
+      if (isCreatingWallet) {
+        const texts = ['CREATING GAMING WALLET', 'SETTING UP BLOCKCHAIN', 'INITIALIZING EMBEDDED WALLET', 'PREPARING GAMING MODE'];
+        setLoadingText(texts[Math.floor(Math.random() * texts.length)]);
+      } else {
+        const texts = ['INITIALIZING', 'LOADING SYSTEMS', 'CONNECTING', 'SYNCING'];
+        setLoadingText(texts[Math.floor(Math.random() * texts.length)]);
+      }
     }, 2000);
 
     return () => {
