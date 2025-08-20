@@ -127,6 +127,69 @@ export const useBlockchainUtils = () => {
   const [transactionPending, setTransactionPending] = useState(false);
   const [balance, setBalance] = useState('0');
   const [contractNumber, setContractNumber] = useState(0);
+  
+  // Состояние для отслеживания последнего проверенного кошелька
+  const [lastCheckedWallet, setLastCheckedWallet] = useState(null);
+  const [currentChainId, setCurrentChainId] = useState(null);
+
+  // Автоматическое обновление баланса при изменении кошельков или сети
+  useEffect(() => {
+    if (!authenticated || !wallets.length || !currentChainId) {
+      return;
+    }
+
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      console.log('🔍 No embedded wallet available for balance monitoring');
+      return;
+    }
+
+    // Проверяем, изменился ли кошелек
+    const walletChanged = lastCheckedWallet !== embeddedWallet.address;
+    
+    if (walletChanged) {
+      console.log('👛 Wallet changed, updating balance...', {
+        previous: lastCheckedWallet,
+        current: embeddedWallet.address,
+        chainId: currentChainId
+      });
+      
+      setLastCheckedWallet(embeddedWallet.address);
+      
+      // Обновляем баланс с небольшой задержкой для стабилизации
+      setTimeout(() => {
+        checkBalance(currentChainId).catch(error => {
+          console.warn('Failed to check balance after wallet change:', error);
+        });
+      }, 1000);
+    }
+  }, [authenticated, wallets, currentChainId, lastCheckedWallet]);
+
+  // Периодическое обновление баланса для текущего кошелька
+  useEffect(() => {
+    if (!authenticated || !wallets.length || !currentChainId) {
+      return;
+    }
+
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      return;
+    }
+
+    // Устанавливаем интервал для периодической проверки баланса
+    const balanceCheckInterval = setInterval(() => {
+      // Проверяем баланс только если текущий баланс очень маленький
+      // Это поможет обнаружить поступление токенов из faucet
+      if (parseFloat(balance) < 0.0001) {
+        console.log('🔄 Periodic balance check (low balance detected)');
+        checkBalance(currentChainId).catch(error => {
+          console.warn('Periodic balance check failed:', error);
+        });
+      }
+    }, 10000); // Проверяем каждые 10 секунд
+
+    return () => clearInterval(balanceCheckInterval);
+  }, [authenticated, wallets, currentChainId, balance]);
 
   // РЕВОЛЮЦИОННАЯ система кеширования с долгосрочным хранением
   const clientCache = useRef({});
@@ -1583,6 +1646,29 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Принудительное обновление баланса - полезно после подключения кошелька
+  const forceBalanceUpdate = async (chainId) => {
+    console.log('🔄 Force balance update requested for chain:', chainId);
+    
+    if (!chainId) {
+      chainId = currentChainId;
+    }
+    
+    if (!chainId) {
+      console.warn('No chainId available for balance update');
+      return '0';
+    }
+
+    try {
+      const balanceEth = await checkBalance(chainId);
+      console.log('✅ Force balance update completed:', balanceEth);
+      return balanceEth;
+    } catch (error) {
+      console.error('❌ Force balance update failed:', error);
+      return '0';
+    }
+  };
+
   // Безопасная функция для вызова faucet - ВСЕГДА использует embedded wallet
   const callFaucetSafe = async (chainId) => {
     const embeddedWallet = getEmbeddedWallet();
@@ -1591,7 +1677,36 @@ export const useBlockchainUtils = () => {
     }
     
     console.log('🔒 Safe faucet call - using embedded wallet:', embeddedWallet.address);
-    return callFaucet(embeddedWallet.address, chainId);
+    
+    try {
+      const result = await callFaucet(embeddedWallet.address, chainId);
+      
+      // Агрессивное обновление баланса после успешного faucet вызова
+      console.log('💰 Faucet successful, scheduling balance updates...');
+      
+      // Первое обновление через 3 секунды
+      setTimeout(() => {
+        console.log('🔄 First balance check after faucet');
+        checkBalance(chainId).catch(console.warn);
+      }, 3000);
+      
+      // Второе обновление через 8 секунд
+      setTimeout(() => {
+        console.log('🔄 Second balance check after faucet');
+        checkBalance(chainId).catch(console.warn);
+      }, 8000);
+      
+      // Третье обновление через 15 секунд
+      setTimeout(() => {
+        console.log('🔄 Third balance check after faucet');
+        checkBalance(chainId).catch(console.warn);
+      }, 15000);
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Safe faucet call failed:', error);
+      throw error;
+    }
   };
 
   // РЕВОЛЮЦИОННЫЙ вызов faucet с кешированием и умной обработкой
@@ -2233,6 +2348,9 @@ export const useBlockchainUtils = () => {
       return;
     }
 
+    // Устанавливаем текущий chainId для мониторинга баланса
+    setCurrentChainId(chainId);
+
     try {
       setIsInitializing(true);
       console.log('🚀 Starting instant blockchain initialization for chain:', chainId);
@@ -2856,6 +2974,7 @@ export const useBlockchainUtils = () => {
     initData,
     sendUpdate,
     checkBalance,
+    forceBalanceUpdate,
     callFaucet,
     callFaucetSafe,
     getContractNumber,
