@@ -1652,16 +1652,29 @@ export const useBlockchainUtils = () => {
       if (result.txHash || result.transactionHash) {
         console.log('⏳ Waiting for faucet transaction to be processed...');
         
-        // УЛУЧШЕННОЕ обновление баланса с несколькими попытками
+        // РЕВОЛЮЦИОННОЕ РЕШЕНИЕ: Используем глобальную функцию refetchBalance
         const updateBalanceWithRetries = async (attempt = 1) => {
           try {
-            const newBalance = await checkBalance(chainId);
+            let newBalance;
+            
+            // Приоритет глобальной функции refetchBalance (Wagmi-like)
+            if (window.refetchBalance) {
+              console.log(`🌐 Using global refetchBalance (attempt ${attempt})`);
+              newBalance = await window.refetchBalance();
+            } else {
+              // Fallback на старый метод
+              console.log(`🔄 Fallback to checkBalance (attempt ${attempt})`);
+              newBalance = await checkBalance(chainId);
+            }
+            
             console.log(`✅ Balance updated after faucet transaction (attempt ${attempt}): ${newBalance} ETH`);
             
             // Если баланс все еще 0, попробуем еще раз через 2 секунды (максимум 3 попытки)
             if (parseFloat(newBalance) === 0 && attempt < 3) {
               console.log(`🔄 Balance still 0, retrying in 2 seconds (attempt ${attempt + 1}/3)...`);
               setTimeout(() => updateBalanceWithRetries(attempt + 1), 2000);
+            } else if (parseFloat(newBalance) >= 0.00005) {
+              console.log('🎉 Sufficient balance achieved! Auto-balance hook will handle reinitialization');
             }
           } catch (error) {
             console.warn(`Failed to update balance after faucet (attempt ${attempt}):`, error);
@@ -1672,8 +1685,8 @@ export const useBlockchainUtils = () => {
           }
         };
         
-        // Первая попытка через 2 секунды (быстрее чем раньше)
-        setTimeout(() => updateBalanceWithRetries(1), 2000);
+        // Первая попытка через 1.5 секунды (еще быстрее)
+        setTimeout(() => updateBalanceWithRetries(1), 1500);
       }
       
       return {
@@ -2272,25 +2285,36 @@ export const useBlockchainUtils = () => {
             .then(() => {
               console.log('✅ Background faucet completed');
               
-              // УЛУЧШЕННОЕ обновление баланса с несколькими попытками
+              // РЕВОЛЮЦИОННОЕ РЕШЕНИЕ: Используем глобальную функцию refetchBalance для фонового faucet
               const updateBalanceAfterFaucet = async (attempt = 1) => {
                 try {
-                  const newBalance = await checkBalance(chainId);
+                  let newBalance;
+                  
+                  // Приоритет глобальной функции refetchBalance
+                  if (window.refetchBalance) {
+                    console.log(`🌐 Background: using global refetchBalance (attempt ${attempt})`);
+                    newBalance = await window.refetchBalance();
+                  } else {
+                    // Fallback на старый метод
+                    console.log(`🔄 Background: fallback to checkBalance (attempt ${attempt})`);
+                    newBalance = await checkBalance(chainId);
+                  }
+                  
                   console.log(`💰 Background balance check (attempt ${attempt}): ${newBalance} ETH`);
                   
                   // Если баланс все еще низкий, попробуем еще раз
                   if (parseFloat(newBalance) < 0.00005 && attempt < 3) {
-                    console.log(`🔄 Balance still low, retrying in 3 seconds (attempt ${attempt + 1}/3)...`);
-                    setTimeout(() => updateBalanceAfterFaucet(attempt + 1), 3000);
-                  } else {
-                    console.log('✅ Balance successfully updated after background faucet');
+                    console.log(`🔄 Background: balance still low, retrying in 2.5 seconds (attempt ${attempt + 1}/3)...`);
+                    setTimeout(() => updateBalanceAfterFaucet(attempt + 1), 2500);
+                  } else if (parseFloat(newBalance) >= 0.00005) {
+                    console.log('✅ Background: balance successfully updated! Auto-balance will handle reinitialization');
                     // Обновляем nonce после успешного faucet
                     return getNextNonce(chainId, embeddedWallet.address, true);
                   }
                 } catch (error) {
                   console.warn(`Failed background balance update (attempt ${attempt}):`, error);
                   if (attempt < 3) {
-                    setTimeout(() => updateBalanceAfterFaucet(attempt + 1), 5000);
+                    setTimeout(() => updateBalanceAfterFaucet(attempt + 1), 4000);
                   }
                 }
               };

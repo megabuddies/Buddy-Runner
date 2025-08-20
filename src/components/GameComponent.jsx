@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { usePrivy, useWallets, useLogin } from '@privy-io/react-auth';
 import { useBlockchainUtils } from '../hooks/useBlockchainUtils';
+import { useAutoBalance } from '../hooks/useAutoBalance';
 import PrivyWalletStatus from './PrivyWalletStatus';
 import TransactionNotifications from './TransactionNotifications';
 import Player from '../game/Player.js';
@@ -22,7 +23,6 @@ const GameComponent = ({ selectedNetwork }) => {
     isInitializing,
     transactionPending,
     transactionPendingCount,
-    balance,
     contractNumber,
     initData,
     sendUpdate,
@@ -33,6 +33,15 @@ const GameComponent = ({ selectedNetwork }) => {
     callFaucet,
     getPoolStatus // Для мониторинга pre-signed пула
   } = useBlockchainUtils();
+
+  // НОВЫЙ: Используем автоматическое отслеживание баланса (Wagmi-like)
+  const {
+    balance,
+    isLoading: balanceLoading,
+    refetch: refetchBalance,
+    hasSufficientBalance,
+    lastUpdated: balanceLastUpdated
+  } = useAutoBalance(selectedNetwork?.id);
 
   const [blockchainStatus, setBlockchainStatus] = useState({
     initialized: false,
@@ -316,25 +325,31 @@ const GameComponent = ({ selectedNetwork }) => {
       
       const result = await callFaucet(embeddedWallet.address, selectedNetwork.id);
       
-      // УЛУЧШЕННОЕ обновление баланса с немедленной проверкой
+      // РЕВОЛЮЦИОННОЕ РЕШЕНИЕ: Используем глобальную функцию refetchBalance (Wagmi-like)
       const updateBalanceAfterManualFaucet = async (attempt = 1) => {
         try {
-          const newBalance = await checkBalance(selectedNetwork.id);
-          console.log(`💰 Manual faucet balance check (attempt ${attempt}): ${newBalance} ETH`);
+          console.log(`🔄 Manual faucet: triggering auto-balance refetch (attempt ${attempt})...`);
           
-          // Если баланс все еще 0 и это не последняя попытка
-          if (parseFloat(newBalance) === 0 && attempt < 3) {
-            console.log(`🔄 Balance still 0 after manual faucet, retrying in 2 seconds (attempt ${attempt + 1}/3)...`);
+          // Используем глобальную функцию для немедленного обновления баланса
+          if (window.refetchBalance) {
+            const newBalance = await window.refetchBalance();
+            console.log(`💰 Global refetch result (attempt ${attempt}): ${newBalance} ETH`);
+            
+            // Если баланс достаточный, auto-balance hook автоматически запустит переинициализацию
+            if (parseFloat(newBalance) >= 0.00005) {
+              console.log('✅ Manual faucet successful! Auto-balance will handle reinitialization');
+              return; // Позволяем auto-balance хуку обработать переинициализацию
+            }
+          } else {
+            // Fallback: используем старый метод если глобальная функция недоступна
+            const newBalance = await checkBalance(selectedNetwork.id);
+            console.log(`💰 Fallback balance check (attempt ${attempt}): ${newBalance} ETH`);
+          }
+          
+          // Retry logic если баланс все еще недостаточный
+          if (attempt < 3) {
+            console.log(`🔄 Balance still insufficient, retrying in 2 seconds (attempt ${attempt + 1}/3)...`);
             setTimeout(() => updateBalanceAfterManualFaucet(attempt + 1), 2000);
-          } else if (parseFloat(newBalance) > 0) {
-            console.log('✅ Manual faucet successful! Balance updated, triggering blockchain reinit...');
-            // Принудительно переинициализируем блокчейн если баланс обновился
-            setTimeout(() => {
-              if (!blockchainStatus.initialized) {
-                console.log('🔄 Forcing blockchain reinitialization after manual faucet...');
-                initializeBlockchain();
-              }
-            }, 500);
           }
         } catch (error) {
           console.warn(`Failed to update balance after manual faucet (attempt ${attempt}):`, error);
@@ -344,7 +359,7 @@ const GameComponent = ({ selectedNetwork }) => {
         }
       };
       
-      // Начинаем проверку баланса через 1 секунду
+      // Начинаем обновление баланса через 1 секунду
       setTimeout(() => updateBalanceAfterManualFaucet(1), 1000);
 
       alert('✅ Faucet request successful! Funds should arrive in your game wallet shortly.');
@@ -421,21 +436,35 @@ const GameComponent = ({ selectedNetwork }) => {
 
   // НОВЫЙ: Переинициализация блокчейна при изменении баланса (после faucet)
   useEffect(() => {
-    // Только для блокчейн сетей и только если уже было инициализировано
+    // Только для блокчейн сетей
     if (selectedNetwork && !selectedNetwork.isWeb2 && isReady && authenticated && wallets.length > 0) {
-      // Если баланс изменился с 0 на положительное значение, переинициализируем
-      const currentBalance = parseFloat(balance);
-      if (currentBalance > 0 && !blockchainStatus.initialized) {
-        console.log('🔄 Balance updated after faucet, reinitializing blockchain...');
-        console.log('💰 New balance:', balance, 'ETH');
+      // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Используем hasSufficientBalance из автоматического хука
+      if (hasSufficientBalance && !blockchainStatus.initialized) {
+        console.log('🔄 Sufficient balance detected via auto-balance, reinitializing blockchain...');
+        console.log('💰 Current balance:', balance, 'ETH');
+        console.log('📅 Balance last updated:', new Date(balanceLastUpdated).toLocaleTimeString());
         
-        // Небольшая задержка для уверенности что транзакция подтвердилась
-        setTimeout(() => {
-          initializeBlockchain();
-        }, 1000);
+        // Принудительная переинициализация с коротким таймаутом
+        setTimeout(async () => {
+          try {
+            console.log('⚡ Force-calling initData with balance:', balance);
+            await initData(selectedNetwork.id, true); // forceReinit = true
+            
+            // Переинициализируем локальное состояние игры
+            setTimeout(() => {
+              initializeBlockchain();
+            }, 300);
+            
+            console.log('✅ Auto-balance triggered reinitialization completed!');
+          } catch (error) {
+            console.error('❌ Failed auto-balance reinitialization:', error);
+            // Fallback
+            initializeBlockchain();
+          }
+        }, 500);
       }
     }
-  }, [balance, selectedNetwork, isReady, authenticated, wallets, blockchainStatus.initialized]);
+  }, [hasSufficientBalance, balance, balanceLastUpdated, selectedNetwork, isReady, authenticated, wallets, blockchainStatus.initialized]);
 
   // Update blockchain status from hook
   useEffect(() => {
@@ -862,7 +891,15 @@ const GameComponent = ({ selectedNetwork }) => {
             <div className="status-details">
               <div className="status-item">
                 <span className="label">Balance:</span>
-                <span className="value">{balance} ETH</span>
+                <span className="value">
+                  {balance} ETH
+                  {/* Индикация загрузки баланса */}
+                  {balanceLoading && (
+                    <span className="balance-loading" title="Updating balance...">
+                      🔄
+                    </span>
+                  )}
+                </span>
                 {/* Индикация состояния после faucet */}
                 {parseFloat(balance) > 0 && !blockchainStatus.initialized && (
                   <span className="status-indicator initializing" title="Initializing blockchain after faucet...">
@@ -872,6 +909,12 @@ const GameComponent = ({ selectedNetwork }) => {
                 {parseFloat(balance) > 0 && blockchainStatus.initialized && (
                   <span className="status-indicator ready" title="Blockchain ready for gaming">
                     ✅ Ready
+                  </span>
+                )}
+                {/* Показываем время последнего обновления баланса */}
+                {balanceLastUpdated && !balanceLoading && (
+                  <span className="balance-timestamp" title={`Last updated: ${new Date(balanceLastUpdated).toLocaleString()}`}>
+                    📅 {new Date(balanceLastUpdated).toLocaleTimeString()}
                   </span>
                 )}
               </div>
