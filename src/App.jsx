@@ -4,10 +4,14 @@ import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
+import PrivyDebugger from './components/PrivyDebugger';
 import './App.css';
 
 const App = () => {
-  const appId = 'cme84q0og02aalc0bh9blzwa9';
+  // Используем App ID из переменной окружения или fallback на известный рабочий ID
+  const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cm25q62mj00nks8j5lxk4qyly';
+  console.log('Privy App ID:', appId);
+  
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
 
@@ -85,7 +89,7 @@ const App = () => {
 
   // Privy configuration optimized for seamless gaming experience
   const privyConfig = {
-    appId: "cm25q62mj00nks8j5lxk4qyly",
+    // appId теперь передается отдельно в PrivyProvider
     config: {
       // Appearance
       appearance: {
@@ -102,14 +106,18 @@ const App = () => {
       embeddedWallets: {
         createOnLogin: 'all-users', // Автоматическое создание для всех пользователей
         requireUserPasswordOnCreate: false, // Убираем трение пароля
-        prependWithWalletUi: false, // Не показываем дополнительные UI элементы
         noPromptOnSignature: true, // Отключаем промпты для подписи
-        showWalletUiOnNotConnected: false, // Не показываем UI если не подключен
-        showWalletLoginFirst: false, // Отключаем первоначальное отображение кошелька
       },
       
       // Login methods optimized for gaming
       loginMethods: ['email', 'wallet', 'google', 'discord', 'twitter'],
+      
+      // Дополнительные настройки для embedded wallets
+      externalWallets: {
+        coinbaseWallet: {
+          connectionOptions: 'all',
+        },
+      },
       
       // МГНОВЕННЫЕ настройки сети
       defaultChain: megaethTestnet, // MegaETH как приоритетная сеть
@@ -256,7 +264,7 @@ const App = () => {
   return (
     <PrivyProvider
       appId={appId}
-      config={privyConfig}
+      config={privyConfig.config}
     >
       <div className="app">
         {gameState === 'network-selection' ? (
@@ -315,6 +323,8 @@ const App = () => {
           </>
         )}
       </div>
+      {/* Временный компонент для отладки Privy */}
+      <PrivyDebugger />
     </PrivyProvider>
   );
 };
