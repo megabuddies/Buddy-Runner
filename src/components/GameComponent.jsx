@@ -23,6 +23,7 @@ const GameComponent = ({ selectedNetwork }) => {
     transactionPending,
     transactionPendingCount,
     balance,
+    forceUpdateCounter,
     contractNumber,
     initData,
     sendUpdate,
@@ -100,6 +101,16 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log('Initializing blockchain for network:', selectedNetwork.name);
       
       await initData(selectedNetwork.id);
+      
+      // ПРИНУДИТЕЛЬНОЕ обновление баланса после инициализации
+      console.log('🔄 GameComponent: Force balance update after blockchain init');
+      setTimeout(() => {
+        checkBalance(selectedNetwork.id).then(newBalance => {
+          console.log('✅ GameComponent: Balance updated after init:', newBalance);
+        }).catch(error => {
+          console.warn('GameComponent: Balance update failed after init:', error);
+        });
+      }, 2000);
       
       // Получаем текущее состояние контракта
       const currentNumber = await getContractNumber(selectedNetwork.id);
@@ -403,6 +414,19 @@ const GameComponent = ({ selectedNetwork }) => {
       }));
     }
   }, [transactionPending, selectedNetwork, getPoolStatus]);
+
+  // Отслеживание принудительных обновлений баланса
+  useEffect(() => {
+    console.log('🔄 GameComponent: forceUpdateCounter changed:', forceUpdateCounter);
+    console.log('🔄 GameComponent: Current balance:', balance);
+    
+    const balanceNum = parseFloat(balance);
+    if (balanceNum >= 0.00005) {
+      console.log('✅ GameComponent: Balance sufficient for gaming!');
+    } else {
+      console.log('⚠️ GameComponent: Balance still insufficient:', balance);
+    }
+  }, [forceUpdateCounter, balance]);
 
   useEffect(() => {
     const canvas = canvasRef.current;

@@ -131,6 +131,9 @@ export const useBlockchainUtils = () => {
   // Состояние для отслеживания последнего проверенного кошелька
   const [lastCheckedWallet, setLastCheckedWallet] = useState(null);
   const [currentChainId, setCurrentChainId] = useState(null);
+  
+  // Состояние для принудительного перерендера UI
+  const [forceUpdateCounter, setForceUpdateCounter] = useState(0);
 
   // Автоматическое обновление баланса при изменении кошельков или сети
   useEffect(() => {
@@ -156,12 +159,32 @@ export const useBlockchainUtils = () => {
       
       setLastCheckedWallet(embeddedWallet.address);
       
-      // Обновляем баланс с небольшой задержкой для стабилизации
+      // АГРЕССИВНОЕ обновление баланса для решения проблемы с перезагрузкой страницы
+      console.log('🚀 Starting aggressive balance update sequence...');
+      
+      // Первое обновление немедленно
       setTimeout(() => {
+        console.log('🔄 Immediate balance check after wallet change');
         checkBalance(currentChainId).catch(error => {
-          console.warn('Failed to check balance after wallet change:', error);
+          console.warn('Immediate balance check failed:', error);
         });
-      }, 1000);
+      }, 500);
+      
+      // Второе обновление через 2 секунды
+      setTimeout(() => {
+        console.log('🔄 Follow-up balance check after wallet change');
+        checkBalance(currentChainId).catch(error => {
+          console.warn('Follow-up balance check failed:', error);
+        });
+      }, 2000);
+      
+      // Третье обновление через 5 секунд
+      setTimeout(() => {
+        console.log('🔄 Final balance check after wallet change');
+        checkBalance(currentChainId).catch(error => {
+          console.warn('Final balance check failed:', error);
+        });
+      }, 5000);
     }
   }, [authenticated, wallets, currentChainId, lastCheckedWallet]);
 
@@ -190,6 +213,26 @@ export const useBlockchainUtils = () => {
 
     return () => clearInterval(balanceCheckInterval);
   }, [authenticated, wallets, currentChainId, balance]);
+
+  // Отладочный useEffect для отслеживания изменений баланса
+  useEffect(() => {
+    console.log('🔍 Balance state changed:', {
+      balance,
+      authenticated,
+      walletsCount: wallets.length,
+      currentChainId,
+      timestamp: new Date().toISOString()
+    });
+    
+    const balanceNum = parseFloat(balance);
+    if (balanceNum >= 0.00005) {
+      console.log('✅ BALANCE SUFFICIENT FOR GAMING!', balance, 'ETH');
+    } else if (balanceNum > 0) {
+      console.log('⚠️ Balance too low for gaming:', balance, 'ETH (need >= 0.00005)');
+    } else {
+      console.log('❌ No balance detected:', balance);
+    }
+  }, [balance, authenticated, wallets.length, currentChainId]);
 
   // РЕВОЛЮЦИОННАЯ система кеширования с долгосрочным хранением
   const clientCache = useRef({});
@@ -1635,8 +1678,27 @@ export const useBlockchainUtils = () => {
       });
       
       const balanceEth = (Number(balance) / 10**18).toFixed(4);
+      
+      // Принудительное обновление состояния с дополнительными проверками
+      console.log(`💰 checkBalance: Updating balance from ${balance} to ${balanceEth} ETH for ${embeddedWallet.address}`);
       setBalance(balanceEth);
-      console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
+      
+      // Дополнительная проверка - если баланс изменился значительно, логируем это
+      const currentBalanceNum = parseFloat(balanceEth);
+      if (currentBalanceNum >= 0.00005) {
+        console.log('🎉 SUFFICIENT BALANCE DETECTED! Game should be ready to play.');
+        console.log(`🎯 Current balance: ${balanceEth} ETH (>= 0.00005 required)`);
+        
+        // Принудительное обновление через небольшую задержку для React
+        setTimeout(() => {
+          setBalance(balanceEth);
+          setForceUpdateCounter(prev => prev + 1); // Принудительный перерендер
+          console.log('🔄 Force re-render with balance:', balanceEth, 'counter:', forceUpdateCounter + 1);
+        }, 100);
+      } else {
+        console.log('⚠️ Balance still insufficient:', balanceEth, 'ETH (< 0.00005 required)');
+      }
+      
       return balanceEth;
     } catch (error) {
       console.error('Error checking balance:', error);
@@ -2968,6 +3030,7 @@ export const useBlockchainUtils = () => {
     transactionPending,
     transactionPendingCount: transactionPendingCount.current, // Добавляем счетчик pending транзакций
     balance,
+    forceUpdateCounter, // Для принудительного перерендера компонентов
     contractNumber,
     
     // Методы
