@@ -311,15 +311,43 @@ const GameComponent = ({ selectedNetwork }) => {
         return;
       }
 
-      console.log('Manual faucet request for:', embeddedWallet.address);
-      await callFaucet(embeddedWallet.address, selectedNetwork.id);
+      console.log('Manual faucet request for embedded wallet:', embeddedWallet.address);
+      console.log('Wallet type:', embeddedWallet.walletClientType);
       
-      // Wait and refresh balance
-      setTimeout(async () => {
-        await checkBalance(selectedNetwork.id);
-      }, 3000);
+      const result = await callFaucet(embeddedWallet.address, selectedNetwork.id);
+      
+      // УЛУЧШЕННОЕ обновление баланса с немедленной проверкой
+      const updateBalanceAfterManualFaucet = async (attempt = 1) => {
+        try {
+          const newBalance = await checkBalance(selectedNetwork.id);
+          console.log(`💰 Manual faucet balance check (attempt ${attempt}): ${newBalance} ETH`);
+          
+          // Если баланс все еще 0 и это не последняя попытка
+          if (parseFloat(newBalance) === 0 && attempt < 3) {
+            console.log(`🔄 Balance still 0 after manual faucet, retrying in 2 seconds (attempt ${attempt + 1}/3)...`);
+            setTimeout(() => updateBalanceAfterManualFaucet(attempt + 1), 2000);
+          } else if (parseFloat(newBalance) > 0) {
+            console.log('✅ Manual faucet successful! Balance updated, triggering blockchain reinit...');
+            // Принудительно переинициализируем блокчейн если баланс обновился
+            setTimeout(() => {
+              if (!blockchainStatus.initialized) {
+                console.log('🔄 Forcing blockchain reinitialization after manual faucet...');
+                initializeBlockchain();
+              }
+            }, 500);
+          }
+        } catch (error) {
+          console.warn(`Failed to update balance after manual faucet (attempt ${attempt}):`, error);
+          if (attempt < 3) {
+            setTimeout(() => updateBalanceAfterManualFaucet(attempt + 1), 3000);
+          }
+        }
+      };
+      
+      // Начинаем проверку баланса через 1 секунду
+      setTimeout(() => updateBalanceAfterManualFaucet(1), 1000);
 
-      alert('Faucet request successful! Funds should arrive shortly.');
+      alert('✅ Faucet request successful! Funds should arrive in your game wallet shortly.');
     } catch (error) {
       console.error('Manual faucet error:', error);
       alert(`Faucet request failed: ${error.message}`);
@@ -390,6 +418,24 @@ const GameComponent = ({ selectedNetwork }) => {
 
     }
   }, [selectedNetwork, isReady, authenticated, wallets]);
+
+  // НОВЫЙ: Переинициализация блокчейна при изменении баланса (после faucet)
+  useEffect(() => {
+    // Только для блокчейн сетей и только если уже было инициализировано
+    if (selectedNetwork && !selectedNetwork.isWeb2 && isReady && authenticated && wallets.length > 0) {
+      // Если баланс изменился с 0 на положительное значение, переинициализируем
+      const currentBalance = parseFloat(balance);
+      if (currentBalance > 0 && !blockchainStatus.initialized) {
+        console.log('🔄 Balance updated after faucet, reinitializing blockchain...');
+        console.log('💰 New balance:', balance, 'ETH');
+        
+        // Небольшая задержка для уверенности что транзакция подтвердилась
+        setTimeout(() => {
+          initializeBlockchain();
+        }, 1000);
+      }
+    }
+  }, [balance, selectedNetwork, isReady, authenticated, wallets, blockchainStatus.initialized]);
 
   // Update blockchain status from hook
   useEffect(() => {
@@ -817,6 +863,17 @@ const GameComponent = ({ selectedNetwork }) => {
               <div className="status-item">
                 <span className="label">Balance:</span>
                 <span className="value">{balance} ETH</span>
+                {/* Индикация состояния после faucet */}
+                {parseFloat(balance) > 0 && !blockchainStatus.initialized && (
+                  <span className="status-indicator initializing" title="Initializing blockchain after faucet...">
+                    🔄 Initializing...
+                  </span>
+                )}
+                {parseFloat(balance) > 0 && blockchainStatus.initialized && (
+                  <span className="status-indicator ready" title="Blockchain ready for gaming">
+                    ✅ Ready
+                  </span>
+                )}
               </div>
               <div className="status-item">
                 <span className="label">Contract #:</span>

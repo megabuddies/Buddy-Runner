@@ -1649,18 +1649,31 @@ export const useBlockchainUtils = () => {
       console.log('💰 Faucet success:', result);
       
       // Если faucet возвращает txHash, ждем немного и обновляем баланс
-      if (result.txHash) {
+      if (result.txHash || result.transactionHash) {
         console.log('⏳ Waiting for faucet transaction to be processed...');
         
-        // Асинхронно обновляем баланс через 3 секунды
-        setTimeout(async () => {
+        // УЛУЧШЕННОЕ обновление баланса с несколькими попытками
+        const updateBalanceWithRetries = async (attempt = 1) => {
           try {
-            await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
+            const newBalance = await checkBalance(chainId);
+            console.log(`✅ Balance updated after faucet transaction (attempt ${attempt}): ${newBalance} ETH`);
+            
+            // Если баланс все еще 0, попробуем еще раз через 2 секунды (максимум 3 попытки)
+            if (parseFloat(newBalance) === 0 && attempt < 3) {
+              console.log(`🔄 Balance still 0, retrying in 2 seconds (attempt ${attempt + 1}/3)...`);
+              setTimeout(() => updateBalanceWithRetries(attempt + 1), 2000);
+            }
           } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
+            console.warn(`Failed to update balance after faucet (attempt ${attempt}):`, error);
+            // Попытаемся еще раз если это первая попытка
+            if (attempt === 1) {
+              setTimeout(() => updateBalanceWithRetries(2), 3000);
+            }
           }
-        }, 3000);
+        };
+        
+        // Первая попытка через 2 секунды (быстрее чем раньше)
+        setTimeout(() => updateBalanceWithRetries(1), 2000);
       }
       
       return {
@@ -2244,14 +2257,36 @@ export const useBlockchainUtils = () => {
         if (parseFloat(currentBalance) < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
+          // НЕБЛОКИРУЮЩИЙ faucet вызов с улучшенным обновлением баланса
           callFaucet(embeddedWallet.address, chainId)
             .then(() => {
               console.log('✅ Background faucet completed');
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
-              // Обновляем nonce после faucet
-              return getNextNonce(chainId, embeddedWallet.address, true);
+              
+              // УЛУЧШЕННОЕ обновление баланса с несколькими попытками
+              const updateBalanceAfterFaucet = async (attempt = 1) => {
+                try {
+                  const newBalance = await checkBalance(chainId);
+                  console.log(`💰 Background balance check (attempt ${attempt}): ${newBalance} ETH`);
+                  
+                  // Если баланс все еще низкий, попробуем еще раз
+                  if (parseFloat(newBalance) < 0.00005 && attempt < 3) {
+                    console.log(`🔄 Balance still low, retrying in 3 seconds (attempt ${attempt + 1}/3)...`);
+                    setTimeout(() => updateBalanceAfterFaucet(attempt + 1), 3000);
+                  } else {
+                    console.log('✅ Balance successfully updated after background faucet');
+                    // Обновляем nonce после успешного faucet
+                    return getNextNonce(chainId, embeddedWallet.address, true);
+                  }
+                } catch (error) {
+                  console.warn(`Failed background balance update (attempt ${attempt}):`, error);
+                  if (attempt < 3) {
+                    setTimeout(() => updateBalanceAfterFaucet(attempt + 1), 5000);
+                  }
+                }
+              };
+              
+              // Начинаем проверку баланса через 3 секунды
+              setTimeout(() => updateBalanceAfterFaucet(1), 3000);
             })
             .catch(faucetError => {
               console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
