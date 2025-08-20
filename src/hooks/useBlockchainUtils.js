@@ -2188,10 +2188,20 @@ export const useBlockchainUtils = () => {
   };
 
   // РЕВОЛЮЦИОННАЯ неблокирующая инициализация данных для instant gaming
-  const initData = async (chainId) => {
+  const initData = async (chainId, forceReinit = false) => {
     const chainKey = chainId.toString();
-    if (isInitialized.current[chainKey] || isInitializing) {
+    
+    // Разрешаем переинициализацию если:
+    // 1. Явно запрошена (forceReinit = true)
+    // 2. Или если это первая инициализация
+    if (!forceReinit && (isInitialized.current[chainKey] || isInitializing)) {
+      console.log('⏭️ Skipping initData - already initialized or in progress');
       return;
+    }
+    
+    if (forceReinit) {
+      console.log('🔄 Force reinitializing blockchain data...');
+      isInitialized.current[chainKey] = false; // Сбрасываем флаг инициализации
     }
 
     try {
