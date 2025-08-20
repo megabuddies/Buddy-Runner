@@ -110,7 +110,9 @@ const PrivyDebugger = () => {
       )}
 
       <div style={{ marginTop: '10px', fontSize: '10px', opacity: 0.7 }}>
-        App ID: {import.meta.env.VITE_PRIVY_APP_ID || 'Using default'}
+        App ID: cme84q0og02aalc0bh9blzwa9 (hardcoded)
+        <br />
+        Env: {import.meta.env.VITE_PRIVY_APP_ID || 'Not set'}
       </div>
     </div>
   );

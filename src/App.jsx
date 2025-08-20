@@ -8,8 +8,9 @@ import PrivyDebugger from './components/PrivyDebugger';
 import './App.css';
 
 const App = () => {
-  // Используем App ID из переменной окружения или fallback на рабочий ID
-  const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cme84q0og02aalc0bh9blzwa9';
+  // ВРЕМЕННО: Используем только рабочий App ID, пока не исправлена переменная в Vercel
+  // const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cme84q0og02aalc0bh9blzwa9';
+  const appId = 'cme84q0og02aalc0bh9blzwa9'; // Hardcoded временно из-за неверной env переменной
   console.log('Privy App ID:', appId);
   
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
