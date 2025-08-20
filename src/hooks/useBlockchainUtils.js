@@ -635,12 +635,9 @@ export const useBlockchainUtils = () => {
       return embeddedWallet;
     }
     
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      return wallets[0];
-    }
-    
-
+    // ИСПРАВЛЕНИЕ: НЕ возвращаем внешний кошелек как embedded
+    // Для игры должен использоваться только embedded кошелек Privy
+    console.warn('🚨 No Privy embedded wallet found. External wallets should not be used for game transactions.');
     return null;
   };
 
@@ -1554,6 +1551,18 @@ export const useBlockchainUtils = () => {
     const FAUCET_COOLDOWN = 5 * 60 * 1000; // 5 минут между вызовами
     
     try {
+      // КРИТИЧЕСКАЯ ПРОВЕРКА: убеждаемся, что адрес принадлежит embedded кошельку
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        throw new Error('🚨 Faucet can only be used with Privy embedded wallet. Please create or connect your game wallet.');
+      }
+      
+      if (embeddedWallet.address.toLowerCase() !== address.toLowerCase()) {
+        throw new Error('🚨 Security error: Faucet address mismatch. Only embedded wallet can receive funds.');
+      }
+      
+      console.log('✅ Faucet security check passed: using embedded wallet address');
+      
       // Проверяем кеш последнего вызова faucet
       const lastFaucetCall = localStorage.getItem(cacheKey);
       if (lastFaucetCall) {
