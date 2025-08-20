@@ -7,7 +7,7 @@ import WalletConnection from './components/WalletConnection';
 import './App.css';
 
 const App = () => {
-  const appId = 'cme84q0og02aalc0bh9blzwa9';
+  const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cm25q62mj00nks8j5lxk4qyly';
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
 
@@ -83,41 +83,57 @@ const App = () => {
     },
   };
 
+  const abstractTestnet = {
+    id: 11124, // 0x2B74 in hex
+    name: 'Abstract Testnet',
+    network: 'abstract-testnet',
+    nativeCurrency: {
+      name: 'Ether',
+      symbol: 'ETH',
+      decimals: 18,
+    },
+    rpcUrls: {
+      default: {
+        http: ['https://api.testnet.abs.xyz'],
+      },
+    },
+    blockExplorers: {
+      default: {
+        name: 'Abstract Explorer',
+        url: 'https://explorer.testnet.abs.xyz',
+      },
+    },
+  };
+
   // Privy configuration optimized for seamless gaming experience
   const privyConfig = {
-    appId: "cm25q62mj00nks8j5lxk4qyly",
-    config: {
-      // Appearance
-      appearance: {
-        theme: 'dark',
-        accentColor: '#1391ff',
-        logo: 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&h=100&fit=crop&crop=center',
-        walletChainType: 'ethereum-and-solana',
-        showWalletLoginFirst: false,
-        showWalletUiOnNotConnected: false, // Отключаем UI кошелька
-        showWalletUi: false, // Полностью отключаем UI кошелька
-      },
-      
-      // РЕВОЛЮЦИОННАЯ конфигурация Embedded Wallets для нулевого трения
-      embeddedWallets: {
-        createOnLogin: 'all-users', // Автоматическое создание для всех пользователей
-        requireUserPasswordOnCreate: false, // Убираем трение пароля
-        prependWithWalletUi: false, // Не показываем дополнительные UI элементы
-        noPromptOnSignature: true, // Отключаем промпты для подписи
-        showWalletUiOnNotConnected: false, // Не показываем UI если не подключен
-        showWalletLoginFirst: false, // Отключаем первоначальное отображение кошелька
-      },
-      
-      // Login methods optimized for gaming
-      loginMethods: ['email', 'wallet', 'google', 'discord', 'twitter'],
-      
-      // МГНОВЕННЫЕ настройки сети
-      defaultChain: megaethTestnet, // MegaETH как приоритетная сеть
-      supportedChains: [
+    // Appearance
+    appearance: {
+      theme: 'dark',
+      accentColor: '#1391ff',
+      logo: 'https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?w=100&h=100&fit=crop&crop=center',
+      walletChainType: 'ethereum-only',
+      showWalletLoginFirst: false,
+    },
+    
+    // EMBEDDED WALLETS - Правильная конфигурация для автоматического создания
+    embeddedWallets: {
+      createOnLogin: 'all-users', // Автоматическое создание для всех пользователей
+      requireUserPasswordOnCreate: false, // Убираем необходимость пароля
+      noPromptOnSignature: false, // Оставляем промпты для безопасности
+    },
+    
+    // Login methods optimized for gaming
+    loginMethods: ['email', 'wallet', 'google', 'discord', 'twitter'],
+    
+    // МГНОВЕННЫЕ настройки сети
+    defaultChain: megaethTestnet, // MegaETH как приоритетная сеть
+    supportedChains: [
         megaethTestnet,
         foundryNetwork,
         somniaTestnet,
         riseTestnet,
+        abstractTestnet,
         {
           id: 84532, // Base Sepolia
           name: 'Base Sepolia',
@@ -202,21 +218,20 @@ const App = () => {
             },
           },
         },
-      ],
-      
-      // Оптимизация для Real-Time Gaming
-      walletConnectCloudProjectId: process.env.REACT_APP_WALLETCONNECT_PROJECT_ID || "default",
-      
-      // УЛУЧШЕННЫЕ настройки для минимального трения
-      legal: {
-        termsAndConditionsUrl: '/terms',
-        privacyPolicyUrl: '/privacy',
-      },
-      
-      // Автоматические разрешения для игры 
-      mfa: {
-        noPromptOnMfaRequired: false
-      }
+    ],
+    
+    // Оптимизация для Real-Time Gaming
+    walletConnectCloudProjectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "default",
+    
+    // УЛУЧШЕННЫЕ настройки для минимального трения
+    legal: {
+      termsAndConditionsUrl: '/terms',
+      privacyPolicyUrl: '/privacy',
+    },
+    
+    // Автоматические разрешения для игры 
+    mfa: {
+      noPromptOnMfaRequired: false
     }
   };
 

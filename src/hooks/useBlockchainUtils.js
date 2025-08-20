@@ -67,6 +67,21 @@ const NETWORK_CONFIGS = {
       request: 30000
     },
     maxConnections: 2,
+  },
+  11124: { // Abstract Testnet
+    name: 'Abstract Testnet',
+    rpcUrl: 'https://api.testnet.abs.xyz',
+    fallbackRpcUrls: ['https://api.testnet.abs.xyz'],
+    contractAddress: '0xb34cac1135c27ec810e7e6880325085783c1a7e0',
+    faucetAddress: '0x76b71a17d82232fd29aca475d14ed596c67c4b85',
+    chainId: 11124,
+    sendMethod: 'eth_sendRawTransaction',
+    connectionTimeouts: {
+      initial: 15000,
+      retry: 5000,
+      request: 20000
+    },
+    maxConnections: 2,
   }
 };
 

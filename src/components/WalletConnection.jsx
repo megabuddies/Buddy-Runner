@@ -1,18 +1,44 @@
 import React, { useEffect, useState } from 'react';
-import { useLogin, usePrivy } from '@privy-io/react-auth';
+import { useLogin, usePrivy, useWallets } from '@privy-io/react-auth';
 import './WalletConnection.css';
 
 const WalletConnection = ({ onWalletConnected }) => {
   const { user, authenticated, ready } = usePrivy();
+  const { wallets } = useWallets();
   const { login } = useLogin();
   const [loadingText, setLoadingText] = useState('INITIALIZING');
   const [dots, setDots] = useState('');
 
   useEffect(() => {
+    // Debug wallet creation
+    console.log('🔍 Wallet Debug:', {
+      authenticated,
+      ready,
+      user: user ? 'exists' : 'null',
+      walletsCount: wallets?.length || 0,
+      wallets: wallets?.map(w => ({
+        type: w.walletClientType,
+        connectorType: w.connectorType,
+        address: w.address
+      }))
+    });
+
     if (authenticated && user) {
-      onWalletConnected();
+      if (wallets && wallets.length > 0) {
+        console.log('✅ Embedded wallet created successfully:', wallets[0]);
+        onWalletConnected();
+      } else {
+        console.log('⚠️ User authenticated but no wallets found - waiting for wallet creation...');
+        // Wait a bit for wallet creation
+        setTimeout(() => {
+          if (wallets && wallets.length > 0) {
+            console.log('✅ Embedded wallet created after delay:', wallets[0]);
+            onWalletConnected();
+          }
+        }, 2000);
+      }
     }
-  }, [authenticated, user, onWalletConnected]);
+  }, [authenticated, user, wallets, onWalletConnected]);
 
   useEffect(() => {
     const dotInterval = setInterval(() => {
