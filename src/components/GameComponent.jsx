@@ -906,6 +906,15 @@ const GameComponent = ({ selectedNetwork }) => {
                   >
                     {manualFaucetLoading ? 'Requesting...' : 'Get Test ETH'}
                   </button>
+                  
+                  {/* Кнопка для переключения на embedded кошелек */}
+                  <button 
+                    className="faucet-button" 
+                    onClick={handleEnsureEmbeddedWallet}
+                    style={{ marginLeft: '10px', background: 'linear-gradient(45deg, #4ecdc4, #44a08d)' }}
+                  >
+                    🎯 Use Gaming Wallet
+                  </button>
                 </div>
               )}
               {transactionPending && (

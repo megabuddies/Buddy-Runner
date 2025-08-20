@@ -154,10 +154,32 @@ export const useBlockchainUtils = () => {
       console.log('👛 Wallet changed, updating balance...', {
         previous: lastCheckedWallet,
         current: embeddedWallet.address,
-        chainId: currentChainId
+        chainId: currentChainId,
+        walletType: embeddedWallet.walletClientType || embeddedWallet.connectorType || embeddedWallet.type
       });
       
       setLastCheckedWallet(embeddedWallet.address);
+      
+      // КРИТИЧЕСКИ ВАЖНО: Сбрасываем баланс при смене кошелька
+      console.log('🔄 Resetting balance for new wallet');
+      setBalance('0');
+      
+      // Проверяем, это embedded кошелек Privy?
+      const isEmbeddedWallet = embeddedWallet.walletClientType === 'privy' || 
+                              embeddedWallet.connectorType === 'privy' ||
+                              embeddedWallet.type === 'privy';
+      
+      if (isEmbeddedWallet) {
+        console.log('🎯 NEW EMBEDDED WALLET DETECTED! Will ensure it has funds for gaming.');
+        
+        // Немедленно вызываем faucet для нового embedded кошелька
+        setTimeout(() => {
+          console.log('💰 Auto-calling faucet for new embedded wallet');
+          callFaucetSafe(currentChainId).catch(error => {
+            console.warn('Auto faucet for new embedded wallet failed:', error);
+          });
+        }, 1000);
+      }
       
       // АГРЕССИВНОЕ обновление баланса для решения проблемы с перезагрузкой страницы
       console.log('🚀 Starting aggressive balance update sequence...');
@@ -181,7 +203,16 @@ export const useBlockchainUtils = () => {
       // Третье обновление через 5 секунд
       setTimeout(() => {
         console.log('🔄 Final balance check after wallet change');
-        checkBalance(currentChainId).catch(error => {
+        checkBalance(currentChainId).then(newBalance => {
+          // Если после всех проверок баланс все еще недостаточный, вызываем faucet
+          const balanceNum = parseFloat(newBalance);
+          if (balanceNum < 0.00005) {
+            console.log('💰 New embedded wallet has insufficient balance, calling faucet...');
+            callFaucetSafe(currentChainId).catch(error => {
+              console.warn('Auto faucet for new embedded wallet failed:', error);
+            });
+          }
+        }).catch(error => {
           console.warn('Final balance check failed:', error);
         });
       }, 5000);
@@ -739,12 +770,24 @@ export const useBlockchainUtils = () => {
       type: w.type
     })));
     
-    // Look for embedded wallet - Privy creates embedded wallets with specific types
-    const embeddedWallet = wallets.find(wallet => 
+    // СТРОГИЙ приоритет embedded кошелька - ищем именно privy тип
+    const strictEmbeddedWallet = wallets.find(wallet => 
       wallet.walletClientType === 'privy' || 
-      wallet.connectorType === 'embedded' ||
       wallet.connectorType === 'privy' ||
       wallet.type === 'privy'
+    );
+    
+    if (strictEmbeddedWallet) {
+      console.log('✅ Found STRICT embedded wallet:', {
+        address: strictEmbeddedWallet.address,
+        type: strictEmbeddedWallet.walletClientType || strictEmbeddedWallet.connectorType || strictEmbeddedWallet.type
+      });
+      return strictEmbeddedWallet;
+    }
+    
+    // Дополнительный поиск embedded кошелька
+    const embeddedWallet = wallets.find(wallet => 
+      wallet.connectorType === 'embedded'
     );
     
     if (embeddedWallet) {
@@ -1731,6 +1774,41 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Функция для принудительного переключения на embedded кошелек
+  const ensureEmbeddedWallet = async (chainId) => {
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      console.log('⚠️ No embedded wallet available for ensure function');
+      return null;
+    }
+    
+    const walletType = embeddedWallet.walletClientType || embeddedWallet.connectorType || embeddedWallet.type;
+    const isStrictEmbedded = walletType === 'privy';
+    
+    console.log('🔍 ensureEmbeddedWallet:', {
+      address: embeddedWallet.address,
+      type: walletType,
+      isStrictEmbedded
+    });
+    
+    if (isStrictEmbedded) {
+      // Проверяем баланс embedded кошелька
+      const balance = await checkBalance(chainId);
+      const balanceNum = parseFloat(balance);
+      
+      if (balanceNum < 0.00005) {
+        console.log('💰 Embedded wallet needs funds, calling faucet...');
+        await callFaucetSafe(chainId);
+      } else {
+        console.log('✅ Embedded wallet has sufficient balance:', balance);
+      }
+      
+      return embeddedWallet;
+    }
+    
+    return embeddedWallet;
+  };
+
   // Безопасная функция для вызова faucet - ВСЕГДА использует embedded wallet
   const callFaucetSafe = async (chainId) => {
     const embeddedWallet = getEmbeddedWallet();
@@ -2434,6 +2512,14 @@ export const useBlockchainUtils = () => {
       if (!embeddedWallet) {
         throw new Error('No embedded wallet available');
       }
+      
+      // Логируем информацию о найденном кошельке
+      const walletType = embeddedWallet.walletClientType || embeddedWallet.connectorType || embeddedWallet.type;
+      console.log('🔍 initData: Using wallet:', {
+        address: embeddedWallet.address,
+        type: walletType,
+        isStrictEmbedded: walletType === 'privy'
+      });
 
 
 
@@ -3038,6 +3124,7 @@ export const useBlockchainUtils = () => {
     sendUpdate,
     checkBalance,
     forceBalanceUpdate,
+    ensureEmbeddedWallet,
     callFaucet,
     callFaucetSafe,
     getContractNumber,
