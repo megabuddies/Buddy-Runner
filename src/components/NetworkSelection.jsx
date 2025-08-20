@@ -161,32 +161,24 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
   };
 
   const handleStartGame = () => {
+    console.log('handleStartGame called with network:', selectedNetwork);
     if (selectedNetwork) {
       // If web2 option is selected, skip wallet connection entirely
       if (selectedNetwork.isWeb2) {
+        console.log('Starting Web2 game mode');
         onStartGame(selectedNetwork);
         return;
       }
       
-      // For blockchain networks, handle wallet authentication
-      if (authenticated && user) {
-        // If already authenticated, go directly to game
-        onStartGame(selectedNetwork);
-      } else {
-        // If not authenticated, trigger Privy login first
-        onNetworkSelect(selectedNetwork);
-        login();
-      }
+      // For blockchain networks, always call onStartGame
+      // The App component will handle the wallet connection flow
+      console.log('Starting blockchain game mode');
+      onStartGame(selectedNetwork);
     }
   };
 
-  // Check if user gets authenticated after login
-  useEffect(() => {
-    if (authenticated && user && selectedNetwork) {
-      // Auto-proceed to game when authentication completes
-      onStartGame(selectedNetwork);
-    }
-  }, [authenticated, user, selectedNetwork, onStartGame]);
+  // Removed useEffect to prevent double navigation
+  // The flow is now handled directly through button clicks
 
   if (isInitializing) {
     return (
