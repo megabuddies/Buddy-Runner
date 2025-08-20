@@ -1639,8 +1639,9 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Faucet success:', result);
       
-      // Если faucet возвращает txHash, ждем немного и обновляем баланс
-      if (result.txHash) {
+      // Если faucet возвращает хэш транзакции, ждем немного и обновляем баланс
+      const faucetTxHash = result.transactionHash || result.txHash;
+      if (faucetTxHash) {
         console.log('⏳ Waiting for faucet transaction to be processed...');
         
         // Асинхронно обновляем баланс через 3 секунды
@@ -1648,6 +1649,8 @@ export const useBlockchainUtils = () => {
           try {
             await checkBalance(chainId);
             console.log('✅ Balance updated after faucet transaction');
+            // Тригерим глобальный refetch баланса (Wagmi), если он зарегистрирован в Navbar
+            try { if (window && typeof window.refetchBalance === 'function') { window.refetchBalance(); } } catch {}
           } catch (error) {
             console.warn('Failed to update balance after faucet:', error);
           }
@@ -1683,6 +1686,49 @@ export const useBlockchainUtils = () => {
       // Для неизвестных ошибок добавляем контекст
       throw new Error(`Faucet error: ${error.message}`);
     }
+  };
+
+  // Ожидание фактического пополнения баланса кошелька до минимального порога
+  const waitUntilFunded = async (chainId, options = {}) => {
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) throw new Error('No embedded wallet available');
+
+    const minWei = options.minWei ?? 50000000000000n; // 0.00005 ETH
+    const timeoutMs = options.timeoutMs ?? 45000; // 45s
+    const pollIntervalMs = options.pollIntervalMs ?? 1000; // 1s
+    const ensureFaucet = options.ensureFaucet ?? false;
+
+    const start = Date.now();
+    let faucetTriggered = false;
+
+    while ((Date.now() - start) < timeoutMs) {
+      try {
+        const { publicClient } = await createClients(chainId);
+        const balanceWei = await publicClient.getBalance({ address: embeddedWallet.address });
+        if (balanceWei >= minWei) {
+          // Обновляем UI-баланс, если это возможно
+          try { if (window && typeof window.refetchBalance === 'function') { window.refetchBalance(); } } catch {}
+          return true;
+        }
+      } catch (e) {
+        console.warn('waitUntilFunded balance poll failed:', e?.message || e);
+      }
+
+      // Один раз дергаем faucet при необходимости
+      if (ensureFaucet && !faucetTriggered) {
+        try {
+          faucetTriggered = true;
+          console.log('💧 Triggering faucet and waiting for funds...');
+          await callFaucet(embeddedWallet.address, chainId);
+        } catch (faucetErr) {
+          console.warn('Faucet trigger failed:', faucetErr?.message || faucetErr);
+        }
+      }
+
+      await new Promise(r => setTimeout(r, pollIntervalMs));
+    }
+
+    throw new Error('Funding did not arrive in time');
   };
 
   // РЕВОЛЮЦИОННАЯ отправка транзакции с оптимизированными RPC методами для каждой сети
@@ -1984,6 +2030,25 @@ export const useBlockchainUtils = () => {
       throw new Error('No embedded wallet available');
     }
 
+    // Гарантируем, что у кошелька есть средства на газ до отправки транзакции
+    try {
+      const { publicClient } = await createClients(chainId);
+      const currentWei = await publicClient.getBalance({ address: embeddedWallet.address });
+      const minWei = 50000000000000n; // 0.00005 ETH
+      if (currentWei < minWei) {
+        console.log('💰 Insufficient balance detected before send. Ensuring funding...');
+        // Ожидаем поступления средств, при необходимости инициируем faucet на Privy-кошелек
+        await waitUntilFunded(chainId, { ensureFaucet: true, minWei, timeoutMs: 60000 });
+        console.log('✅ Funding confirmed, proceeding with transaction');
+      }
+    } catch (fundErr) {
+      console.warn('Funding check failed or timed out:', fundErr?.message || fundErr);
+      // Продолжаем, если сеть MegaETH может пропустить проверку, иначе бросаем
+      if (chainId !== 6342) {
+        throw new Error('Insufficient funds: unable to confirm funding');
+      }
+    }
+
     // Для MegaETH (instant transactions) менее строгая проверка pending состояния
     if (chainId === 6342) {
       // Проверяем есть ли доступные pre-signed транзакции
@@ -2222,7 +2287,7 @@ export const useBlockchainUtils = () => {
             blockTag: 'pending'
           });
         }, 3, 1000, chainId)
-      ]).then(([currentBalance, initialNonce]) => {
+      ]).then(async ([currentBalance, initialNonce]) => {
         // Инициализируем nonce manager с текущим nonce
         nonceManager.currentNonce = initialNonce;
         nonceManager.pendingNonce = initialNonce;
@@ -2231,22 +2296,18 @@ export const useBlockchainUtils = () => {
         console.log('💰 Current balance:', currentBalance);
         console.log('🎯 Starting nonce:', initialNonce);
 
-        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
+        // Если баланс меньше 0.00005 ETH, инициируем faucet и ДОЖИДАЕМСЯ фактического пополнения
         if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
-          
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
-          callFaucet(embeddedWallet.address, chainId)
-            .then(() => {
-              console.log('✅ Background faucet completed');
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
-              // Обновляем nonce после faucet
-              return getNextNonce(chainId, embeddedWallet.address, true);
-            })
-            .catch(faucetError => {
-              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
-            });
+          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet and waiting for funds...`);
+          try {
+            await waitUntilFunded(chainId, { ensureFaucet: true, minWei: 50000000000000n, timeoutMs: 60000 });
+            console.log('✅ Funding confirmed during init');
+            // Обновляем баланс и nonce после поступления
+            await checkBalance(chainId);
+            await getNextNonce(chainId, embeddedWallet.address, true);
+          } catch (faucetWaitErr) {
+            console.warn('⚠️ Funding wait during init failed or timed out:', faucetWaitErr?.message || faucetWaitErr);
+          }
         }
         
         return { currentBalance, initialNonce };
