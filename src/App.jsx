@@ -8,8 +8,8 @@ import PrivyDebugger from './components/PrivyDebugger';
 import './App.css';
 
 const App = () => {
-  // Используем App ID из переменной окружения или fallback на известный рабочий ID
-  const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cm25q62mj00nks8j5lxk4qyly';
+  // Используем App ID из переменной окружения или fallback на рабочий ID
+  const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cme84q0og02aalc0bh9blzwa9';
   console.log('Privy App ID:', appId);
   
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'

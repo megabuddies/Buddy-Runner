@@ -20,7 +20,7 @@
 ### 1. Унификация App ID
 ```javascript
 // Теперь используется один App ID с поддержкой переменной окружения
-const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cm25q62mj00nks8j5lxk4qyly';
+const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cme84q0og02aalc0bh9blzwa9';
 ```
 
 ### 2. Исправление передачи конфигурации
@@ -48,7 +48,7 @@ embeddedWallets: {
 Убедитесь, что в Vercel настроены следующие переменные:
 
 ```env
-VITE_PRIVY_APP_ID=cm25q62mj00nks8j5lxk4qyly
+VITE_PRIVY_APP_ID=cme84q0og02aalc0bh9blzwa9
 NEXT_PUBLIC_PROJECT_ID=your_walletconnect_project_id
 FAUCET_OWNER_PRIVATE_KEY=your_faucet_private_key
 ```
