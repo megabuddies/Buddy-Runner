@@ -164,22 +164,8 @@ export const useBlockchainUtils = () => {
       console.log('🔄 Resetting balance for new wallet');
       setBalance('0');
       
-      // Проверяем, это embedded кошелек Privy?
-      const isEmbeddedWallet = embeddedWallet.walletClientType === 'privy' || 
-                              embeddedWallet.connectorType === 'privy' ||
-                              embeddedWallet.type === 'privy';
-      
-      if (isEmbeddedWallet) {
-        console.log('🎯 NEW EMBEDDED WALLET DETECTED! Will ensure it has funds for gaming.');
-        
-        // Немедленно вызываем faucet для нового embedded кошелька
-        setTimeout(() => {
-          console.log('💰 Auto-calling faucet for new embedded wallet');
-          callFaucetSafe(currentChainId).catch(error => {
-            console.warn('Auto faucet for new embedded wallet failed:', error);
-          });
-        }, 1000);
-      }
+      // ВРЕМЕННО УПРОЩЕНО: Не проверяем тип кошелька для избежания проблем
+      console.log('💰 New wallet detected, will check balance and call faucet if needed');
       
       // АГРЕССИВНОЕ обновление баланса для решения проблемы с перезагрузкой страницы
       console.log('🚀 Starting aggressive balance update sequence...');
@@ -207,10 +193,12 @@ export const useBlockchainUtils = () => {
           // Если после всех проверок баланс все еще недостаточный, вызываем faucet
           const balanceNum = parseFloat(newBalance);
           if (balanceNum < 0.00005) {
-            console.log('💰 New embedded wallet has insufficient balance, calling faucet...');
+            console.log('💰 Wallet has insufficient balance, calling faucet...');
             callFaucetSafe(currentChainId).catch(error => {
-              console.warn('Auto faucet for new embedded wallet failed:', error);
+              console.warn('Auto faucet failed:', error);
             });
+          } else {
+            console.log('✅ Wallet has sufficient balance:', newBalance);
           }
         }).catch(error => {
           console.warn('Final balance check failed:', error);
@@ -245,25 +233,17 @@ export const useBlockchainUtils = () => {
     return () => clearInterval(balanceCheckInterval);
   }, [authenticated, wallets, currentChainId, balance]);
 
-  // Отладочный useEffect для отслеживания изменений баланса
+  // Отладочный useEffect для отслеживания изменений баланса (уменьшенное логирование)
   useEffect(() => {
-    console.log('🔍 Balance state changed:', {
-      balance,
-      authenticated,
-      walletsCount: wallets.length,
-      currentChainId,
-      timestamp: new Date().toISOString()
-    });
-    
     const balanceNum = parseFloat(balance);
     if (balanceNum >= 0.00005) {
       console.log('✅ BALANCE SUFFICIENT FOR GAMING!', balance, 'ETH');
     } else if (balanceNum > 0) {
       console.log('⚠️ Balance too low for gaming:', balance, 'ETH (need >= 0.00005)');
-    } else {
+    } else if (balance !== '0') {
       console.log('❌ No balance detected:', balance);
     }
-  }, [balance, authenticated, wallets.length, currentChainId]);
+  }, [balance]);
 
   // РЕВОЛЮЦИОННАЯ система кеширования с долгосрочным хранением
   const clientCache = useRef({});
@@ -762,13 +742,16 @@ export const useBlockchainUtils = () => {
       return null;
     }
     
-    // Отладочная информация о всех доступных кошельках
-    console.log('🔍 Available wallets:', wallets.map(w => ({
-      address: w.address,
-      walletClientType: w.walletClientType,
-      connectorType: w.connectorType,
-      type: w.type
-    })));
+    // Отладочная информация о всех доступных кошельках (только при изменении)
+    if (wallets.length !== (window._lastWalletCount || 0)) {
+      console.log('🔍 Available wallets:', wallets.map(w => ({
+        address: w.address,
+        walletClientType: w.walletClientType,
+        connectorType: w.connectorType,
+        type: w.type
+      })));
+      window._lastWalletCount = wallets.length;
+    }
     
     // СТРОГИЙ приоритет embedded кошелька - ищем именно privy тип
     const strictEmbeddedWallet = wallets.find(wallet => 
@@ -815,12 +798,11 @@ export const useBlockchainUtils = () => {
       return privyManagedWallet;
     }
     
-    // WARNING: Fallback to first wallet only if no better option
+    // ВРЕМЕННОЕ РЕШЕНИЕ: Используем первый доступный кошелек
     if (wallets.length > 0) {
-      console.warn('⚠️ Using fallback wallet (first available):', {
+      console.log('✅ Using first available wallet for gaming:', {
         address: wallets[0].address,
-        type: wallets[0].walletClientType || wallets[0].connectorType || wallets[0].type,
-        warning: 'This might be an external wallet instead of embedded!'
+        type: wallets[0].walletClientType || wallets[0].connectorType || wallets[0].type
       });
       return wallets[0];
     }
