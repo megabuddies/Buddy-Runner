@@ -9,6 +9,7 @@ import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
 import PrivyDebugger from './components/PrivyDebugger';
 import WalletDebugInfo from './components/WalletDebugInfo';
+import EmbeddedWalletEnsurer from './components/EmbeddedWalletEnsurer';
 import './App.css';
 
 const App = () => {
@@ -112,6 +113,10 @@ const App = () => {
         createOnLogin: 'all-users', // Автоматическое создание для всех пользователей
         requireUserPasswordOnCreate: false, // Убираем трение пароля
         noPromptOnSignature: true, // Отключаем промпты для подписи
+        priceDisplay: {
+          primary: 'native-token', // Показываем нативный токен
+          secondary: 'fiat-currency'
+        }
       },
       
       // Login methods optimized for gaming
@@ -334,6 +339,7 @@ const App = () => {
       {/* Временные компоненты для отладки */}
       <PrivyDebugger />
       <WalletDebugInfo selectedNetwork={selectedNetwork} />
+      <EmbeddedWalletEnsurer />
     </PrivyProvider>
   );
 };

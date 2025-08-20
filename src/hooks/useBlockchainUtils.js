@@ -781,32 +781,12 @@ export const useBlockchainUtils = () => {
       return embeddedWallet;
     }
     
-    console.log('⚠️ No embedded wallet found, checking for Privy-managed wallets...');
+    console.log('⚠️ No embedded wallet found!');
+    console.log('🔍 This means Privy has not created an embedded wallet yet.');
+    console.log('🎯 Gaming requires a Privy embedded wallet, not external wallets.');
     
-    // Дополнительная проверка для кошельков, управляемых Privy
-    const privyManagedWallet = wallets.find(wallet => 
-      wallet.address && 
-      (wallet.walletClientType || wallet.connectorType || wallet.type) &&
-      !wallet.imported // Исключаем импортированные кошельки
-    );
-    
-    if (privyManagedWallet) {
-      console.log('✅ Found Privy-managed wallet:', {
-        address: privyManagedWallet.address,
-        type: privyManagedWallet.walletClientType || privyManagedWallet.connectorType || privyManagedWallet.type
-      });
-      return privyManagedWallet;
-    }
-    
-    // ВРЕМЕННОЕ РЕШЕНИЕ: Используем первый доступный кошелек
-    if (wallets.length > 0) {
-      console.log('✅ Using first available wallet for gaming:', {
-        address: wallets[0].address,
-        type: wallets[0].walletClientType || wallets[0].connectorType || wallets[0].type
-      });
-      return wallets[0];
-    }
-    
+    // НЕ ИСПОЛЬЗУЕМ внешние кошельки для игры!
+    // Возвращаем null, чтобы принудить создание embedded кошелька
     return null;
   };
 
