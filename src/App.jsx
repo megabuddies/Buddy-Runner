@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import { PrivyProvider } from '@privy-io/react-auth';
+import { WagmiProvider } from 'wagmi';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { wagmiConfig, queryClient } from './config/wagmi';
 import GameComponent from './components/GameComponent';
 import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
