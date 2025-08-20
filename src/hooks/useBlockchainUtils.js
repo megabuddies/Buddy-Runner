@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { usePrivy, useWallets } from '@privy-io/react-auth';
+import { usePrivy, useWallets, useCreateWallet } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
 
 // Конфигурация сетей
@@ -620,9 +620,21 @@ export const useBlockchainUtils = () => {
 
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
-    if (!authenticated || !wallets.length) {
+    if (!authenticated) {
+      console.log('🔍 getEmbeddedWallet: User not authenticated');
       return null;
     }
+    
+    if (!wallets.length) {
+      console.log('🔍 getEmbeddedWallet: No wallets available');
+      return null;
+    }
+    
+    console.log('🔍 getEmbeddedWallet: Available wallets:', wallets.map(w => ({
+      address: w.address,
+      walletClientType: w.walletClientType,
+      connectorType: w.connectorType
+    })));
     
     // Look for embedded wallet - Privy creates embedded wallets with specific types
     const embeddedWallet = wallets.find(wallet => 
@@ -632,15 +644,21 @@ export const useBlockchainUtils = () => {
     );
     
     if (embeddedWallet) {
+      console.log('✅ Found embedded wallet:', {
+        address: embeddedWallet.address,
+        type: embeddedWallet.walletClientType,
+        connector: embeddedWallet.connectorType
+      });
       return embeddedWallet;
     }
     
     // If no embedded wallet found, use the first available wallet
     if (wallets.length > 0) {
+      console.log('⚠️ No embedded wallet found, using first wallet:', wallets[0].address);
       return wallets[0];
     }
     
-
+    console.log('❌ No wallets available');
     return null;
   };
 
@@ -2171,19 +2189,25 @@ export const useBlockchainUtils = () => {
       // Wait for embedded wallet to be created (with retry)
       let embeddedWallet = null;
       let retries = 0;
-      const maxRetries = 10;
+      const maxRetries = 15; // Увеличиваем количество попыток
+      
+      console.log('🔄 Waiting for embedded wallet creation...');
       
       while (!embeddedWallet && retries < maxRetries) {
         embeddedWallet = getEmbeddedWallet();
         if (!embeddedWallet) {
-
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          console.log(`⏳ Attempt ${retries + 1}/${maxRetries}: Embedded wallet not ready, waiting...`);
+          await new Promise(resolve => setTimeout(resolve, 1500)); // Увеличиваем интервал
           retries++;
+        } else {
+          console.log('✅ Embedded wallet found:', embeddedWallet.address);
         }
       }
 
       if (!embeddedWallet) {
-        throw new Error('No embedded wallet available');
+        console.error('❌ Failed to create embedded wallet after', maxRetries, 'attempts');
+        console.log('Available wallets:', wallets);
+        throw new Error('No embedded wallet available - check Privy configuration and app ID');
       }
 
 

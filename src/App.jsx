@@ -85,7 +85,7 @@ const App = () => {
 
   // Privy configuration optimized for seamless gaming experience
   const privyConfig = {
-    appId: "cm25q62mj00nks8j5lxk4qyly",
+    appId: import.meta.env.VITE_PRIVY_APP_ID || "cm25q62mj00nks8j5lxk4qyly",
     config: {
       // Appearance
       appearance: {
@@ -100,7 +100,7 @@ const App = () => {
       
       // РЕВОЛЮЦИОННАЯ конфигурация Embedded Wallets для нулевого трения
       embeddedWallets: {
-        createOnLogin: 'all-users', // Автоматическое создание для всех пользователей
+        createOnLogin: 'users-without-wallets', // Создаем только для пользователей без кошельков
         requireUserPasswordOnCreate: false, // Убираем трение пароля
         prependWithWalletUi: false, // Не показываем дополнительные UI элементы
         noPromptOnSignature: true, // Отключаем промпты для подписи
@@ -205,7 +205,7 @@ const App = () => {
       ],
       
       // Оптимизация для Real-Time Gaming
-      walletConnectCloudProjectId: process.env.REACT_APP_WALLETCONNECT_PROJECT_ID || "default",
+      walletConnectCloudProjectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || import.meta.env.NEXT_PUBLIC_PROJECT_ID || "default",
       
       // УЛУЧШЕННЫЕ настройки для минимального трения
       legal: {
