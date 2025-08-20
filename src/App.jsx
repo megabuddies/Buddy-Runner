@@ -5,6 +5,7 @@ import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
 import PrivyDebugger from './components/PrivyDebugger';
+import WalletDebugInfo from './components/WalletDebugInfo';
 import './App.css';
 
 const App = () => {
@@ -327,8 +328,9 @@ const App = () => {
           </>
         )}
       </div>
-      {/* Временный компонент для отладки Privy */}
+      {/* Временные компоненты для отладки */}
       <PrivyDebugger />
+      <WalletDebugInfo selectedNetwork={selectedNetwork} />
     </PrivyProvider>
   );
 };

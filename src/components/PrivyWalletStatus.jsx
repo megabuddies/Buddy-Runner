@@ -103,6 +103,9 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
           {walletInfo.isEmbedded && (
             <span className="embedded-badge">Privy</span>
           )}
+          {!walletInfo.isEmbedded && (
+            <span className="external-badge">External</span>
+          )}
         </div>
         
         {selectedNetwork && selectedNetwork.id !== 'select' && poolStatus && (

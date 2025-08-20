@@ -31,6 +31,7 @@ const GameComponent = ({ selectedNetwork }) => {
     isReady,
     getEmbeddedWallet,
     callFaucet,
+    callFaucetSafe,
     getPoolStatus // Для мониторинга pre-signed пула
   } = useBlockchainUtils();
 
@@ -311,8 +312,8 @@ const GameComponent = ({ selectedNetwork }) => {
         return;
       }
 
-      console.log('Manual faucet request for:', embeddedWallet.address);
-      await callFaucet(embeddedWallet.address, selectedNetwork.id);
+      console.log('Manual faucet request - using safe method');
+      await callFaucetSafe(selectedNetwork.id);
       
       // Wait and refresh balance
       setTimeout(async () => {

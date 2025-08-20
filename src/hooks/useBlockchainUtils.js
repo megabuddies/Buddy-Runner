@@ -621,26 +621,61 @@ export const useBlockchainUtils = () => {
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
     if (!authenticated || !wallets.length) {
+      console.log('🔍 getEmbeddedWallet: No authenticated user or wallets');
       return null;
     }
+    
+    // Отладочная информация о всех доступных кошельках
+    console.log('🔍 Available wallets:', wallets.map(w => ({
+      address: w.address,
+      walletClientType: w.walletClientType,
+      connectorType: w.connectorType,
+      type: w.type
+    })));
     
     // Look for embedded wallet - Privy creates embedded wallets with specific types
     const embeddedWallet = wallets.find(wallet => 
       wallet.walletClientType === 'privy' || 
       wallet.connectorType === 'embedded' ||
-      wallet.connectorType === 'privy'
+      wallet.connectorType === 'privy' ||
+      wallet.type === 'privy'
     );
     
     if (embeddedWallet) {
+      console.log('✅ Found embedded wallet:', {
+        address: embeddedWallet.address,
+        type: embeddedWallet.walletClientType || embeddedWallet.connectorType || embeddedWallet.type
+      });
       return embeddedWallet;
     }
     
-    // If no embedded wallet found, use the first available wallet
+    console.log('⚠️ No embedded wallet found, checking for Privy-managed wallets...');
+    
+    // Дополнительная проверка для кошельков, управляемых Privy
+    const privyManagedWallet = wallets.find(wallet => 
+      wallet.address && 
+      (wallet.walletClientType || wallet.connectorType || wallet.type) &&
+      !wallet.imported // Исключаем импортированные кошельки
+    );
+    
+    if (privyManagedWallet) {
+      console.log('✅ Found Privy-managed wallet:', {
+        address: privyManagedWallet.address,
+        type: privyManagedWallet.walletClientType || privyManagedWallet.connectorType || privyManagedWallet.type
+      });
+      return privyManagedWallet;
+    }
+    
+    // WARNING: Fallback to first wallet only if no better option
     if (wallets.length > 0) {
+      console.warn('⚠️ Using fallback wallet (first available):', {
+        address: wallets[0].address,
+        type: wallets[0].walletClientType || wallets[0].connectorType || wallets[0].type,
+        warning: 'This might be an external wallet instead of embedded!'
+      });
       return wallets[0];
     }
     
-
     return null;
   };
 
@@ -1548,12 +1583,38 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Безопасная функция для вызова faucet - ВСЕГДА использует embedded wallet
+  const callFaucetSafe = async (chainId) => {
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      throw new Error('No embedded wallet available for faucet');
+    }
+    
+    console.log('🔒 Safe faucet call - using embedded wallet:', embeddedWallet.address);
+    return callFaucet(embeddedWallet.address, chainId);
+  };
+
   // РЕВОЛЮЦИОННЫЙ вызов faucet с кешированием и умной обработкой
   const callFaucet = async (address, chainId) => {
     const cacheKey = `faucet_${chainId}_${address}`;
     const FAUCET_COOLDOWN = 5 * 60 * 1000; // 5 минут между вызовами
     
     try {
+      // КРИТИЧЕСКИ ВАЖНАЯ отладочная информация
+      const embeddedWallet = getEmbeddedWallet();
+      console.log('🚨 FAUCET DEBUG INFO:');
+      console.log('📍 Target address for faucet:', address);
+      console.log('🏦 Embedded wallet address:', embeddedWallet?.address);
+      console.log('✅ Addresses match:', address === embeddedWallet?.address);
+      console.log('🌐 Chain ID:', chainId);
+      
+      if (address !== embeddedWallet?.address) {
+        console.error('🚨 CRITICAL: Faucet target address does not match embedded wallet!');
+        console.error('This means tokens will be sent to wrong address!');
+        console.error('Expected (embedded):', embeddedWallet?.address);
+        console.error('Actual (target):', address);
+      }
+      
       // Проверяем кеш последнего вызова faucet
       const lastFaucetCall = localStorage.getItem(cacheKey);
       if (lastFaucetCall) {
@@ -2235,8 +2296,8 @@ export const useBlockchainUtils = () => {
         if (parseFloat(currentBalance) < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
-          callFaucet(embeddedWallet.address, chainId)
+          // НЕБЛОКИРУЮЩИЙ faucet вызов - используем БЕЗОПАСНУЮ функцию
+          callFaucetSafe(chainId)
             .then(() => {
               console.log('✅ Background faucet completed');
               // Обновляем баланс через 5 секунд
@@ -2796,6 +2857,7 @@ export const useBlockchainUtils = () => {
     sendUpdate,
     checkBalance,
     callFaucet,
+    callFaucetSafe,
     getContractNumber,
     
     // Утилиты

@@ -63,6 +63,16 @@
   text-transform: uppercase;
 }
 
+.external-badge {
+  background: linear-gradient(45deg, #ffa500, #ff4500);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: bold;
+  text-transform: uppercase;
+}
+
 .pool-status {
   display: flex;
   align-items: center;
