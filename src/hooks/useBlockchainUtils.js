@@ -618,28 +618,29 @@ export const useBlockchainUtils = () => {
     return state?.degradedMode ? state : null;
   };
 
-  // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
+  // СТАБИЛЬНЫЙ выбор embedded-кошелька (фиксирует один адрес, созданный Privy)
+  const selectedEmbeddedWalletRef = useRef(null);
   const getEmbeddedWallet = () => {
     if (!authenticated || !wallets.length) {
       return null;
     }
-    
-    // Look for embedded wallet - Privy creates embedded wallets with specific types
-    const embeddedWallet = wallets.find(wallet => 
-      wallet.walletClientType === 'privy' || 
-      wallet.connectorType === 'embedded' ||
-      wallet.connectorType === 'privy'
-    );
-    
-    if (embeddedWallet) {
-      return embeddedWallet;
+
+    // Если уже зафиксирован embedded-кошелек, возвращаем его
+    if (selectedEmbeddedWalletRef.current) {
+      const fixed = wallets.find(w => w.address?.toLowerCase() === selectedEmbeddedWalletRef.current.address?.toLowerCase());
+      if (fixed) return fixed;
     }
-    
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      return wallets[0];
+
+    // Предпочитаем настоящий Privy embedded кошелек
+    const byPrivyType = wallets.find(w => w.walletClientType === 'privy');
+    const byEmbeddedConnector = wallets.find(w => w.connectorType === 'embedded' || w.connectorType === 'privy');
+    const chosen = byPrivyType || byEmbeddedConnector || wallets[0];
+
+    if (chosen) {
+      // Зафиксировать выбранный embedded кошелек, чтобы не "скакал" между адресами
+      selectedEmbeddedWalletRef.current = { address: chosen.address };
+      return chosen;
     }
-    
 
     return null;
   };
@@ -1393,14 +1394,14 @@ export const useBlockchainUtils = () => {
     } else {
       // Детальное логирование для отладки
       if (!pool) {
-        console.log(`❌ No transaction pool exists for chain ${chainId}`);
-        throw new Error(`No pre-signed transaction pool available for chain ${chainId}. Only pre-signed transactions are allowed.`);
+        console.log(`❌ No transaction pool exists for chain ${chainId} — falling back to realtime creation`);
+        return await createRealtimeTransaction(chainId);
       } else if (!pool.isReady) {
-        console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
-        throw new Error(`Pre-signed transaction pool not ready for chain ${chainId}. Wait for initialization to complete.`);
+        console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress) — using realtime`);
+        return await createRealtimeTransaction(chainId);
       } else if (pool.transactions.length <= pool.currentIndex) {
-        console.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length})`);
-        throw new Error(`Pre-signed transaction pool exhausted for chain ${chainId}. Only pre-signed transactions are allowed.`);
+        console.log(`📭 Transaction pool empty for chain ${chainId} (used ${pool.currentIndex}/${pool.transactions.length}) — using realtime`);
+        return await createRealtimeTransaction(chainId);
       }
     }
 
@@ -1437,10 +1438,36 @@ export const useBlockchainUtils = () => {
     throw new Error('CRITICAL ERROR: Pre-signed transaction pool exhausted and emergency refill failed. Only pre-signed transactions are allowed in this game.');
   };
 
-  // ОТКЛЮЧЕНО: создание и подписание транзакции в реальном времени
-  // В игре используются ТОЛЬКО pre-signed транзакции
+  // Создание и подписание транзакции в реальном времени (fallback, если пул недоступен)
   const createRealtimeTransaction = async (chainId) => {
-    throw new Error('Realtime transaction creation is disabled. Only pre-signed transactions are allowed in this game.');
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) throw new Error('No embedded wallet available');
+
+    const { publicClient, walletClient, config } = await createClients(chainId);
+    const gas = await getGasParams(chainId);
+
+    // Получаем актуальный nonce из сети
+    const nonce = await publicClient.getTransactionCount({ address: embeddedWallet.address, blockTag: 'pending' });
+
+    const tx = {
+      account: embeddedWallet.address,
+      to: config.contractAddress,
+      data: '0xa2e62045',
+      nonce,
+      maxFeePerGas: gas.maxFeePerGas,
+      maxPriorityFeePerGas: gas.maxPriorityFeePerGas,
+      chain: publicClient.chain,
+      type: 'eip1559'
+    };
+
+    // Подписываем через embedded provider (Privy)
+    const provider = await embeddedWallet.getProvider?.() || await embeddedWallet.getEthereumProvider?.() || embeddedWallet;
+    if (!provider?.request) throw new Error('No provider for realtime signing');
+
+    // viem createWalletClient с custom transport уже проксирует eth_signTransaction
+    // Используем его для получения подписанной raw tx
+    const raw = await walletClient.signTransaction(tx);
+    return raw;
   };
 
   // МОНИТОРИНГ БЕСКОНЕЧНОГО ПУЛА pre-signed транзакций
@@ -2115,8 +2142,14 @@ export const useBlockchainUtils = () => {
       
       console.log('⚡ Sending instant on-chain jump transaction...');
       
-      // Отправляем транзакцию с улучшенной обработкой ошибок
-      const txResult = await sendRawTransaction(chainId, signedTx);
+      let txResult;
+      // Если fallback вернул уже отправленную провайдером транзакцию
+      if (typeof signedTx === 'object' && signedTx.__providerSent && signedTx.hash) {
+        txResult = { hash: signedTx.hash };
+      } else {
+        // Отправляем транзакцию с улучшенной обработкой ошибок
+        txResult = await sendRawTransaction(chainId, signedTx);
+      }
       console.log('📡 Transaction sent:', txResult);
 
       const config = NETWORK_CONFIGS[chainId];
