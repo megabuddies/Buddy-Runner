@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
 
@@ -1662,16 +1662,40 @@ export const useBlockchainUtils = () => {
       console.log('💰 Faucet success:', result);
       
       // Если faucet возвращает txHash, ждем немного и обновляем баланс
-      if (result.txHash) {
+      if (result.transactionHash || result.txHash) {
         console.log('⏳ Waiting for faucet transaction to be processed...');
         
-        // Асинхронно обновляем баланс через 3 секунды
+        // МГНОВЕННОЕ обновление баланса через 1 секунду
         setTimeout(async () => {
           try {
-            await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
+            const newBalance = await checkBalance(chainId);
+            console.log('✅ Balance updated after faucet transaction (quick check):', newBalance, 'ETH');
+            
+            // Уведомляем UI об обновлении баланса
+            if (typeof window.dispatchEvent === 'function') {
+              window.dispatchEvent(new CustomEvent('balanceUpdated', { 
+                detail: { balance: newBalance, chainId } 
+              }));
+            }
           } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
+            console.warn('Failed to update balance after faucet (quick check):', error);
+          }
+        }, 1000);
+        
+        // Дополнительная проверка через 3 секунды для уверенности
+        setTimeout(async () => {
+          try {
+            const newBalance = await checkBalance(chainId);
+            console.log('✅ Balance updated after faucet transaction (confirmation check):', newBalance, 'ETH');
+            
+            // Повторное уведомление UI
+            if (typeof window.dispatchEvent === 'function') {
+              window.dispatchEvent(new CustomEvent('balanceUpdated', { 
+                detail: { balance: newBalance, chainId } 
+              }));
+            }
+          } catch (error) {
+            console.warn('Failed to update balance after faucet (confirmation check):', error);
           }
         }, 3000);
       }
@@ -2257,11 +2281,19 @@ export const useBlockchainUtils = () => {
         if (parseFloat(currentBalance) < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
+          // НЕБЛОКИРУЮЩИЙ faucet вызов с быстрым обновлением
           callFaucet(embeddedWallet.address, chainId)
             .then(() => {
               console.log('✅ Background faucet completed');
-              // Обновляем баланс через 5 секунд
+              // БЫСТРОЕ обновление баланса через 2 секунды
+              setTimeout(() => {
+                checkBalance(chainId);
+                // Вызываем глобальную функцию refetchBalance
+                if (typeof window.refetchBalance === 'function') {
+                  window.refetchBalance(chainId);
+                }
+              }, 2000);
+              // Дополнительная проверка через 5 секунд
               setTimeout(() => checkBalance(chainId), 5000);
               // Обновляем nonce после faucet
               return getNextNonce(chainId, embeddedWallet.address, true);

@@ -314,7 +314,22 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log('Manual faucet request for:', embeddedWallet.address);
       await callFaucet(embeddedWallet.address, selectedNetwork.id);
       
-      // Wait and refresh balance
+      // МГНОВЕННОЕ обновление баланса через 1 секунду
+      setTimeout(async () => {
+        try {
+          const newBalance = await checkBalance(selectedNetwork.id);
+          console.log('✅ Balance updated immediately:', newBalance, 'ETH');
+          
+          // Принудительно перерендерить компонент если баланс обновился
+          if (parseFloat(newBalance) > 0) {
+            console.log('🎮 Balance sufficient for gaming!');
+          }
+        } catch (error) {
+          console.warn('Failed to update balance immediately:', error);
+        }
+      }, 1000);
+      
+      // Дополнительная проверка через 3 секунды для уверенности
       setTimeout(async () => {
         await checkBalance(selectedNetwork.id);
       }, 3000);
