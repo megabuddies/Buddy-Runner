@@ -233,11 +233,14 @@ const App = () => {
   };
 
   const handleStartGame = (network) => {
+    console.log('App handleStartGame called with network:', network);
     setSelectedNetwork(network);
     // For blockchain networks, require authentication first
     if (!network.isWeb2) {
+      console.log('Setting game state to wallet-connection');
       setGameState('wallet-connection');
     } else {
+      console.log('Setting game state to game');
       setGameState('game');
     }
   };
