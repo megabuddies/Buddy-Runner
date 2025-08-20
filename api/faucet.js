@@ -80,12 +80,16 @@ export default async function handler(req, res) {
     const dripAmount = ethers.parseEther('0.0001'); // Изменено на 0.0001 ETH
     const faucetBalance = await provider.getBalance(ownerWallet.address); // Проверяем баланс отдельного faucet кошелька
     
-    if (faucetBalance < dripAmount) {
-      return res.status(400).json({ 
-        error: 'Faucet wallet is empty',
-        balance: ethers.formatEther(faucetBalance)
-      });
-    }
+    // ВРЕМЕННО ОТКЛЮЧЕНО: Проверка баланса faucet
+    // if (faucetBalance < dripAmount) {
+    //   return res.status(400).json({ 
+    //     error: 'Faucet wallet is empty',
+    //     balance: ethers.formatEther(faucetBalance)
+    //   });
+    // }
+    
+    // Логируем текущий баланс faucet для мониторинга
+    console.log(`Faucet balance: ${ethers.formatEther(faucetBalance)} ETH`);
 
     // Проверяем, что у пользователя мало средств (< 0.00005 ETH)
     const userBalance = await provider.getBalance(address);
@@ -126,7 +130,12 @@ export default async function handler(req, res) {
     
     // Обработка специфичных ошибок
     if (error.message.includes('insufficient funds')) {
-      return res.status(400).json({ error: 'Faucet wallet has insufficient funds' });
+      // Логируем для отладки
+      console.error('Insufficient funds error:', error.message);
+      return res.status(400).json({ 
+        error: 'Faucet wallet has insufficient funds for this transaction',
+        details: 'The faucet wallet needs to be refilled'
+      });
     }
     
     if (error.message.includes('nonce')) {
