@@ -1566,12 +1566,20 @@ export const useBlockchainUtils = () => {
       }
       
       console.log('💰 Calling optimized faucet for address:', address);
+      console.log('🌐 Chain ID:', chainId);
       
       // Создаем контроллер для timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
       
-      const response = await fetch('/api/faucet', {
+      // Определяем базовый URL для API
+      const apiUrl = window.location.hostname === 'localhost' 
+        ? '/api/faucet'
+        : `${window.location.origin}/api/faucet`;
+      
+      console.log('📡 Faucet API URL:', apiUrl);
+      
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
