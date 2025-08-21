@@ -30,6 +30,7 @@ const GameComponent = ({ selectedNetwork }) => {
     getContractNumber,
     isReady,
     getEmbeddedWallet,
+    ensureEmbeddedWallet,
     callFaucet,
     getPoolStatus // Для мониторинга pre-signed пула
   } = useBlockchainUtils();
@@ -305,21 +306,33 @@ const GameComponent = ({ selectedNetwork }) => {
 
     try {
       setManualFaucetLoading(true);
-      const embeddedWallet = getEmbeddedWallet();
+      
+      // Убеждаемся, что у нас есть embedded wallet
+      let embeddedWallet = getEmbeddedWallet();
       if (!embeddedWallet) {
-        alert('Please connect your wallet first');
-        return;
+        console.log('No embedded wallet found, attempting to create one...');
+        embeddedWallet = await ensureEmbeddedWallet();
+        if (!embeddedWallet) {
+          alert('Please connect your wallet first');
+          return;
+        }
       }
 
       console.log('Manual faucet request for:', embeddedWallet.address);
-      await callFaucet(embeddedWallet.address, selectedNetwork.id);
+      const result = await callFaucet(embeddedWallet.address, selectedNetwork.id);
+      
+      // Показываем информацию о том, какой адрес был использован
+      if (result.usedEmbeddedWallet) {
+        alert('Faucet request successful! Funds will be sent to your game wallet.');
+      } else {
+        alert('Faucet request successful! Funds should arrive shortly.');
+      }
       
       // Wait and refresh balance
       setTimeout(async () => {
         await checkBalance(selectedNetwork.id);
       }, 3000);
 
-      alert('Faucet request successful! Funds should arrive shortly.');
     } catch (error) {
       console.error('Manual faucet error:', error);
       alert(`Faucet request failed: ${error.message}`);

@@ -108,6 +108,9 @@ const App = () => {
         createOnLogin: 'all-users', // Автоматическое создание для всех пользователей
         requireUserPasswordOnCreate: false, // Убираем трение пароля
         noPromptOnSignature: true, // Отключаем промпты для подписи
+        showWalletUiOnNotConnected: false, // Отключаем UI для не подключенных кошельков
+        showWalletUi: false, // Полностью отключаем UI кошелька
+        prependWithWalletUi: false, // Не показываем UI кошелька в начале
       },
       
       // Login methods optimized for gaming
