@@ -625,13 +625,16 @@ export const useBlockchainUtils = () => {
       return null;
     }
     
-    console.log('🔍 getEmbeddedWallet: Available wallets:', wallets.map(w => ({
-      address: w.address,
-      walletClientType: w.walletClientType,
-      connectorType: w.connectorType,
-      type: w.type,
-      walletIndex: w.walletIndex
-    })));
+    // Only log in development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 getEmbeddedWallet: Available wallets:', wallets.map(w => ({
+        address: w.address,
+        walletClientType: w.walletClientType,
+        connectorType: w.connectorType,
+        type: w.type,
+        walletIndex: w.walletIndex
+      })));
+    }
     
     // Enhanced embedded wallet detection with multiple criteria
     const embeddedWallet = wallets.find(wallet => {
@@ -644,13 +647,16 @@ export const useBlockchainUtils = () => {
         wallet.walletClientType === 'embedded' ||
         wallet.walletIndex === 0; // First wallet is usually embedded
       
-      console.log(`🔍 Checking wallet ${wallet.address}:`, {
-        walletClientType: wallet.walletClientType,
-        connectorType: wallet.connectorType,
-        type: wallet.type,
-        walletIndex: wallet.walletIndex,
-        isEmbedded
-      });
+      // Only log in development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔍 Checking wallet ${wallet.address}:`, {
+          walletClientType: wallet.walletClientType,
+          connectorType: wallet.connectorType,
+          type: wallet.type,
+          walletIndex: wallet.walletIndex,
+          isEmbedded
+        });
+      }
       
       return isEmbedded;
     });

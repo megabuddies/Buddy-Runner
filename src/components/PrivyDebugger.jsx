@@ -97,6 +97,11 @@ const PrivyDebugger = () => {
             ⚠️ User authenticated but no embedded wallet found
           </div>
         )}
+        {debugInfo.hasEmbeddedWallet && (
+          <div style={{ marginTop: '5px', fontSize: '10px', color: '#28a745' }}>
+            ✅ Embedded wallet ready for gaming
+          </div>
+        )}
       </div>
 
       {createWalletError && (
