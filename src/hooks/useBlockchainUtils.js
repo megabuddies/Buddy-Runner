@@ -1801,19 +1801,14 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Faucet success:', result);
       
-      // Если faucet возвращает txHash, ждем немного и обновляем баланс
+      // Если faucet возвращает txHash, сразу обновляем баланс (tx уже подтверждена сервером)
       if (result.txHash) {
-        console.log('⏳ Waiting for faucet transaction to be processed...');
-        
-        // Асинхронно обновляем баланс через 3 секунды
-        setTimeout(async () => {
-          try {
-            await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
-          } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
-          }
-        }, 3000);
+        try {
+          await checkBalance(chainId);
+          console.log('✅ Balance updated immediately after faucet transaction');
+        } catch (error) {
+          console.warn('Failed to update balance immediately after faucet:', error);
+        }
       }
       
       return {
@@ -3046,10 +3041,10 @@ export const useBlockchainUtils = () => {
               console.warn('Auto faucet attempt failed:', err);
             }
           }
-          // Обновляем баланс чуть позже, чтобы пользователь сразу мог играть
-          setTimeout(() => {
-            checkBalance(AUTO_FAUCET_CHAIN_ID).catch(() => {});
-          }, 3000);
+          // Немедленно обновляем баланс после успешного faucet
+          try {
+            await checkBalance(AUTO_FAUCET_CHAIN_ID);
+          } catch (_) {}
         }
       } catch (e) {
         console.warn('Auto-funding flow error:', e);
@@ -3072,6 +3067,14 @@ export const useBlockchainUtils = () => {
     initData,
     sendUpdate,
     checkBalance,
+    // Немедленное обновление баланса по запросу UI
+    refetchBalance: async (chainId) => {
+      try {
+        return await checkBalance(chainId);
+      } catch (e) {
+        return '0';
+      }
+    },
     callFaucet,
     getContractNumber,
     
