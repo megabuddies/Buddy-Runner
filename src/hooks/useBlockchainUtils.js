@@ -675,13 +675,7 @@ export const useBlockchainUtils = () => {
     console.log('⚠️ No embedded wallet found, available wallets:', wallets.length);
     console.log('⚠️ This might cause faucet to send to wrong wallet!');
     
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      console.log('⚠️ Falling back to first wallet:', wallets[0].address);
-      return wallets[0];
-    }
-    
-
+    // Do NOT fall back to first wallet; require embedded wallet
     return null;
   };
 
@@ -1715,6 +1709,9 @@ export const useBlockchainUtils = () => {
       // Проверяем, что адрес принадлежит embedded wallet
       const embeddedWallet = getEmbeddedWallet();
       const isEmbeddedWallet = embeddedWallet && embeddedWallet.address === address;
+      if (!isEmbeddedWallet) {
+        throw new Error('Faucet target must be the embedded wallet. Please wait for wallet to initialize.');
+      }
       
       console.log('🔍 Faucet target address check:', {
         address,
@@ -2391,17 +2388,17 @@ export const useBlockchainUtils = () => {
         if (parseFloat(currentBalance) < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-          // Получаем правильный embedded wallet для faucet
-          const faucetWallet = getEmbeddedWallet();
-          if (!faucetWallet) {
-            console.warn('⚠️ No embedded wallet available for faucet');
-            return { currentBalance, initialNonce };
-          }
-          
-          console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
-          
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
-          callFaucet(faucetWallet.address, chainId)
+                // Получаем правильный embedded wallet для faucet
+      const faucetWallet = getEmbeddedWallet();
+      if (!faucetWallet) {
+        console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
+        return { currentBalance, initialNonce };
+      }
+      
+      console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
+      
+      // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
+      callFaucet(faucetWallet.address, chainId)
             .then((result) => {
               console.log('✅ Background faucet completed');
               if (result.isEmbeddedWallet) {
