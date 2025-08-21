@@ -621,27 +621,129 @@ export const useBlockchainUtils = () => {
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
     if (!authenticated || !wallets.length) {
+      console.log('🔍 getEmbeddedWallet: Not authenticated or no wallets available');
       return null;
     }
     
-    // Look for embedded wallet - Privy creates embedded wallets with specific types
-    const embeddedWallet = wallets.find(wallet => 
-      wallet.walletClientType === 'privy' || 
-      wallet.connectorType === 'embedded' ||
-      wallet.connectorType === 'privy'
-    );
+    // Only log in development mode
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔍 getEmbeddedWallet: Available wallets:', wallets.map(w => ({
+        address: w.address,
+        walletClientType: w.walletClientType,
+        connectorType: w.connectorType,
+        type: w.type,
+        walletIndex: w.walletIndex
+      })));
+    }
+    
+    // Enhanced embedded wallet detection with multiple criteria
+    const embeddedWallet = wallets.find(wallet => {
+      // Check for embedded wallet indicators
+      const isEmbedded = 
+        wallet.walletClientType === 'privy' || 
+        wallet.connectorType === 'embedded' ||
+        wallet.connectorType === 'privy' ||
+        wallet.type === 'embedded' ||
+        wallet.walletClientType === 'embedded' ||
+        wallet.walletIndex === 0; // First wallet is usually embedded
+      
+      // Only log in development mode
+      if (process.env.NODE_ENV === 'development') {
+        console.log(`🔍 Checking wallet ${wallet.address}:`, {
+          walletClientType: wallet.walletClientType,
+          connectorType: wallet.connectorType,
+          type: wallet.type,
+          walletIndex: wallet.walletIndex,
+          isEmbedded
+        });
+      }
+      
+      return isEmbedded;
+    });
     
     if (embeddedWallet) {
+      console.log('✅ Found embedded wallet:', {
+        address: embeddedWallet.address,
+        walletClientType: embeddedWallet.walletClientType,
+        connectorType: embeddedWallet.connectorType,
+        type: embeddedWallet.type,
+        walletIndex: embeddedWallet.walletIndex
+      });
       return embeddedWallet;
     }
     
-    // If no embedded wallet found, use the first available wallet
-    if (wallets.length > 0) {
-      return wallets[0];
-    }
+    console.log('⚠️ No embedded wallet found, available wallets:', wallets.length);
+    console.log('⚠️ This might cause faucet to send to wrong wallet!');
     
-
+    // Do NOT fall back to first wallet; require embedded wallet
     return null;
+  };
+
+  // Функция для принудительного создания embedded wallet
+  const ensureEmbeddedWallet = async () => {
+    if (!authenticated || !user) {
+      console.log('🔍 ensureEmbeddedWallet: Not authenticated or no user');
+      return null;
+    }
+
+    // Проверяем, есть ли уже embedded wallet
+    const existingEmbeddedWallet = getEmbeddedWallet();
+    if (existingEmbeddedWallet && (
+      existingEmbeddedWallet.walletClientType === 'privy' || 
+      existingEmbeddedWallet.connectorType === 'embedded' ||
+      existingEmbeddedWallet.type === 'embedded' ||
+      existingEmbeddedWallet.walletClientType === 'embedded' ||
+      existingEmbeddedWallet.walletIndex === 0
+    )) {
+      console.log('✅ Embedded wallet already exists:', existingEmbeddedWallet.address);
+      return existingEmbeddedWallet;
+    }
+
+    console.log('🔄 Attempting to create embedded wallet...');
+    
+    try {
+      // Wait a bit for any pending wallet creation to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Check again after waiting
+      const retryEmbeddedWallet = getEmbeddedWallet();
+      if (retryEmbeddedWallet) {
+        console.log('✅ Found embedded wallet after waiting:', retryEmbeddedWallet.address);
+        return retryEmbeddedWallet;
+      }
+      
+      // Пытаемся создать embedded wallet через Privy
+      if (window.privy && window.privy.createWallet) {
+        console.log('🔄 Attempting to create wallet via Privy...');
+        const newWallet = await window.privy.createWallet();
+        console.log('✅ Created new embedded wallet via Privy:', newWallet);
+        
+        // Wait a bit more for the wallet to be properly registered
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Check if the wallet is now available in the wallets list
+        const finalCheck = getEmbeddedWallet();
+        if (finalCheck) {
+          console.log('✅ Embedded wallet successfully registered:', finalCheck.address);
+          return finalCheck;
+        } else {
+          console.log('⚠️ Wallet created but not found in wallets list');
+          return newWallet;
+        }
+      }
+      
+      console.log('⚠️ Privy createWallet not available');
+      return null;
+    } catch (error) {
+      console.error('❌ Failed to create embedded wallet:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        privyAvailable: !!window.privy,
+        createWalletAvailable: !!(window.privy && window.privy.createWallet)
+      });
+      return null;
+    }
   };
 
   // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ создание клиентов с системой fallback endpoints
@@ -654,8 +756,14 @@ export const useBlockchainUtils = () => {
     const config = NETWORK_CONFIGS[chainId];
     if (!config) throw new Error(`Unsupported network: ${chainId}`);
 
-    const embeddedWallet = getEmbeddedWallet();
-    if (!embeddedWallet) throw new Error('No embedded wallet found');
+    let embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      console.log('🔄 No embedded wallet found, attempting to ensure one exists...');
+      embeddedWallet = await ensureEmbeddedWallet();
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet found and could not create one');
+      }
+    }
 
     // Инициализируем систему мониторинга RPC здоровья
     initializeRpcHealth(chainId);
@@ -1548,6 +1656,36 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Автоматическое обновление баланса
+  const startBalanceAutoUpdate = (chainId) => {
+    if (!chainId) return;
+    
+    console.log('🔄 Starting automatic balance updates for chain:', chainId);
+    
+    // Очищаем предыдущий интервал
+    if (balanceUpdateInterval.current) {
+      clearInterval(balanceUpdateInterval.current);
+    }
+    
+    // Обновляем баланс каждые 10 секунд
+    balanceUpdateInterval.current = setInterval(async () => {
+      try {
+        await checkBalance(chainId);
+      } catch (error) {
+        console.warn('Auto balance update failed:', error);
+      }
+    }, 10000); // 10 секунд
+  };
+
+  // Остановка автоматического обновления баланса
+  const stopBalanceAutoUpdate = () => {
+    if (balanceUpdateInterval.current) {
+      clearInterval(balanceUpdateInterval.current);
+      balanceUpdateInterval.current = null;
+      console.log('🛑 Stopped automatic balance updates');
+    }
+  };
+
   // РЕВОЛЮЦИОННЫЙ вызов faucet с кешированием и умной обработкой
   const callFaucet = async (address, chainId) => {
     const cacheKey = `faucet_${chainId}_${address}`;
@@ -1567,6 +1705,20 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Calling optimized faucet for address:', address);
       console.log('🌐 Chain ID:', chainId);
+      
+      // Проверяем, что адрес принадлежит embedded wallet
+      const embeddedWallet = getEmbeddedWallet();
+      const isEmbeddedWallet = embeddedWallet && embeddedWallet.address === address;
+      if (!isEmbeddedWallet) {
+        throw new Error('Faucet target must be the embedded wallet. Please wait for wallet to initialize.');
+      }
+      
+      console.log('🔍 Faucet target address check:', {
+        address,
+        isEmbeddedWallet,
+        embeddedWalletAddress: embeddedWallet?.address,
+        walletType: embeddedWallet?.walletClientType || embeddedWallet?.connectorType || embeddedWallet?.type
+      });
       
       // Создаем контроллер для timeout
       const controller = new AbortController();
@@ -1588,7 +1740,8 @@ export const useBlockchainUtils = () => {
           address, 
           chainId,
           timestamp: Date.now(), // Добавляем timestamp для предотвращения кеширования
-          clientVersion: '1.0'    // Версия клиента для аналитики
+          clientVersion: '1.0',   // Версия клиента для аналитики
+          force: true             // Принудительно отправить, даже если баланс уже достаточный
         }),
         signal: controller.signal,
         mode: 'cors'
@@ -1599,7 +1752,9 @@ export const useBlockchainUtils = () => {
       if (!response.ok) {
         let errorMessage = 'Faucet request failed';
         try {
-          const errorData = await response.json();
+          const text = await response.text();
+          let errorData = {};
+          try { errorData = JSON.parse(text); } catch (_) {}
           errorMessage = errorData.error || errorMessage;
           
           // Специальная обработка известных ошибок
@@ -1632,10 +1787,17 @@ export const useBlockchainUtils = () => {
         throw new Error(errorMessage);
       }
 
-      const result = await response.json();
+      const text = await response.text();
+      let result = {};
+      try { result = JSON.parse(text); } catch (_) {}
+      if (!result || !result.success) {
+        console.warn('Faucet responded without success flag:', text);
+      }
       
       // Сохраняем время последнего успешного вызова
-      localStorage.setItem(cacheKey, Date.now().toString());
+      if (result && result.success) {
+        localStorage.setItem(cacheKey, Date.now().toString());
+      }
       
       console.log('💰 Faucet success:', result);
       
@@ -1657,7 +1819,8 @@ export const useBlockchainUtils = () => {
       return {
         success: true,
         ...result,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        isEmbeddedWallet
       };
       
     } catch (error) {
@@ -2235,14 +2398,28 @@ export const useBlockchainUtils = () => {
         if (parseFloat(currentBalance) < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-          // НЕБЛОКИРУЮЩИЙ faucet вызов
-          callFaucet(embeddedWallet.address, chainId)
-            .then(() => {
+                // Получаем правильный embedded wallet для faucet
+      const faucetWallet = getEmbeddedWallet();
+      if (!faucetWallet) {
+        console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
+        return { currentBalance, initialNonce };
+      }
+      
+      console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
+      
+      // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
+      callFaucet(faucetWallet.address, chainId)
+            .then((result) => {
               console.log('✅ Background faucet completed');
+              if (result.isEmbeddedWallet) {
+                console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
+              } else {
+                console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
+              }
               // Обновляем баланс через 5 секунд
               setTimeout(() => checkBalance(chainId), 5000);
               // Обновляем nonce после faucet
-              return getNextNonce(chainId, embeddedWallet.address, true);
+              return getNextNonce(chainId, faucetWallet.address, true);
             })
             .catch(faucetError => {
               console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
@@ -2306,6 +2483,9 @@ export const useBlockchainUtils = () => {
       // Ждем только базовую инициализацию (баланс + nonce)
       await balanceAndNoncePromise;
       
+      // Запускаем автоматическое обновление баланса
+      startBalanceAutoUpdate(chainId);
+      
       console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
       
       if (fallbackConfig) {
@@ -2353,6 +2533,7 @@ export const useBlockchainUtils = () => {
 
   // ЗНАЧИТЕЛЬНО УЛУЧШЕННАЯ retry функция с circuit breaker и умной обработкой ошибок
   const circuitBreakers = useRef({});
+  const balanceUpdateInterval = useRef(null);
 
   const getCircuitBreaker = (chainId) => {
     if (!circuitBreakers.current[chainId]) {
@@ -2780,8 +2961,59 @@ export const useBlockchainUtils = () => {
           }
         });
       }, 2000); // Через 2 секунды после загрузки
+      
+      // Добавляем глобальные функции для отладки
+      if (process.env.NODE_ENV === 'development') {
+        window.gameCallFaucet = callFaucet;
+        window.gameGetEmbeddedWallet = getEmbeddedWallet;
+        window.gameEnsureEmbeddedWallet = ensureEmbeddedWallet;
+        console.log('🔧 Отладочные функции добавлены в window:');
+        console.log('  • window.gameCallFaucet(address, chainId)');
+        console.log('  • window.gameGetEmbeddedWallet()');
+        console.log('  • window.gameEnsureEmbeddedWallet()');
+      }
     }
+    
+    // Очистка при размонтировании
+    return () => {
+      stopBalanceAutoUpdate();
+    };
   }, []);
+
+  // Effect для автоматического обеспечения embedded wallet при аутентификации
+  useEffect(() => {
+    if (authenticated && user && wallets.length === 0) {
+      console.log('🔄 User authenticated but no wallets found, ensuring embedded wallet creation...');
+      const ensureWallet = async () => {
+        try {
+          await ensureEmbeddedWallet();
+        } catch (error) {
+          console.error('Failed to ensure embedded wallet:', error);
+        }
+      };
+      ensureWallet();
+    }
+  }, [authenticated, user, wallets.length]);
+
+  // Effect для повторных попыток создания embedded wallet
+  useEffect(() => {
+    if (authenticated && user && wallets.length > 0) {
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        console.log('🔄 User has wallets but no embedded wallet found, retrying creation...');
+        const retryWallet = async () => {
+          try {
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await ensureEmbeddedWallet();
+          } catch (error) {
+            console.error('Failed to retry embedded wallet creation:', error);
+          }
+        };
+        retryWallet();
+      }
+    }
+  }, [authenticated, user, wallets.length]);
 
   return {
     // Состояние
@@ -2800,6 +3032,9 @@ export const useBlockchainUtils = () => {
     
     // Утилиты
     getEmbeddedWallet,
+    ensureEmbeddedWallet,
+    startBalanceAutoUpdate,
+    stopBalanceAutoUpdate,
     isAuthenticated: authenticated,
     isReady: authenticated && wallets.length > 0,
     
