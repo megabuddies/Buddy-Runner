@@ -322,7 +322,7 @@ const GameComponent = ({ selectedNetwork }) => {
       const result = await callFaucet(embeddedWallet.address, selectedNetwork.id);
       
       // Показываем информацию о том, какой адрес был использован
-      if (result.usedEmbeddedWallet) {
+      if (result.isEmbeddedWallet) {
         alert('Faucet request successful! Funds will be sent to your game wallet.');
       } else {
         alert('Faucet request successful! Funds should arrive shortly.');

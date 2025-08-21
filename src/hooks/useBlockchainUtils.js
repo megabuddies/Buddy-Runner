@@ -1605,9 +1605,39 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Автоматическое обновление баланса
+  const startBalanceAutoUpdate = (chainId) => {
+    if (!chainId) return;
+    
+    console.log('🔄 Starting automatic balance updates for chain:', chainId);
+    
+    // Очищаем предыдущий интервал
+    if (balanceUpdateInterval.current) {
+      clearInterval(balanceUpdateInterval.current);
+    }
+    
+    // Обновляем баланс каждые 10 секунд
+    balanceUpdateInterval.current = setInterval(async () => {
+      try {
+        await checkBalance(chainId);
+      } catch (error) {
+        console.warn('Auto balance update failed:', error);
+      }
+    }, 10000); // 10 секунд
+  };
+
+  // Остановка автоматического обновления баланса
+  const stopBalanceAutoUpdate = () => {
+    if (balanceUpdateInterval.current) {
+      clearInterval(balanceUpdateInterval.current);
+      balanceUpdateInterval.current = null;
+      console.log('🛑 Stopped automatic balance updates');
+    }
+  };
+
   // РЕВОЛЮЦИОННЫЙ вызов faucet с кешированием и умной обработкой
   const callFaucet = async (address, chainId) => {
-    // Кеш ключ будет обновлен после определения targetAddress
+    const cacheKey = `faucet_${chainId}_${address}`;
     const FAUCET_COOLDOWN = 5 * 60 * 1000; // 5 минут между вызовами
     
     try {
@@ -1622,41 +1652,19 @@ export const useBlockchainUtils = () => {
         }
       }
       
-      // Убеждаемся, что у нас есть embedded wallet для faucet
-      let targetAddress = address;
-      const embeddedWallet = getEmbeddedWallet();
-      
-      if (!embeddedWallet || 
-          embeddedWallet.walletClientType !== 'privy' && 
-          embeddedWallet.connectorType !== 'embedded' && 
-          embeddedWallet.type !== 'embedded' && 
-          embeddedWallet.walletClientType !== 'embedded') {
-        
-        console.log('⚠️ No proper embedded wallet found, attempting to create one...');
-        const newEmbeddedWallet = await ensureEmbeddedWallet();
-        
-        if (newEmbeddedWallet) {
-          targetAddress = newEmbeddedWallet.address;
-          console.log('✅ Using newly created embedded wallet for faucet:', targetAddress);
-        } else {
-          console.log('⚠️ Could not create embedded wallet, using provided address');
-        }
-      } else {
-        targetAddress = embeddedWallet.address;
-        console.log('✅ Using existing embedded wallet for faucet:', targetAddress);
-      }
-      
-      console.log('💰 Calling optimized faucet for address:', targetAddress);
+      console.log('💰 Calling optimized faucet for address:', address);
       console.log('🌐 Chain ID:', chainId);
-      console.log('🔍 Faucet target address type check:', {
-        originalAddress: address,
-        targetAddress,
-        isEmbeddedWallet: targetAddress === getEmbeddedWallet()?.address,
-        embeddedWalletAddress: getEmbeddedWallet()?.address
-      });
       
-      // Обновляем кеш ключ с правильным адресом
-      const cacheKey = `faucet_${chainId}_${targetAddress}`;
+      // Проверяем, что адрес принадлежит embedded wallet
+      const embeddedWallet = getEmbeddedWallet();
+      const isEmbeddedWallet = embeddedWallet && embeddedWallet.address === address;
+      
+      console.log('🔍 Faucet target address check:', {
+        address,
+        isEmbeddedWallet,
+        embeddedWalletAddress: embeddedWallet?.address,
+        walletType: embeddedWallet?.walletClientType || embeddedWallet?.connectorType || embeddedWallet?.type
+      });
       
       // Создаем контроллер для timeout
       const controller = new AbortController();
@@ -1675,7 +1683,7 @@ export const useBlockchainUtils = () => {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({ 
-          address: targetAddress, 
+          address, 
           chainId,
           timestamp: Date.now(), // Добавляем timestamp для предотвращения кеширования
           clientVersion: '1.0'    // Версия клиента для аналитики
@@ -1748,9 +1756,7 @@ export const useBlockchainUtils = () => {
         success: true,
         ...result,
         timestamp: Date.now(),
-        targetAddress: targetAddress,
-        originalAddress: address,
-        usedEmbeddedWallet: targetAddress === getEmbeddedWallet()?.address
+        isEmbeddedWallet
       };
       
     } catch (error) {
@@ -2328,19 +2334,28 @@ export const useBlockchainUtils = () => {
         if (parseFloat(currentBalance) < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-          // НЕБЛОКИРУЮЩИЙ faucet вызов с проверкой embedded wallet
-          callFaucet(embeddedWallet.address, chainId)
+          // Получаем правильный embedded wallet для faucet
+          const faucetWallet = getEmbeddedWallet();
+          if (!faucetWallet) {
+            console.warn('⚠️ No embedded wallet available for faucet');
+            return { currentBalance, initialNonce };
+          }
+          
+          console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
+          
+          // НЕБЛОКИРУЮЩИЙ faucet вызов
+          callFaucet(faucetWallet.address, chainId)
             .then((result) => {
               console.log('✅ Background faucet completed');
-              if (result.usedEmbeddedWallet) {
-                console.log('✅ Faucet sent to embedded wallet:', result.targetAddress);
+              if (result.isEmbeddedWallet) {
+                console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
               } else {
-                console.log('⚠️ Faucet sent to fallback wallet:', result.targetAddress);
+                console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
               }
               // Обновляем баланс через 5 секунд
               setTimeout(() => checkBalance(chainId), 5000);
               // Обновляем nonce после faucet
-              return getNextNonce(chainId, embeddedWallet.address, true);
+              return getNextNonce(chainId, faucetWallet.address, true);
             })
             .catch(faucetError => {
               console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
@@ -2404,6 +2419,9 @@ export const useBlockchainUtils = () => {
       // Ждем только базовую инициализацию (баланс + nonce)
       await balanceAndNoncePromise;
       
+      // Запускаем автоматическое обновление баланса
+      startBalanceAutoUpdate(chainId);
+      
       console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
       
       if (fallbackConfig) {
@@ -2451,6 +2469,7 @@ export const useBlockchainUtils = () => {
 
   // ЗНАЧИТЕЛЬНО УЛУЧШЕННАЯ retry функция с circuit breaker и умной обработкой ошибок
   const circuitBreakers = useRef({});
+  const balanceUpdateInterval = useRef(null);
 
   const getCircuitBreaker = (chainId) => {
     if (!circuitBreakers.current[chainId]) {
@@ -2890,6 +2909,11 @@ export const useBlockchainUtils = () => {
         console.log('  • window.gameEnsureEmbeddedWallet()');
       }
     }
+    
+    // Очистка при размонтировании
+    return () => {
+      stopBalanceAutoUpdate();
+    };
   }, []);
 
   return {
@@ -2910,6 +2934,8 @@ export const useBlockchainUtils = () => {
     // Утилиты
     getEmbeddedWallet,
     ensureEmbeddedWallet,
+    startBalanceAutoUpdate,
+    stopBalanceAutoUpdate,
     isAuthenticated: authenticated,
     isReady: authenticated && wallets.length > 0,
     
