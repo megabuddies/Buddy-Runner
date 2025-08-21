@@ -86,8 +86,8 @@ const GameComponent = ({ selectedNetwork }) => {
 
   // Инициализация блокчейн данных
   const initializeBlockchain = async () => {
-    if (!isReady || !selectedNetwork || selectedNetwork.isWeb2) {
-      console.log('Skipping blockchain initialization - Web2 mode or not ready');
+    if (!selectedNetwork || selectedNetwork.isWeb2 || !authenticated) {
+      console.log('Skipping blockchain initialization - Web2 mode or not authenticated');
       setBlockchainStatus(prev => ({ 
         ...prev, 
         initialized: false,
@@ -394,15 +394,13 @@ const GameComponent = ({ selectedNetwork }) => {
       return;
     }
 
-    // Only initialize if we have proper authentication and embedded wallet
-    if (selectedNetwork && isReady && authenticated && wallets.length > 0) {
+    // Trigger initialization as soon as we have a network and authentication.
+    // Wallet readiness is handled internally by initData (with retries), allowing auto-faucet earlier.
+    if (selectedNetwork && authenticated) {
       console.log('Initializing blockchain for:', selectedNetwork.name);
-
       initializeBlockchain();
-    } else {
-
     }
-  }, [selectedNetwork, isReady, authenticated, wallets]);
+  }, [selectedNetwork, authenticated]);
 
   // Update blockchain status from hook
   useEffect(() => {
