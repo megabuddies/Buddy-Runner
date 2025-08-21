@@ -1502,6 +1502,30 @@ export const useBlockchainUtils = () => {
       // Детальное логирование для отладки
       if (!pool) {
         console.log(`❌ No transaction pool exists for chain ${chainId}`);
+        console.log('🔄 Attempting automatic pool initialization...');
+        
+        // Попытка автоматической инициализации пула
+        try {
+          const embeddedWallet = getEmbeddedWallet();
+          if (embeddedWallet) {
+            const manager = getNonceManager(chainId, embeddedWallet.address);
+            const currentNonce = manager ? manager.currentNonce : 0;
+            console.log(`🔄 Auto-initializing pool with nonce ${currentNonce}`);
+            await preSignBatch(chainId, currentNonce, 10);
+            
+            // Проверяем, создался ли пул
+            const newPool = preSignedPool.current[chainId.toString()];
+            if (newPool && newPool.isReady && newPool.transactions.length > 0) {
+              console.log('✅ Auto-initialization successful, retrying transaction...');
+              const txWrapper = newPool.transactions[newPool.currentIndex];
+              newPool.currentIndex++;
+              return txWrapper.signedTx;
+            }
+          }
+        } catch (autoInitError) {
+          console.error('❌ Auto-initialization failed:', autoInitError);
+        }
+        
         throw new Error(`No pre-signed transaction pool available for chain ${chainId}. Only pre-signed transactions are allowed.`);
       } else if (!pool.isReady) {
         console.log(`⏳ Transaction pool not ready yet for chain ${chainId} (${pool.transactions.length} transactions in progress)`);
@@ -1637,22 +1661,23 @@ export const useBlockchainUtils = () => {
       
       if (!embeddedWallet) {
         console.error('No embedded wallet available for balance check');
-        return '0';
+        return 0;
       }
       
       const balance = await publicClient.getBalance({
         address: embeddedWallet.address
       });
       
-      const balanceEth = (Number(balance) / 10**18).toFixed(4);
-      setBalance(balanceEth);
-      console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
-      return balanceEth;
+      const balanceEth = Number(balance) / 10**18;
+      const balanceEthFormatted = balanceEth.toFixed(4);
+      setBalance(balanceEthFormatted);
+      console.log(`Balance for ${embeddedWallet.address}: ${balanceEthFormatted} ETH (raw: ${balanceEth})`);
+      return balanceEth; // Возвращаем число, а не строку
     } catch (error) {
       console.error('Error checking balance:', error);
       // Return 0 balance and let the system continue
       setBalance('0');
-      return '0';
+      return 0;
     }
   };
 
@@ -1675,6 +1700,28 @@ export const useBlockchainUtils = () => {
         console.warn('Auto balance update failed:', error);
       }
     }, 10000); // 10 секунд
+  };
+
+  // Принудительное обновление баланса с повторными попытками
+  const forceUpdateBalance = async (chainId, maxRetries = 3) => {
+    console.log('🔄 Force updating balance for chain:', chainId);
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const newBalance = await checkBalance(chainId);
+        console.log(`✅ Balance updated on attempt ${attempt}:`, newBalance, 'ETH');
+        return newBalance;
+      } catch (error) {
+        console.warn(`⚠️ Balance update attempt ${attempt} failed:`, error);
+        if (attempt < maxRetries) {
+          // Ждем перед следующей попыткой
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        }
+      }
+    }
+    
+    console.error('❌ All balance update attempts failed');
+    return 0;
   };
 
   // Остановка автоматического обновления баланса
@@ -2391,11 +2438,11 @@ export const useBlockchainUtils = () => {
         nonceManager.pendingNonce = initialNonce;
         nonceManager.lastUpdate = Date.now();
 
-        console.log('💰 Current balance:', currentBalance);
+        console.log('💰 Current balance:', currentBalance, 'ETH (type:', typeof currentBalance, ')');
         console.log('🎯 Starting nonce:', initialNonce);
 
         // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
-        if (parseFloat(currentBalance) < 0.00005) {
+        if (currentBalance < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
                 // Получаем правильный embedded wallet для faucet
@@ -2416,8 +2463,27 @@ export const useBlockchainUtils = () => {
               } else {
                 console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
               }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
+              // Обновляем баланс через 3 секунды и принудительно инициализируем пул
+              setTimeout(async () => {
+                try {
+                  console.log('🔄 Updating balance after faucet...');
+                  const newBalance = await forceUpdateBalance(chainId, 3);
+                  console.log('✅ New balance after faucet:', newBalance, 'ETH');
+                  
+                  // Принудительно инициализируем пул предподписанных транзакций
+                  const pool = preSignedPool.current[chainKey];
+                  if (!pool || !pool.isReady || pool.transactions.length === 0) {
+                    console.log('🔄 Forcing pre-signed pool initialization after faucet...');
+                    const manager = getNonceManager(chainId, faucetWallet.address);
+                    const currentNonce = manager ? manager.currentNonce : initialNonce;
+                    await preSignBatch(chainId, currentNonce, 10); // Инициализируем с 10 транзакциями
+                    console.log('✅ Pre-signed pool initialized after faucet');
+                  }
+                } catch (error) {
+                  console.warn('Failed to update balance/initialize pool after faucet:', error);
+                }
+              }, 3000);
+              
               // Обновляем nonce после faucet
               return getNextNonce(chainId, faucetWallet.address, true);
             })
@@ -2425,6 +2491,10 @@ export const useBlockchainUtils = () => {
               console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
             });
         }
+        
+        // ВСЕГДА инициализируем пул предподписанных транзакций, независимо от баланса
+        // Это критично для работы игры, так как она использует только pre-signed транзакции
+        console.log('🎯 Initializing pre-signed transaction pool regardless of balance...');
         
         return { currentBalance, initialNonce };
       });
@@ -2482,6 +2552,34 @@ export const useBlockchainUtils = () => {
       
       // Ждем только базовую инициализацию (баланс + nonce)
       await balanceAndNoncePromise;
+      
+      // ПРИНУДИТЕЛЬНАЯ инициализация пула предподписанных транзакций
+      // Это критично для работы игры, так как она использует только pre-signed транзакции
+      try {
+        const pool = preSignedPool.current[chainKey];
+        if (!pool || !pool.isReady || pool.transactions.length === 0) {
+          console.log('🔄 Forcing pre-signed pool initialization after basic setup...');
+          const { initialNonce } = await balanceAndNoncePromise;
+          const manager = getNonceManager(chainId, embeddedWallet.address);
+          const currentNonce = manager ? manager.currentNonce : initialNonce;
+          await preSignBatch(chainId, currentNonce, 10); // Инициализируем с 10 транзакциями
+          console.log('✅ Pre-signed pool forced initialization complete');
+          
+          // Принудительно обновляем баланс после инициализации пула
+          setTimeout(async () => {
+            try {
+              await forceUpdateBalance(chainId, 2);
+            } catch (error) {
+              console.warn('Failed to update balance after pool initialization:', error);
+            }
+          }, 2000);
+        } else {
+          console.log('✅ Pre-signed pool already initialized');
+        }
+      } catch (poolError) {
+        console.warn('⚠️ Failed to force initialize pre-signed pool:', poolError);
+        // Не блокируем игру, продолжаем в fallback режиме
+      }
       
       // Запускаем автоматическое обновление баланса
       startBalanceAutoUpdate(chainId);
@@ -3072,6 +3170,7 @@ export const useBlockchainUtils = () => {
     initData,
     sendUpdate,
     checkBalance,
+    forceUpdateBalance,
     callFaucet,
     getContractNumber,
     

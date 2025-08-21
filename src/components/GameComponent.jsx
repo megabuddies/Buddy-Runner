@@ -27,6 +27,7 @@ const GameComponent = ({ selectedNetwork }) => {
     initData,
     sendUpdate,
     checkBalance,
+    forceUpdateBalance,
     getContractNumber,
     isReady,
     getEmbeddedWallet,
@@ -60,10 +61,11 @@ const GameComponent = ({ selectedNetwork }) => {
     blockchainFunctionsRef.current = {
       sendUpdate,
       getContractNumber,
+      forceUpdateBalance,
       selectedNetwork,
       blockchainInitialized: blockchainStatus.initialized
     };
-  }, [sendUpdate, getContractNumber, selectedNetwork, blockchainStatus.initialized]);
+  }, [sendUpdate, getContractNumber, forceUpdateBalance, selectedNetwork, blockchainStatus.initialized]);
 
   // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
@@ -114,6 +116,18 @@ const GameComponent = ({ selectedNetwork }) => {
       });
 
       console.log('Blockchain initialization complete');
+      
+      // Принудительно обновляем баланс после успешной инициализации
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Force updating balance after blockchain initialization...');
+          await forceUpdateBalance(selectedNetwork.id, 3);
+          console.log('✅ Balance updated after blockchain initialization');
+        } catch (error) {
+          console.warn('Failed to update balance after blockchain initialization:', error);
+        }
+      }, 2000);
+      
     } catch (error) {
       console.error('Failed to initialize blockchain:', error);
       setBlockchainStatus(prev => ({ 
@@ -126,7 +140,7 @@ const GameComponent = ({ selectedNetwork }) => {
 
   // Обработка ончейн прыжка с Real-Time Gaming архитектурой
   const handleOnChainMovement = useCallback(async () => {
-    const { sendUpdate, getContractNumber, selectedNetwork, blockchainInitialized } = blockchainFunctionsRef.current;
+    const { sendUpdate, getContractNumber, forceUpdateBalance, selectedNetwork, blockchainInitialized } = blockchainFunctionsRef.current;
     
     // Проверяем, поддерживает ли сеть ончейн функциональность
     if (!selectedNetwork || selectedNetwork.isWeb2 || !blockchainInitialized) {
@@ -283,6 +297,17 @@ const GameComponent = ({ selectedNetwork }) => {
           timestamp: Date.now()
         }
       }));
+      
+      // Принудительно обновляем баланс в случае ошибки
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Force updating balance after transaction error...');
+          await forceUpdateBalance(selectedNetwork.id, 2);
+          console.log('✅ Balance updated after transaction error');
+        } catch (balanceError) {
+          console.warn('Failed to update balance after transaction error:', balanceError);
+        }
+      }, 1000);
       
       // Бросаем ошибку для обработки выше
       const enhancedError = new Error(errorMessage);
