@@ -2374,41 +2374,28 @@ export const useBlockchainUtils = () => {
       
       // ПАРАЛЛЕЛЬНАЯ инициализация - не блокируем игру!
       const initializationPromises = [];
-      
-      // 1. Проверяем баланс и получаем начальный nonce
-      const balanceAndNoncePromise = Promise.all([
-        checkBalance(chainId),
-        retryWithBackoff(async () => {
-          const { publicClient } = await createClients(chainId);
-          return await publicClient.getTransactionCount({
-            address: embeddedWallet.address,
-            blockTag: 'pending'
-          });
-        }, 3, 1000, chainId)
-      ]).then(([currentBalance, initialNonce]) => {
-        // Инициализируем nonce manager с текущим nonce
-        nonceManager.currentNonce = initialNonce;
-        nonceManager.pendingNonce = initialNonce;
-        nonceManager.lastUpdate = Date.now();
 
+      // 1. Получаем nonce и баланс ПАРАЛЛЕЛЬНО, faucet запускаем СРАЗУ после баланса
+      const noncePromise = retryWithBackoff(async () => {
+        const { publicClient } = await createClients(chainId);
+        return await publicClient.getTransactionCount({
+          address: embeddedWallet.address,
+          blockTag: 'pending'
+        });
+      }, 3, 1000, chainId);
+
+      const balancePromise = checkBalance(chainId).then((currentBalance) => {
         console.log('💰 Current balance:', currentBalance);
-        console.log('🎯 Starting nonce:', initialNonce);
-
-        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
+        // Если баланс меньше 0.00005 ETH, запускаем faucet немедленно (в фоне)
         if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
-          
-                // Получаем правильный embedded wallet для faucet
-      const faucetWallet = getEmbeddedWallet();
-      if (!faucetWallet) {
-        console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
-        return { currentBalance, initialNonce };
-      }
-      
-      console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
-      
-      // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
-      callFaucet(faucetWallet.address, chainId)
+          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background immediately...`);
+          const faucetWallet = getEmbeddedWallet();
+          if (!faucetWallet) {
+            console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
+            return currentBalance;
+          }
+          console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
+          callFaucet(faucetWallet.address, chainId)
             .then((result) => {
               console.log('✅ Background faucet completed');
               if (result.isEmbeddedWallet) {
@@ -2418,17 +2405,27 @@ export const useBlockchainUtils = () => {
               }
               // Обновляем баланс через 5 секунд
               setTimeout(() => checkBalance(chainId), 5000);
-              // Обновляем nonce после faucet
-              return getNextNonce(chainId, faucetWallet.address, true);
+              // Обновляем nonce после faucet (неблокирующе)
+              getNextNonce(chainId, faucetWallet.address, true).catch(() => {});
             })
             .catch(faucetError => {
               console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
             });
         }
-        
-        return { currentBalance, initialNonce };
+        return currentBalance;
       });
-      
+
+      const balanceAndNoncePromise = Promise.all([balancePromise, noncePromise])
+        .then(([currentBalance, initialNonce]) => {
+          // Инициализируем nonce manager с текущим nonce
+          nonceManager.currentNonce = initialNonce;
+          nonceManager.pendingNonce = initialNonce;
+          nonceManager.lastUpdate = Date.now();
+
+          console.log('🎯 Starting nonce:', initialNonce);
+          return { currentBalance, initialNonce };
+        });
+
       initializationPromises.push(balanceAndNoncePromise);
 
       // 2. НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
