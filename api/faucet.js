@@ -50,7 +50,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { address, chainId } = req.body;
+    const { address, chainId, force } = req.body;
 
     // Валидация входных данных
     if (!address || !chainId) {
@@ -96,7 +96,7 @@ export default async function handler(req, res) {
     const userBalance = await provider.getBalance(address);
     const minBalance = ethers.parseEther('0.00005'); // Изменено на 0.00005 ETH
     
-    if (userBalance >= minBalance) {
+    if (!force && userBalance >= minBalance) {
       return res.status(400).json({ 
         error: 'Address already has sufficient balance',
         balance: ethers.formatEther(userBalance),

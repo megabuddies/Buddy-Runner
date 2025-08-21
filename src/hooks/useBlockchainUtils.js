@@ -1740,7 +1740,8 @@ export const useBlockchainUtils = () => {
           address, 
           chainId,
           timestamp: Date.now(), // Добавляем timestamp для предотвращения кеширования
-          clientVersion: '1.0'    // Версия клиента для аналитики
+          clientVersion: '1.0',   // Версия клиента для аналитики
+          force: true             // Принудительно отправить, даже если баланс уже достаточный
         }),
         signal: controller.signal,
         mode: 'cors'
@@ -1794,7 +1795,9 @@ export const useBlockchainUtils = () => {
       }
       
       // Сохраняем время последнего успешного вызова
-      localStorage.setItem(cacheKey, Date.now().toString());
+      if (result && result.success) {
+        localStorage.setItem(cacheKey, Date.now().toString());
+      }
       
       console.log('💰 Faucet success:', result);
       
