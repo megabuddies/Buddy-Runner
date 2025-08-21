@@ -1801,19 +1801,37 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Faucet success:', result);
       
-      // Если faucet возвращает txHash, ждем немного и обновляем баланс
+      // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Немедленное обновление баланса после faucet
       if (result.txHash) {
-        console.log('⏳ Waiting for faucet transaction to be processed...');
+        console.log('⏳ Faucet transaction sent, updating balance immediately...');
         
-        // Асинхронно обновляем баланс через 3 секунды
+        // Немедленно обновляем баланс
+        try {
+          await checkBalance(chainId);
+          console.log('✅ Balance updated immediately after faucet transaction');
+        } catch (error) {
+          console.warn('Failed to update balance immediately after faucet:', error);
+          
+          // Повторная попытка через 2 секунды
+          setTimeout(async () => {
+            try {
+              await checkBalance(chainId);
+              console.log('✅ Balance updated on retry after faucet transaction');
+            } catch (retryError) {
+              console.warn('Failed to update balance on retry after faucet:', retryError);
+            }
+          }, 2000);
+        }
+        
+        // Дополнительное обновление через 5 секунд для гарантии
         setTimeout(async () => {
           try {
             await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
+            console.log('✅ Final balance update after faucet transaction');
           } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
+            console.warn('Failed final balance update after faucet:', error);
           }
-        }, 3000);
+        }, 5000);
       }
       
       return {
@@ -2347,7 +2365,6 @@ export const useBlockchainUtils = () => {
       while (!embeddedWallet && retries < maxRetries) {
         embeddedWallet = getEmbeddedWallet();
         if (!embeddedWallet) {
-
           await new Promise(resolve => setTimeout(resolve, 1000));
           retries++;
         }
@@ -2356,8 +2373,6 @@ export const useBlockchainUtils = () => {
       if (!embeddedWallet) {
         throw new Error('No embedded wallet available');
       }
-
-
 
       // Для Privy embedded wallets пропускаем переключение сети
       // Используем логику bypass для избежания ошибок Privy
@@ -2371,9 +2386,6 @@ export const useBlockchainUtils = () => {
 
       // УЛУЧШЕННАЯ инициализация nonce manager
       const nonceManager = getNonceManager(chainId, embeddedWallet.address);
-      
-      // ПАРАЛЛЕЛЬНАЯ инициализация - не блокируем игру!
-      const initializationPromises = [];
       
       // 1. Проверяем баланс и получаем начальный nonce
       const balanceAndNoncePromise = Promise.all([
@@ -2398,17 +2410,17 @@ export const useBlockchainUtils = () => {
         if (parseFloat(currentBalance) < 0.00005) {
           console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
           
-                // Получаем правильный embedded wallet для faucet
-      const faucetWallet = getEmbeddedWallet();
-      if (!faucetWallet) {
-        console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
-        return { currentBalance, initialNonce };
-      }
-      
-      console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
-      
-      // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
-      callFaucet(faucetWallet.address, chainId)
+          // Получаем правильный embedded wallet для faucet
+          const faucetWallet = getEmbeddedWallet();
+          if (!faucetWallet) {
+            console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
+            return { currentBalance, initialNonce };
+          }
+          
+          console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
+          
+          // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
+          callFaucet(faucetWallet.address, chainId)
             .then((result) => {
               console.log('✅ Background faucet completed');
               if (result.isEmbeddedWallet) {
@@ -2428,14 +2440,12 @@ export const useBlockchainUtils = () => {
         
         return { currentBalance, initialNonce };
       });
-      
-      initializationPromises.push(balanceAndNoncePromise);
 
       // 2. НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
       isInitialized.current[chainKey] = true;
       console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
       
-      // 3. Pre-signing в ФОНОВОМ режиме (не блокируем игру)
+      // 3. КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Синхронное создание пула предподписанных транзакций
       const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
       const fallbackConfig = getFallbackConfig(chainId);
       
@@ -2445,43 +2455,33 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      // ФОНОВОЕ предподписание
-      const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
-        console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
-        
-        // Резервируем nonces для pre-signing
-        const manager = getNonceManager(chainId, embeddedWallet.address);
-        if (manager) {
-          manager.pendingNonce = Math.max(manager.pendingNonce || initialNonce, initialNonce + batchSize);
+      // Ждем базовую инициализацию (баланс + nonce)
+      const { initialNonce } = await balanceAndNoncePromise;
+      
+      // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Синхронно создаем пул предподписанных транзакций
+      console.log(`🔄 CRITICAL: Creating pre-signed transaction pool with ${batchSize} transactions starting from nonce ${initialNonce}`);
+      
+      // Резервируем nonces для pre-signing
+      const manager = getNonceManager(chainId, embeddedWallet.address);
+      if (manager) {
+        manager.pendingNonce = Math.max(manager.pendingNonce || initialNonce, initialNonce + batchSize);
+      }
+      
+      // СИНХРОННО создаем пул предподписанных транзакций
+      try {
+        await preSignBatch(chainId, initialNonce, batchSize);
+        const pool = preSignedPool.current[chainKey];
+        if (pool && pool.transactions.length > 0) {
+          console.log(`✅ CRITICAL: Pre-signed ${pool.transactions.length} transactions - pool is ready!`);
+        } else {
+          console.log('⚠️ Pre-signing completed with 0 transactions - enabling fallback mode');
+          enableFallbackMode(chainId);
         }
-        
-        return preSignBatch(chainId, initialNonce, batchSize)
-          .then(() => {
-            const pool = preSignedPool.current[chainKey];
-            if (pool && pool.transactions.length > 0) {
-              console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
-            } else {
-              console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
-            }
-          })
-          .catch(error => {
-            console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
-            enableFallbackMode(chainId);
-            console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
-          });
-      });
-      
-      // НЕ ДОБАВЛЯЕМ pre-signing в критический путь инициализации
-      // Это позволяет игре начаться сразу, а pre-signing работает в фоне
-      // initializationPromises.push(preSigningPromise);
-      
-             // Запускаем pre-signing в фоне
-       preSigningPromise.catch(error => {
-         console.warn('Background pre-signing error (non-critical):', error);
-       });
-      
-      // Ждем только базовую инициализацию (баланс + nonce)
-      await balanceAndNoncePromise;
+      } catch (error) {
+        console.warn('⚠️ Pre-signing failed, enabling fallback mode:', error);
+        enableFallbackMode(chainId);
+        console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
+      }
       
       // Запускаем автоматическое обновление баланса
       startBalanceAutoUpdate(chainId);
@@ -2491,15 +2491,8 @@ export const useBlockchainUtils = () => {
       if (fallbackConfig) {
         console.log('⚠️ Running in fallback mode - reduced performance expected');
       } else {
-        console.log('🚀 Full performance mode activating in background...');
+        console.log('🚀 Full performance mode activated!');
       }
-      
-      // Остальные задачи выполняются в фоне
-      Promise.all(initializationPromises.slice(1)).then(() => {
-        console.log('✅ Full blockchain optimization complete');
-      }).catch(error => {
-        console.warn('⚠️ Some background optimizations failed (non-critical):', error);
-      });
       
     } catch (error) {
       console.error('❌ Critical initialization error:', error);
@@ -2967,11 +2960,28 @@ export const useBlockchainUtils = () => {
         window.gameCallFaucet = callFaucet;
         window.gameGetEmbeddedWallet = getEmbeddedWallet;
         window.gameEnsureEmbeddedWallet = ensureEmbeddedWallet;
+        window.gameForceRefreshBalance = checkBalance;
         console.log('🔧 Отладочные функции добавлены в window:');
         console.log('  • window.gameCallFaucet(address, chainId)');
         console.log('  • window.gameGetEmbeddedWallet()');
         console.log('  • window.gameEnsureEmbeddedWallet()');
+        console.log('  • window.gameForceRefreshBalance(chainId) // 🆕 Force refresh balance');
       }
+      
+      // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Глобальная функция для обновления баланса (доступна всегда)
+      window.refetchBalance = async (chainId = 6342) => {
+        try {
+          console.log('🔄 Global balance refresh triggered for chain:', chainId);
+          await checkBalance(chainId);
+          console.log('✅ Global balance refresh completed');
+          return true;
+        } catch (error) {
+          console.error('❌ Global balance refresh failed:', error);
+          return false;
+        }
+      };
+      
+      console.log('💰 Global balance refresh function added: window.refetchBalance(chainId)');
     }
     
     // Очистка при размонтировании
@@ -3082,6 +3092,19 @@ export const useBlockchainUtils = () => {
     stopBalanceAutoUpdate,
     isAuthenticated: authenticated,
     isReady: authenticated && wallets.length > 0,
+    
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Глобальная функция для принудительного обновления баланса
+    forceRefreshBalance: async (chainId) => {
+      try {
+        console.log('🔄 Force refreshing balance for chain:', chainId);
+        await checkBalance(chainId);
+        console.log('✅ Balance force refreshed successfully');
+        return true;
+      } catch (error) {
+        console.error('❌ Failed to force refresh balance:', error);
+        return false;
+      }
+    },
     
     // INFINITE POOL: Дополнительные утилиты для мониторинга бесконечного пула
     getPoolStatus: (chainId) => {

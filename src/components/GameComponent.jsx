@@ -114,6 +114,19 @@ const GameComponent = ({ selectedNetwork }) => {
       });
 
       console.log('Blockchain initialization complete');
+      
+      // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Принудительно обновляем баланс после инициализации
+      // Это гарантирует, что пользователь увидит актуальный баланс после faucet
+      setTimeout(async () => {
+        try {
+          console.log('🔄 Force updating balance after initialization...');
+          await checkBalance(selectedNetwork.id);
+          console.log('✅ Balance updated after initialization');
+        } catch (error) {
+          console.warn('Failed to update balance after initialization:', error);
+        }
+      }, 2000); // Ждем 2 секунды после инициализации
+      
     } catch (error) {
       console.error('Failed to initialize blockchain:', error);
       setBlockchainStatus(prev => ({ 
