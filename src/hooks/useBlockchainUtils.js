@@ -282,6 +282,8 @@ export const useBlockchainUtils = () => {
   const nonceManager = useRef({}); // Централизованное управление nonce
   const isInitialized = useRef({});
   const transactionPendingCount = useRef(0); // Счетчик одновременных транзакций
+  const currentChainIdRef = useRef(null); // Текущая активная сеть для авто-фандинга
+  const isAutoFundingRef = useRef(false); // Блокировка параллельных авто-вызовов faucet
   
   // РЕВОЛЮЦИОННАЯ система Performance Monitoring для Real-Time Gaming
   const performanceMetrics = useRef({});
@@ -1848,6 +1850,37 @@ export const useBlockchainUtils = () => {
     }
   };
 
+  // Авто-фандинг: если баланс низкий и есть embedded wallet — вызываем faucet без участия пользователя
+  const tryAutoFund = async () => {
+    try {
+      const chainId = currentChainIdRef.current;
+      if (!chainId) return;
+      if (!authenticated) return;
+
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) return;
+
+      // Обновляем баланс на всякий случай перед проверкой
+      const currentBalance = await checkBalance(chainId);
+      if (parseFloat(currentBalance) >= 0.00005) return;
+
+      if (isAutoFundingRef.current) return;
+      isAutoFundingRef.current = true;
+
+      console.log('🚰 Auto-funding: low balance detected, calling faucet for', embeddedWallet.address);
+      try {
+        await callFaucet(embeddedWallet.address, chainId);
+      } catch (e) {
+        // Игнорируем ошибки кулдауна/сети — повторим позже через обновление баланса
+        console.warn('Auto-funding attempt failed:', e?.message || e);
+      } finally {
+        isAutoFundingRef.current = false;
+      }
+    } catch (error) {
+      console.warn('Auto-funding error:', error);
+    }
+  };
+
   // РЕВОЛЮЦИОННАЯ отправка транзакции с оптимизированными RPC методами для каждой сети
   const sendRawTransaction = async (chainId, signedTx) => {
     const config = NETWORK_CONFIGS[chainId];
@@ -2330,6 +2363,8 @@ export const useBlockchainUtils = () => {
 
   // РЕВОЛЮЦИОННАЯ неблокирующая инициализация данных для instant gaming
   const initData = async (chainId) => {
+    // Запоминаем активную сеть для фоновой логики авто-фандинга
+    currentChainIdRef.current = chainId;
     const chainKey = chainId.toString();
     if (isInitialized.current[chainKey] || isInitializing) {
       return;
@@ -2485,6 +2520,11 @@ export const useBlockchainUtils = () => {
       
       // Запускаем автоматическое обновление баланса
       startBalanceAutoUpdate(chainId);
+
+      // На всякий случай инициируем авто-фандинг, если баланс всё ещё низкий
+      setTimeout(() => {
+        tryAutoFund();
+      }, 200);
       
       console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
       
@@ -2987,6 +3027,10 @@ export const useBlockchainUtils = () => {
       const ensureWallet = async () => {
         try {
           await ensureEmbeddedWallet();
+          // После появления embedded-кошелька пробуем профандить, если баланс низкий
+          setTimeout(() => {
+            tryAutoFund();
+          }, 200);
         } catch (error) {
           console.error('Failed to ensure embedded wallet:', error);
         }
@@ -3006,6 +3050,10 @@ export const useBlockchainUtils = () => {
             // Wait a bit before retrying
             await new Promise(resolve => setTimeout(resolve, 2000));
             await ensureEmbeddedWallet();
+            // И сразу пробуем авто-фандинг после создания
+            setTimeout(() => {
+              tryAutoFund();
+            }, 200);
           } catch (error) {
             console.error('Failed to retry embedded wallet creation:', error);
           }
@@ -3014,6 +3062,21 @@ export const useBlockchainUtils = () => {
       }
     }
   }, [authenticated, user, wallets.length]);
+
+  // Автоматический вызов faucet при низком балансе на активной сети
+  useEffect(() => {
+    // Запускаем авто-фандинг когда:
+    // - есть активная сеть (установлена через initData)
+    // - пользователь аутентифицирован
+    // - есть кошелек
+    // - баланс низкий (проверяем внутри tryAutoFund)
+    if (!currentChainIdRef.current) return;
+    if (!authenticated) return;
+    if (!wallets || wallets.length === 0) return;
+
+    tryAutoFund();
+    // Реагируем на изменение баланса/кошельков/аутентификации
+  }, [balance, authenticated, wallets.length]);
 
   return {
     // Состояние
