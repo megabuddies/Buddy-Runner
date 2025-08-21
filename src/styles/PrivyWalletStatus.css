@@ -150,6 +150,27 @@
   text-align: right;
 }
 
+.refresh-balance-btn {
+  background: none;
+  border: none;
+  color: #00ff88;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  margin-left: 8px;
+}
+
+.refresh-balance-btn:hover {
+  background-color: rgba(0, 255, 136, 0.1);
+  transform: scale(1.1);
+}
+
+.refresh-balance-btn:active {
+  transform: scale(0.95);
+}
+
 .monospace {
   font-family: 'Courier New', monospace;
   font-size: 10px;

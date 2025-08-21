@@ -9,7 +9,8 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
     balance, 
     getEmbeddedWallet,
     getPoolStatus,
-    getInfinitePoolStats
+    getInfinitePoolStats,
+    refetchBalance // Добавляем функцию обновления баланса
   } = useBlockchainUtils();
   
   const [poolStatus, setPoolStatus] = useState(null);
@@ -136,6 +137,13 @@ const PrivyWalletStatus = ({ selectedNetwork, className = "" }) => {
             <div className="detail-item">
               <span>Balance:</span>
               <span>{balance || '0.0000'} ETH</span>
+              <button 
+                onClick={() => refetchBalance(selectedNetwork?.id)}
+                className="refresh-balance-btn"
+                title="Refresh balance"
+              >
+                🔄
+              </button>
             </div>
           </div>
 

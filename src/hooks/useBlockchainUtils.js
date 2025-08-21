@@ -1805,15 +1805,33 @@ export const useBlockchainUtils = () => {
       if (result.txHash) {
         console.log('⏳ Waiting for faucet transaction to be processed...');
         
-        // Асинхронно обновляем баланс через 3 секунды
+        // Мгновенно обновляем баланс после успешного faucet
+        try {
+          await checkBalance(chainId);
+          console.log('✅ Balance updated immediately after faucet transaction');
+        } catch (error) {
+          console.warn('Failed to update balance immediately after faucet:', error);
+        }
+        
+        // Дополнительная проверка через 2 секунды для надежности
         setTimeout(async () => {
           try {
             await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
+            console.log('✅ Balance re-checked after faucet transaction');
           } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
+            console.warn('Failed to re-check balance after faucet:', error);
           }
-        }, 3000);
+        }, 2000);
+        
+        // Еще одна проверка через 5 секунд для блокчейнов с медленным подтверждением
+        setTimeout(async () => {
+          try {
+            await checkBalance(chainId);
+            console.log('✅ Final balance check after faucet transaction');
+          } catch (error) {
+            console.warn('Failed to perform final balance check after faucet:', error);
+          }
+        }, 5000);
       }
       
       return {
@@ -2967,10 +2985,12 @@ export const useBlockchainUtils = () => {
         window.gameCallFaucet = callFaucet;
         window.gameGetEmbeddedWallet = getEmbeddedWallet;
         window.gameEnsureEmbeddedWallet = ensureEmbeddedWallet;
+        window.refetchBalance = refetchBalance; // Добавляем функцию обновления баланса
         console.log('🔧 Отладочные функции добавлены в window:');
         console.log('  • window.gameCallFaucet(address, chainId)');
         console.log('  • window.gameGetEmbeddedWallet()');
         console.log('  • window.gameEnsureEmbeddedWallet()');
+        console.log('  • window.refetchBalance(chainId)');
       }
     }
     
@@ -3030,26 +3050,30 @@ export const useBlockchainUtils = () => {
         if (autoFaucetTriggered.current[key]) return;
         autoFaucetTriggered.current[key] = true;
 
-        // Проверяем баланс и при необходимости вызываем faucet
-        const currentBalance = await checkBalance(AUTO_FAUCET_CHAIN_ID);
-        if (parseFloat(currentBalance) < 0.00005) {
-          console.log('🚰 Auto-funding embedded wallet right after signup...', {
-            address: embedded.address,
-            chainId: AUTO_FAUCET_CHAIN_ID
-          });
-          try {
-            await callFaucet(embedded.address, AUTO_FAUCET_CHAIN_ID);
-          } catch (err) {
-            // Тихо игнорируем ошибки кулдауна/достаточного баланса — баланс обновится таймером
-            const msg = err?.message || '';
-            if (!(msg.includes('cooldown') || msg.includes('Sufficient') || msg.includes('sufficient'))) {
-              console.warn('Auto faucet attempt failed:', err);
+        // Используем новую функцию initializeNetwork для полной инициализации
+        console.log('🚰 Auto-initializing network and funding embedded wallet...', {
+          address: embedded.address,
+          chainId: AUTO_FAUCET_CHAIN_ID
+        });
+        
+        try {
+          await initializeNetwork(AUTO_FAUCET_CHAIN_ID);
+        } catch (err) {
+          console.warn('Auto network initialization failed:', err);
+          // Fallback: просто проверяем баланс и вызываем faucet если нужно
+          const currentBalance = await checkBalance(AUTO_FAUCET_CHAIN_ID);
+          if (parseFloat(currentBalance) < 0.00005) {
+            try {
+              await callFaucet(embedded.address, AUTO_FAUCET_CHAIN_ID);
+              // Мгновенно обновляем баланс
+              await checkBalance(AUTO_FAUCET_CHAIN_ID);
+            } catch (faucetErr) {
+              const msg = faucetErr?.message || '';
+              if (!(msg.includes('cooldown') || msg.includes('Sufficient') || msg.includes('sufficient'))) {
+                console.warn('Auto faucet attempt failed:', faucetErr);
+              }
             }
           }
-          // Обновляем баланс чуть позже, чтобы пользователь сразу мог играть
-          setTimeout(() => {
-            checkBalance(AUTO_FAUCET_CHAIN_ID).catch(() => {});
-          }, 3000);
         }
       } catch (e) {
         console.warn('Auto-funding flow error:', e);
@@ -3059,6 +3083,77 @@ export const useBlockchainUtils = () => {
     // Запускаем немедленно после появления embedded кошелька
     run();
   }, [authenticated, user, wallets.length]);
+
+  // Инициализация сети с проверкой баланса и автоматическим faucet
+  const initializeNetwork = async (chainId) => {
+    if (!isReady || !chainId) {
+      console.log('Skipping network initialization - not ready or no chainId');
+      return;
+    }
+
+    setIsInitializing(true);
+    try {
+      console.log(`Initializing network ${chainId}...`);
+      
+      // Инициализация данных и предварительная подпись транзакций
+      await initData(chainId, 15);
+      
+      // Проверка баланса кошелька
+      const balance = await checkBalance(chainId);
+      
+      // Если баланс равен 0 или очень мал, вызываем faucet
+      if (parseFloat(balance) < 0.00005) {
+        console.log(`Balance is low (${balance}) on chain ${chainId}, calling faucet...`);
+        const embeddedWallet = getEmbeddedWallet();
+        if (embeddedWallet) {
+          try {
+            await callFaucet(embeddedWallet.address, chainId);
+            
+            // Мгновенно обновляем баланс после успешного faucet
+            console.log('🔄 Refreshing balance immediately after faucet...');
+            await checkBalance(chainId);
+            
+            // Дополнительная проверка через 2 секунды для надежности
+            setTimeout(async () => {
+              await checkBalance(chainId);
+            }, 2000);
+            
+            // Запускаем автоматическое обновление баланса
+            startBalanceAutoUpdate(chainId);
+          } catch (error) {
+            console.error(`Failed to call faucet for chain ${chainId}:`, error);
+            // Даже если faucet не сработал, запускаем обновление баланса
+            startBalanceAutoUpdate(chainId);
+          }
+        }
+      } else {
+        // Если баланс достаточный, просто запускаем обновление
+        startBalanceAutoUpdate(chainId);
+      }
+      
+      console.log(`Network ${chainId} initialization complete`);
+    } catch (error) {
+      console.error(`Failed to initialize network ${chainId}:`, error);
+    } finally {
+      setIsInitializing(false);
+    }
+  };
+
+  // Глобальная функция для обновления баланса (для использования в window.refetchBalance)
+  const refetchBalance = async (chainId) => {
+    if (!chainId) {
+      const embeddedWallet = getEmbeddedWallet();
+      if (embeddedWallet) {
+        // Если chainId не указан, используем текущую сеть или MegaETH
+        chainId = 6342; // По умолчанию MegaETH
+      }
+    }
+    
+    if (chainId) {
+      console.log('🔄 Manual balance refresh requested...');
+      await checkBalance(chainId);
+    }
+  };
 
   return {
     // Состояние
@@ -3074,6 +3169,8 @@ export const useBlockchainUtils = () => {
     checkBalance,
     callFaucet,
     getContractNumber,
+    initializeNetwork, // Новая функция инициализации сети
+    refetchBalance,    // Функция для обновления баланса
     
     // Утилиты
     getEmbeddedWallet,

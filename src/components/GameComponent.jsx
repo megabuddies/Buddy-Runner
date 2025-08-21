@@ -32,6 +32,8 @@ const GameComponent = ({ selectedNetwork }) => {
     getEmbeddedWallet,
     ensureEmbeddedWallet,
     callFaucet,
+    initializeNetwork, // Новая функция инициализации сети
+    refetchBalance,    // Функция для обновления баланса
     getPoolStatus // Для мониторинга pre-signed пула
   } = useBlockchainUtils();
 
@@ -61,9 +63,10 @@ const GameComponent = ({ selectedNetwork }) => {
       sendUpdate,
       getContractNumber,
       selectedNetwork,
-      blockchainInitialized: blockchainStatus.initialized
+      blockchainInitialized: blockchainStatus.initialized,
+      refetchBalance // Добавляем функцию обновления баланса
     };
-  }, [sendUpdate, getContractNumber, selectedNetwork, blockchainStatus.initialized]);
+  }, [sendUpdate, getContractNumber, selectedNetwork, blockchainStatus.initialized, refetchBalance]);
 
   // Game constants with pixel art scaling
   const GAME_SPEED_START = 1;
@@ -84,7 +87,7 @@ const GameComponent = ({ selectedNetwork }) => {
     { width: 68 / 1.5, height: 70 / 1.5, imageSrc: "assets/carrot_3.png" },
   ];
 
-  // Инициализация блокчейн данных
+  // Инициализация блокчейн данных с автоматическим faucet
   const initializeBlockchain = async () => {
     if (!isReady || !selectedNetwork || selectedNetwork.isWeb2) {
       console.log('Skipping blockchain initialization - Web2 mode or not ready');
@@ -99,7 +102,8 @@ const GameComponent = ({ selectedNetwork }) => {
     try {
       console.log('Initializing blockchain for network:', selectedNetwork.name);
       
-      await initData(selectedNetwork.id);
+      // Используем новую функцию initializeNetwork для полной инициализации
+      await initializeNetwork(selectedNetwork.id);
       
       // Получаем текущее состояние контракта
       const currentNumber = await getContractNumber(selectedNetwork.id);
@@ -113,7 +117,7 @@ const GameComponent = ({ selectedNetwork }) => {
         onChainScore: currentNumber
       });
 
-      console.log('Blockchain initialization complete');
+      console.log('Blockchain initialization complete with automatic faucet check');
     } catch (error) {
       console.error('Failed to initialize blockchain:', error);
       setBlockchainStatus(prev => ({ 
