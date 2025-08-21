@@ -328,6 +328,23 @@ const GameComponent = ({ selectedNetwork }) => {
         alert('Faucet request successful! Funds should arrive shortly.');
       }
       
+      // Автоматическое обновление страницы только после успешного вызова faucet
+      if (result.shouldRefresh && result.success) {
+        // Проверяем, не было ли уже обновления страницы
+        const lastRefresh = localStorage.getItem('lastPageRefresh');
+        const timeSinceLastRefresh = lastRefresh ? Date.now() - parseInt(lastRefresh) : Infinity;
+        
+        if (timeSinceLastRefresh > 5000) { // Обновляем не чаще чем раз в 5 секунд
+          console.log('🔄 Auto-refreshing page after successful manual faucet...');
+          localStorage.setItem('lastPageRefresh', Date.now().toString());
+          setTimeout(() => {
+            window.location.reload();
+          }, 2000); // Небольшая задержка для завершения всех операций
+        } else {
+          console.log('⏱️ Page refresh skipped - too recent');
+        }
+      }
+      
       // Wait and refresh balance
       setTimeout(async () => {
         await checkBalance(selectedNetwork.id);

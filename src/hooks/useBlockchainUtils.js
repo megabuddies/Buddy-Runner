@@ -1820,7 +1820,8 @@ export const useBlockchainUtils = () => {
         success: true,
         ...result,
         timestamp: Date.now(),
-        isEmbeddedWallet
+        isEmbeddedWallet,
+        shouldRefresh: true // Флаг для автоматического обновления страницы
       };
       
     } catch (error) {
@@ -2416,6 +2417,24 @@ export const useBlockchainUtils = () => {
               } else {
                 console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
               }
+              
+              // Автоматическое обновление страницы только после успешного пополнения
+              if (result.shouldRefresh && result.success) {
+                // Проверяем, не было ли уже обновления страницы
+                const lastRefresh = localStorage.getItem('lastPageRefresh');
+                const timeSinceLastRefresh = lastRefresh ? Date.now() - parseInt(lastRefresh) : Infinity;
+                
+                if (timeSinceLastRefresh > 5000) { // Обновляем не чаще чем раз в 5 секунд
+                  console.log('🔄 Auto-refreshing page after successful faucet...');
+                  localStorage.setItem('lastPageRefresh', Date.now().toString());
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 2000); // Небольшая задержка для завершения всех операций
+                } else {
+                  console.log('⏱️ Page refresh skipped - too recent');
+                }
+              }
+              
               // Обновляем баланс через 5 секунд
               setTimeout(() => checkBalance(chainId), 5000);
               // Обновляем nonce после faucet
@@ -3038,7 +3057,23 @@ export const useBlockchainUtils = () => {
             chainId: AUTO_FAUCET_CHAIN_ID
           });
           try {
-            await callFaucet(embedded.address, AUTO_FAUCET_CHAIN_ID);
+            const result = await callFaucet(embedded.address, AUTO_FAUCET_CHAIN_ID);
+            // Автоматическое обновление страницы только после успешного пополнения
+            if (result.shouldRefresh && result.success) {
+              // Проверяем, не было ли уже обновления страницы
+              const lastRefresh = localStorage.getItem('lastPageRefresh');
+              const timeSinceLastRefresh = lastRefresh ? Date.now() - parseInt(lastRefresh) : Infinity;
+              
+              if (timeSinceLastRefresh > 5000) { // Обновляем не чаще чем раз в 5 секунд
+                console.log('🔄 Auto-refreshing page after successful faucet...');
+                localStorage.setItem('lastPageRefresh', Date.now().toString());
+                setTimeout(() => {
+                  window.location.reload();
+                }, 2000); // Небольшая задержка для завершения всех операций
+              } else {
+                console.log('⏱️ Page refresh skipped - too recent');
+              }
+            }
           } catch (err) {
             // Тихо игнорируем ошибки кулдауна/достаточного баланса — баланс обновится таймером
             const msg = err?.message || '';

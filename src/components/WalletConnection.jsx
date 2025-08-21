@@ -11,6 +11,21 @@ const WalletConnection = ({ onWalletConnected }) => {
   useEffect(() => {
     if (authenticated && user) {
       onWalletConnected();
+      // Автоматическое обновление страницы после успешного подключения кошелька
+      // Ждем немного дольше, чтобы кошелек полностью инициализировался
+      // Проверяем, не было ли уже обновления страницы
+      const lastRefresh = localStorage.getItem('lastPageRefresh');
+      const timeSinceLastRefresh = lastRefresh ? Date.now() - parseInt(lastRefresh) : Infinity;
+      
+      if (timeSinceLastRefresh > 5000) { // Обновляем не чаще чем раз в 5 секунд
+        console.log('🔄 Auto-refreshing page after successful wallet connection...');
+        localStorage.setItem('lastPageRefresh', Date.now().toString());
+        setTimeout(() => {
+          window.location.reload();
+        }, 3000); // Увеличиваем задержку для полной инициализации кошелька
+      } else {
+        console.log('⏱️ Page refresh skipped - too recent');
+      }
     }
   }, [authenticated, user, onWalletConnected]);
 

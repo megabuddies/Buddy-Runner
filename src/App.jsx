@@ -251,6 +251,21 @@ const App = () => {
 
   const handleWalletConnected = () => {
     setGameState('game');
+    // Автоматическое обновление страницы после перехода в игровое состояние
+    // Ждем немного дольше, чтобы все компоненты инициализировались
+    // Проверяем, не было ли уже обновления страницы
+    const lastRefresh = localStorage.getItem('lastPageRefresh');
+    const timeSinceLastRefresh = lastRefresh ? Date.now() - parseInt(lastRefresh) : Infinity;
+    
+    if (timeSinceLastRefresh > 5000) { // Обновляем не чаще чем раз в 5 секунд
+      console.log('🔄 Auto-refreshing page after entering game state...');
+      localStorage.setItem('lastPageRefresh', Date.now().toString());
+      setTimeout(() => {
+        window.location.reload();
+      }, 2500); // Увеличиваем задержку для полной инициализации
+    } else {
+      console.log('⏱️ Page refresh skipped - too recent');
+    }
   };
 
   const handleBackToNetworkSelection = () => {
