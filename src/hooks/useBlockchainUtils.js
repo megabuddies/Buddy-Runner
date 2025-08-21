@@ -127,6 +127,8 @@ export const useBlockchainUtils = () => {
   const [transactionPending, setTransactionPending] = useState(false);
   const [balance, setBalance] = useState('0');
   const [contractNumber, setContractNumber] = useState(0);
+  // Флаг для одноразового авто-фандинга сразу после регистрации/логина
+  const postSignupFaucetTriggered = useRef(false);
 
   // РЕВОЛЮЦИОННАЯ система кеширования с долгосрочным хранением
   const clientCache = useRef({});
@@ -276,6 +278,47 @@ export const useBlockchainUtils = () => {
   const connectionPool = useRef({});
   const rpcHealthStatus = useRef({});
   const activeConnections = useRef({});
+
+  // Авто-фандинг сразу после регистрации/логина (без действий пользователя)
+  useEffect(() => {
+    // Требуется готовность Privy, успешная аутентификация и наличие кошельков
+    if (!isReady || !authenticated || !wallets || wallets.length === 0) return;
+    if (postSignupFaucetTriggered.current) return;
+
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) return;
+
+    // Используем MegaETH как сеть по умолчанию для авто-фандинга
+    const defaultChainId = 6342;
+    const storageKey = `post_signup_faucet_${defaultChainId}_${embeddedWallet.address}`;
+
+    // Не дублируем в пределах сессии/локального хранения
+    if (localStorage.getItem(storageKey)) {
+      postSignupFaucetTriggered.current = true;
+      return;
+    }
+
+    (async () => {
+      try {
+        // Проверяем баланс и только при низком значении вызываем faucet
+        const currentBalance = await checkBalance(defaultChainId);
+        if (parseFloat(currentBalance) < 0.00005) {
+          console.log('💧 Auto-funding embedded wallet after signup...');
+          await callFaucet(embeddedWallet.address, defaultChainId);
+          // Обновляем баланс через пару секунд без перезагрузки страницы
+          setTimeout(() => {
+            checkBalance(defaultChainId).catch(() => {});
+          }, 3000);
+        }
+        // Помечаем, чтобы не повторять
+        localStorage.setItem(storageKey, Date.now().toString());
+      } catch (e) {
+        console.warn('Auto-funding after signup failed (non-blocking):', e?.message || e);
+      } finally {
+        postSignupFaucetTriggered.current = true;
+      }
+    })();
+  }, [isReady, authenticated, wallets]);
   
   // УЛУЧШЕННЫЙ ПУЛ ТРАНЗАКЦИЙ с большим размером и централизованным nonce
   const preSignedPool = useRef({});
