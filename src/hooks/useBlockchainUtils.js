@@ -335,6 +335,40 @@ export const useBlockchainUtils = () => {
   // Кеширование параметров сети для минимизации RPC вызовов
   const chainParamsCache = useRef({});
 
+  // Быстрая инициализация пула сразу после появления средств
+  const ensurePreSignedPoolReady = async (chainId) => {
+    try {
+      const chainKey = chainId.toString();
+      const pool = preSignedPool.current[chainKey];
+      if (pool && pool.isReady && pool.transactions.length > pool.currentIndex) {
+        return true;
+      }
+
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        console.warn('ensurePreSignedPoolReady: no embedded wallet');
+        return false;
+      }
+
+      const { publicClient } = await createClients(chainId);
+      const actualNonce = await publicClient.getTransactionCount({
+        address: embeddedWallet.address,
+        blockTag: 'pending'
+      });
+
+      const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+      const fallbackCfg = getFallbackConfig(chainId);
+      const batchSize = fallbackCfg ? Math.max(1, fallbackCfg.reducedBatchSize) : poolConfig.poolSize;
+
+      console.log(`⚙️ ensurePreSignedPoolReady: pre-signing ${batchSize} txs from nonce ${actualNonce}`);
+      await preSignBatch(chainId, actualNonce, batchSize);
+      return true;
+    } catch (e) {
+      console.warn('ensurePreSignedPoolReady failed:', e?.message || e);
+      return false;
+    }
+  };
+
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
     6342: { // MegaETH - МАКСИМАЛЬНАЯ ПРОИЗВОДИТЕЛЬНОСТЬ с исправлениями
@@ -1647,6 +1681,17 @@ export const useBlockchainUtils = () => {
       const balanceEth = (Number(balance) / 10**18).toFixed(4);
       setBalance(balanceEth);
       console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
+
+      // Если баланс стал положительным — сразу готовим pre-signed пул
+      if (parseFloat(balanceEth) > 0) {
+        // Не блокируем UI: инициализируем пул в фоне
+        ensurePreSignedPoolReady(chainId).then((ok) => {
+          if (ok) {
+            console.log('✅ Pre-signed pool ensured after balance update');
+          }
+        });
+      }
+
       return balanceEth;
     } catch (error) {
       console.error('Error checking balance:', error);
@@ -1809,6 +1854,13 @@ export const useBlockchainUtils = () => {
         } catch (error) {
           console.warn('Failed to update balance immediately after faucet:', error);
         }
+        // Немедленно готовим pre-signed пул после подтвержденного faucet
+        try {
+          const ok = await ensurePreSignedPoolReady(chainId);
+          if (ok) {
+            console.log('✅ Pre-signed pool ensured right after faucet');
+          }
+        } catch (_) {}
       }
       
       return {
@@ -3092,18 +3144,25 @@ export const useBlockchainUtils = () => {
       if (!pool) return null;
       const cyclesCompleted = Math.floor(pool.currentIndex / 5);
       const netGrowth = cyclesCompleted * 10;
+      const totalTransactions = pool.transactions.length;
+      const consumedTransactions = pool.currentIndex;
+      const remaining = totalTransactions - consumedTransactions;
       return {
-        total: pool.transactions.length,
-        used: pool.currentIndex,
-        remaining: pool.transactions.length - pool.currentIndex,
+        // Новые поля
+        total: totalTransactions,
+        used: consumedTransactions,
+        remaining,
         isReady: pool.isReady,
         isRefilling: pool.isRefilling,
+        // Совместимость со старым UI
+        totalTransactions,
+        consumedTransactions,
+        availableTransactions: remaining,
         // Infinite pool specific stats
         cyclesCompleted,
         netGrowth,
-        isInfinite: pool.transactions.length > 50,
-        trend: pool.transactions.length - pool.currentIndex > 20 ? 'growing' : 
-               pool.transactions.length - pool.currentIndex > 10 ? 'stable' : 'attention'
+        isInfinite: totalTransactions > 50,
+        trend: remaining > 20 ? 'growing' : remaining > 10 ? 'stable' : 'attention'
       };
     },
     
