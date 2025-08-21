@@ -1751,7 +1751,9 @@ export const useBlockchainUtils = () => {
       if (!response.ok) {
         let errorMessage = 'Faucet request failed';
         try {
-          const errorData = await response.json();
+          const text = await response.text();
+          let errorData = {};
+          try { errorData = JSON.parse(text); } catch (_) {}
           errorMessage = errorData.error || errorMessage;
           
           // Специальная обработка известных ошибок
@@ -1784,7 +1786,12 @@ export const useBlockchainUtils = () => {
         throw new Error(errorMessage);
       }
 
-      const result = await response.json();
+      const text = await response.text();
+      let result = {};
+      try { result = JSON.parse(text); } catch (_) {}
+      if (!result || !result.success) {
+        console.warn('Faucet responded without success flag:', text);
+      }
       
       // Сохраняем время последнего успешного вызова
       localStorage.setItem(cacheKey, Date.now().toString());

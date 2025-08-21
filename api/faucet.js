@@ -69,7 +69,7 @@ export default async function handler(req, res) {
     // Получаем приватный ключ владельца из переменных окружения
     const ownerPrivateKey = process.env.FAUCET_OWNER_PRIVATE_KEY;
     if (!ownerPrivateKey) {
-      return res.status(500).json({ error: 'Faucet owner private key not configured' });
+      return res.status(500).json({ error: 'Faucet owner private key not configured', code: 'MISSING_PRIVATE_KEY' });
     }
 
     // Создаем провайдер и faucet кошелёк
@@ -84,7 +84,8 @@ export default async function handler(req, res) {
     // if (faucetBalance < dripAmount) {
     //   return res.status(400).json({ 
     //     error: 'Faucet wallet is empty',
-    //     balance: ethers.formatEther(faucetBalance)
+    //     balance: ethers.formatEther(faucetBalance),
+    //     code: 'INSUFFICIENT_FAUCET_FUNDS'
     //   });
     // }
     
@@ -99,7 +100,8 @@ export default async function handler(req, res) {
       return res.status(400).json({ 
         error: 'Address already has sufficient balance',
         balance: ethers.formatEther(userBalance),
-        minimum: '0.00005'
+        minimum: '0.00005',
+        code: 'ALREADY_SUFFICIENT'
       });
     }
 
@@ -119,6 +121,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
+      // Совместимость с клиентом: дублируем поле txHash
+      txHash: receipt.hash,
       transactionHash: receipt.hash,
       amount: '0.0001',
       recipient: address,
@@ -134,21 +138,23 @@ export default async function handler(req, res) {
       console.error('Insufficient funds error:', error.message);
       return res.status(400).json({ 
         error: 'Faucet wallet has insufficient funds for this transaction',
-        details: 'The faucet wallet needs to be refilled'
+        details: 'The faucet wallet needs to be refilled',
+        code: 'INSUFFICIENT_FAUCET_FUNDS'
       });
     }
     
     if (error.message.includes('nonce')) {
-      return res.status(500).json({ error: 'Transaction nonce error, please try again' });
+      return res.status(500).json({ error: 'Transaction nonce error, please try again', code: 'NONCE_ERROR' });
     }
     
     if (error.message.includes('gas')) {
-      return res.status(500).json({ error: 'Gas estimation failed, please try again' });
+      return res.status(500).json({ error: 'Gas estimation failed, please try again', code: 'GAS_ERROR' });
     }
 
     return res.status(500).json({ 
       error: 'Internal server error',
-      details: error.message 
+      details: error.message,
+      code: 'INTERNAL_ERROR'
     });
   }
 }
