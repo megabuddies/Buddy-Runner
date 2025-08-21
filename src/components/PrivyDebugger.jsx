@@ -35,6 +35,17 @@ const PrivyDebugger = () => {
       console.log('Manually creating embedded wallet...');
       const wallet = await createWallet();
       console.log('Wallet created successfully:', wallet);
+      
+      // Wait a bit for the wallet to be properly registered
+      setTimeout(() => {
+        console.log('Checking wallet registration...');
+        const embeddedWallet = wallets.find(w => w.walletClientType === 'privy');
+        if (embeddedWallet) {
+          console.log('✅ Embedded wallet properly registered:', embeddedWallet.address);
+        } else {
+          console.log('⚠️ Embedded wallet not found in wallets list');
+        }
+      }, 2000);
     } catch (error) {
       console.error('Error creating wallet:', error);
     } finally {
@@ -81,6 +92,11 @@ const PrivyDebugger = () => {
 
       <div style={{ marginBottom: '10px' }}>
         <strong>Embedded Wallet:</strong> {debugInfo.hasEmbeddedWallet ? '✅ Exists' : '❌ Not Found'}
+        {!debugInfo.hasEmbeddedWallet && authenticated && (
+          <div style={{ marginTop: '5px', fontSize: '10px', color: '#ffa500' }}>
+            ⚠️ User authenticated but no embedded wallet found
+          </div>
+        )}
       </div>
 
       {createWalletError && (
@@ -90,29 +106,82 @@ const PrivyDebugger = () => {
       )}
 
       {authenticated && !embeddedWallet && (
-        <button
-          onClick={handleCreateWallet}
-          disabled={isCreatingWallet || isCreatingManually}
-          style={{
-            background: '#007bff',
-            color: 'white',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            cursor: isCreatingWallet || isCreatingManually ? 'not-allowed' : 'pointer',
-            opacity: isCreatingWallet || isCreatingManually ? 0.5 : 1,
-            marginTop: '10px',
-            width: '100%'
-          }}
-        >
-          {isCreatingWallet || isCreatingManually ? 'Creating...' : 'Create Embedded Wallet Manually'}
-        </button>
+        <div style={{ marginTop: '10px' }}>
+          <button
+            onClick={handleCreateWallet}
+            disabled={isCreatingWallet || isCreatingManually}
+            style={{
+              background: '#007bff',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              cursor: isCreatingWallet || isCreatingManually ? 'not-allowed' : 'pointer',
+              opacity: isCreatingWallet || isCreatingManually ? 0.5 : 1,
+              marginBottom: '5px',
+              width: '100%'
+            }}
+          >
+            {isCreatingWallet || isCreatingManually ? 'Creating...' : 'Create Embedded Wallet (Privy)'}
+          </button>
+          
+          <button
+            onClick={async () => {
+              try {
+                console.log('Using ensureEmbeddedWallet function...');
+                const wallet = await window.gameEnsureEmbeddedWallet?.();
+                if (wallet) {
+                  console.log('✅ Embedded wallet ensured:', wallet.address);
+                } else {
+                  console.log('❌ Failed to ensure embedded wallet');
+                }
+              } catch (error) {
+                console.error('Error ensuring embedded wallet:', error);
+              }
+            }}
+            style={{
+              background: '#28a745',
+              color: 'white',
+              border: 'none',
+              padding: '8px 16px',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              width: '100%'
+            }}
+          >
+            Ensure Embedded Wallet (Custom)
+          </button>
+        </div>
       )}
 
       <div style={{ marginTop: '10px', fontSize: '10px', opacity: 0.7 }}>
         App ID: cme84q0og02aalc0bh9blzwa9 (hardcoded)
         <br />
         Env: {import.meta.env.VITE_PRIVY_APP_ID || 'Not set'}
+        <br />
+        <button
+          onClick={() => {
+            console.log('=== WALLET DEBUG INFO ===');
+            console.log('Wallets:', wallets);
+            console.log('User:', user);
+            console.log('Authenticated:', authenticated);
+            console.log('Ready:', ready);
+            console.log('Embedded wallet check:', window.gameGetEmbeddedWallet?.());
+            console.log('=======================');
+          }}
+          style={{
+            background: 'transparent',
+            color: '#ccc',
+            border: '1px solid #ccc',
+            padding: '4px 8px',
+            borderRadius: '2px',
+            cursor: 'pointer',
+            fontSize: '10px',
+            marginTop: '5px'
+          }}
+        >
+          Debug Wallets
+        </button>
       </div>
     </div>
   );

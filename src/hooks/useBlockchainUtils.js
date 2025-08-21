@@ -629,24 +629,39 @@ export const useBlockchainUtils = () => {
       address: w.address,
       walletClientType: w.walletClientType,
       connectorType: w.connectorType,
-      type: w.type
+      type: w.type,
+      walletIndex: w.walletIndex
     })));
     
-    // Look for embedded wallet - Privy creates embedded wallets with specific types
-    const embeddedWallet = wallets.find(wallet => 
-      wallet.walletClientType === 'privy' || 
-      wallet.connectorType === 'embedded' ||
-      wallet.connectorType === 'privy' ||
-      wallet.type === 'embedded' ||
-      wallet.walletClientType === 'embedded'
-    );
+    // Enhanced embedded wallet detection with multiple criteria
+    const embeddedWallet = wallets.find(wallet => {
+      // Check for embedded wallet indicators
+      const isEmbedded = 
+        wallet.walletClientType === 'privy' || 
+        wallet.connectorType === 'embedded' ||
+        wallet.connectorType === 'privy' ||
+        wallet.type === 'embedded' ||
+        wallet.walletClientType === 'embedded' ||
+        wallet.walletIndex === 0; // First wallet is usually embedded
+      
+      console.log(`🔍 Checking wallet ${wallet.address}:`, {
+        walletClientType: wallet.walletClientType,
+        connectorType: wallet.connectorType,
+        type: wallet.type,
+        walletIndex: wallet.walletIndex,
+        isEmbedded
+      });
+      
+      return isEmbedded;
+    });
     
     if (embeddedWallet) {
       console.log('✅ Found embedded wallet:', {
         address: embeddedWallet.address,
         walletClientType: embeddedWallet.walletClientType,
         connectorType: embeddedWallet.connectorType,
-        type: embeddedWallet.type
+        type: embeddedWallet.type,
+        walletIndex: embeddedWallet.walletIndex
       });
       return embeddedWallet;
     }
@@ -677,7 +692,8 @@ export const useBlockchainUtils = () => {
       existingEmbeddedWallet.walletClientType === 'privy' || 
       existingEmbeddedWallet.connectorType === 'embedded' ||
       existingEmbeddedWallet.type === 'embedded' ||
-      existingEmbeddedWallet.walletClientType === 'embedded'
+      existingEmbeddedWallet.walletClientType === 'embedded' ||
+      existingEmbeddedWallet.walletIndex === 0
     )) {
       console.log('✅ Embedded wallet already exists:', existingEmbeddedWallet.address);
       return existingEmbeddedWallet;
@@ -686,17 +702,46 @@ export const useBlockchainUtils = () => {
     console.log('🔄 Attempting to create embedded wallet...');
     
     try {
+      // Wait a bit for any pending wallet creation to complete
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Check again after waiting
+      const retryEmbeddedWallet = getEmbeddedWallet();
+      if (retryEmbeddedWallet) {
+        console.log('✅ Found embedded wallet after waiting:', retryEmbeddedWallet.address);
+        return retryEmbeddedWallet;
+      }
+      
       // Пытаемся создать embedded wallet через Privy
       if (window.privy && window.privy.createWallet) {
+        console.log('🔄 Attempting to create wallet via Privy...');
         const newWallet = await window.privy.createWallet();
-        console.log('✅ Created new embedded wallet:', newWallet);
-        return newWallet;
+        console.log('✅ Created new embedded wallet via Privy:', newWallet);
+        
+        // Wait a bit more for the wallet to be properly registered
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Check if the wallet is now available in the wallets list
+        const finalCheck = getEmbeddedWallet();
+        if (finalCheck) {
+          console.log('✅ Embedded wallet successfully registered:', finalCheck.address);
+          return finalCheck;
+        } else {
+          console.log('⚠️ Wallet created but not found in wallets list');
+          return newWallet;
+        }
       }
       
       console.log('⚠️ Privy createWallet not available');
       return null;
     } catch (error) {
       console.error('❌ Failed to create embedded wallet:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        privyAvailable: !!window.privy,
+        createWalletAvailable: !!(window.privy && window.privy.createWallet)
+      });
       return null;
     }
   };
@@ -711,8 +756,14 @@ export const useBlockchainUtils = () => {
     const config = NETWORK_CONFIGS[chainId];
     if (!config) throw new Error(`Unsupported network: ${chainId}`);
 
-    const embeddedWallet = getEmbeddedWallet();
-    if (!embeddedWallet) throw new Error('No embedded wallet found');
+    let embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      console.log('🔄 No embedded wallet found, attempting to ensure one exists...');
+      embeddedWallet = await ensureEmbeddedWallet();
+      if (!embeddedWallet) {
+        throw new Error('No embedded wallet found and could not create one');
+      }
+    }
 
     // Инициализируем систему мониторинга RPC здоровья
     initializeRpcHealth(chainId);
@@ -2915,6 +2966,41 @@ export const useBlockchainUtils = () => {
       stopBalanceAutoUpdate();
     };
   }, []);
+
+  // Effect для автоматического обеспечения embedded wallet при аутентификации
+  useEffect(() => {
+    if (authenticated && user && wallets.length === 0) {
+      console.log('🔄 User authenticated but no wallets found, ensuring embedded wallet creation...');
+      const ensureWallet = async () => {
+        try {
+          await ensureEmbeddedWallet();
+        } catch (error) {
+          console.error('Failed to ensure embedded wallet:', error);
+        }
+      };
+      ensureWallet();
+    }
+  }, [authenticated, user, wallets.length]);
+
+  // Effect для повторных попыток создания embedded wallet
+  useEffect(() => {
+    if (authenticated && user && wallets.length > 0) {
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        console.log('🔄 User has wallets but no embedded wallet found, retrying creation...');
+        const retryWallet = async () => {
+          try {
+            // Wait a bit before retrying
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            await ensureEmbeddedWallet();
+          } catch (error) {
+            console.error('Failed to retry embedded wallet creation:', error);
+          }
+        };
+        retryWallet();
+      }
+    }
+  }, [authenticated, user, wallets.length]);
 
   return {
     // Состояние
