@@ -335,39 +335,7 @@ export const useBlockchainUtils = () => {
   // Кеширование параметров сети для минимизации RPC вызовов
   const chainParamsCache = useRef({});
 
-  // Быстрая инициализация пула сразу после появления средств
-  const ensurePreSignedPoolReady = async (chainId) => {
-    try {
-      const chainKey = chainId.toString();
-      const pool = preSignedPool.current[chainKey];
-      if (pool && pool.isReady && pool.transactions.length > pool.currentIndex) {
-        return true;
-      }
-
-      const embeddedWallet = getEmbeddedWallet();
-      if (!embeddedWallet) {
-        console.warn('ensurePreSignedPoolReady: no embedded wallet');
-        return false;
-      }
-
-      const { publicClient } = await createClients(chainId);
-      const actualNonce = await publicClient.getTransactionCount({
-        address: embeddedWallet.address,
-        blockTag: 'pending'
-      });
-
-      const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
-      const fallbackCfg = getFallbackConfig(chainId);
-      const batchSize = fallbackCfg ? Math.max(1, fallbackCfg.reducedBatchSize) : poolConfig.poolSize;
-
-      console.log(`⚙️ ensurePreSignedPoolReady: pre-signing ${batchSize} txs from nonce ${actualNonce}`);
-      await preSignBatch(chainId, actualNonce, batchSize);
-      return true;
-    } catch (e) {
-      console.warn('ensurePreSignedPoolReady failed:', e?.message || e);
-      return false;
-    }
-  };
+  // ensurePreSignedPoolReady удален: возвращаем исходную идеальную логику пресайна
 
   // PRE-SIGNED ONLY MODE: Увеличенные пулы для гарантированной доступности транзакций
   const ENHANCED_POOL_CONFIG = {
@@ -1682,15 +1650,7 @@ export const useBlockchainUtils = () => {
       setBalance(balanceEth);
       console.log(`Balance for ${embeddedWallet.address}: ${balanceEth} ETH`);
 
-      // Если баланс стал положительным — сразу готовим pre-signed пул
-      if (parseFloat(balanceEth) > 0) {
-        // Не блокируем UI: инициализируем пул в фоне
-        ensurePreSignedPoolReady(chainId).then((ok) => {
-          if (ok) {
-            console.log('✅ Pre-signed pool ensured after balance update');
-          }
-        });
-      }
+      // Не вмешиваемся в пресайн — исходная логика сама пополнит пул
 
       return balanceEth;
     } catch (error) {
@@ -1854,13 +1814,7 @@ export const useBlockchainUtils = () => {
         } catch (error) {
           console.warn('Failed to update balance immediately after faucet:', error);
         }
-        // Немедленно готовим pre-signed пул после подтвержденного faucet
-        try {
-          const ok = await ensurePreSignedPoolReady(chainId);
-          if (ok) {
-            console.log('✅ Pre-signed pool ensured right after faucet');
-          }
-        } catch (_) {}
+        // Пресайн не трогаем — фоновые механизмы уже это делают
       }
       
       return {

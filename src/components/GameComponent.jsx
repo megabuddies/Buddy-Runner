@@ -179,7 +179,20 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log('⚡ Sending instant on-chain jump transaction...');
       
       // Отправляем транзакцию с измерением производительности
-      const txResult = await sendUpdate(selectedNetwork.id);
+      let txResult;
+      try {
+        txResult = await sendUpdate(selectedNetwork.id);
+      } catch (e) {
+        // Мягкий ретрай, если пул ещё не готов сразу после пополнения
+        const msg = e?.message || '';
+        if (msg.includes('pool not ready') || msg.includes('Pre-signed transaction pool not ready') || msg.includes('No pre-signed transaction pool')) {
+          console.log('⏳ Pool not ready yet, retrying shortly...');
+          await new Promise(r => setTimeout(r, 500));
+          txResult = await sendUpdate(selectedNetwork.id);
+        } else {
+          throw e;
+        }
+      }
       
       // Рассчитываем метрики производительности
       const totalTime = performance.now() - reactionTime;
