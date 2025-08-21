@@ -717,6 +717,10 @@ export const useBlockchainUtils = () => {
         console.log('🔄 Attempting to create wallet via Privy...');
         const newWallet = await window.privy.createWallet();
         console.log('✅ Created new embedded wallet via Privy:', newWallet);
+        try {
+          // Помечаем, что кошелек только что создан, чтобы перезагрузить страницу после пополнения faucet
+          sessionStorage.setItem('privy_wallet_just_created', '1');
+        } catch (_) {}
         
         // Wait a bit more for the wallet to be properly registered
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -1815,6 +1819,18 @@ export const useBlockchainUtils = () => {
           }
         }, 3000);
       }
+      
+      // Единственное место: перезагружаем страницу ТОЛЬКО если кошелек был создан и faucet завершился
+      try {
+        const justCreated = sessionStorage.getItem('privy_wallet_just_created');
+        if (justCreated && result && result.success && !result.skipped) {
+          console.log('🔄 Reloading page after Privy wallet creation and faucet funding...');
+          sessionStorage.removeItem('privy_wallet_just_created');
+          setTimeout(() => {
+            window.location.reload();
+          }, 0);
+        }
+      } catch (_) {}
       
       return {
         success: true,
