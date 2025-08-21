@@ -3015,6 +3015,51 @@ export const useBlockchainUtils = () => {
     }
   }, [authenticated, user, wallets.length]);
 
+  // Авто-фондирование сразу после регистрации/создания кошелька (без кликов и перезагрузок)
+  const autoFaucetTriggered = useRef({});
+  useEffect(() => {
+    if (!authenticated || !user || wallets.length === 0) return;
+    const AUTO_FAUCET_CHAIN_ID = 6342; // приоритетная сеть для старта игры
+
+    const run = async () => {
+      try {
+        const embedded = getEmbeddedWallet();
+        if (!embedded) return;
+
+        const key = `${AUTO_FAUCET_CHAIN_ID}-${embedded.address}`;
+        if (autoFaucetTriggered.current[key]) return;
+        autoFaucetTriggered.current[key] = true;
+
+        // Проверяем баланс и при необходимости вызываем faucet
+        const currentBalance = await checkBalance(AUTO_FAUCET_CHAIN_ID);
+        if (parseFloat(currentBalance) < 0.00005) {
+          console.log('🚰 Auto-funding embedded wallet right after signup...', {
+            address: embedded.address,
+            chainId: AUTO_FAUCET_CHAIN_ID
+          });
+          try {
+            await callFaucet(embedded.address, AUTO_FAUCET_CHAIN_ID);
+          } catch (err) {
+            // Тихо игнорируем ошибки кулдауна/достаточного баланса — баланс обновится таймером
+            const msg = err?.message || '';
+            if (!(msg.includes('cooldown') || msg.includes('Sufficient') || msg.includes('sufficient'))) {
+              console.warn('Auto faucet attempt failed:', err);
+            }
+          }
+          // Обновляем баланс чуть позже, чтобы пользователь сразу мог играть
+          setTimeout(() => {
+            checkBalance(AUTO_FAUCET_CHAIN_ID).catch(() => {});
+          }, 3000);
+        }
+      } catch (e) {
+        console.warn('Auto-funding flow error:', e);
+      }
+    };
+
+    // Запускаем немедленно после появления embedded кошелька
+    run();
+  }, [authenticated, user, wallets.length]);
+
   return {
     // Состояние
     isInitializing,
