@@ -1581,7 +1581,7 @@ export const useBlockchainUtils = () => {
   const startPoolMonitoring = (chainId) => {
     const chainKey = chainId.toString();
     
-    const monitorInterval = setInterval(() => {
+    const monitorInterval = setInterval(async () => {
       const pool = preSignedPool.current[chainKey];
       if (!pool || !pool.isReady) return;
       
@@ -1647,6 +1647,35 @@ export const useBlockchainUtils = () => {
       if (remainingTx <= 8 && consumedTx > 10) {
         console.warn(`⚠️ INFINITE POOL: Low remaining transactions (${remainingTx}) - check refill mechanism`);
       }
+
+      // Авто-дозапуск pre-signing если пул пустеет и не идёт пополнение
+      if ((remainingTx <= 3 || (!pool.isRefilling && remainingTx <= 8)) && !pool.hasTriggeredRefill) {
+        pool.hasTriggeredRefill = true;
+        try {
+          const embeddedWallet = getEmbeddedWallet();
+          if (embeddedWallet) {
+            const { publicClient } = await createClients(chainId);
+            const currentNetworkNonce = await publicClient.getTransactionCount({
+              address: embeddedWallet.address,
+              blockTag: 'pending'
+            });
+            const lastUsedNonce = pool.baseNonce + pool.currentIndex - 1;
+            const nextAvailableNonce = Math.max(currentNetworkNonce, lastUsedNonce + 1);
+            const refillSize = Math.max(20, Math.floor((pool.transactions.length || 20) * 0.75));
+            await extendPool(chainId, nextAvailableNonce, refillSize);
+            const manager = getNonceManager(chainId, embeddedWallet.address);
+            if (manager) {
+              manager.currentNonce = nextAvailableNonce;
+              manager.pendingNonce = nextAvailableNonce + refillSize;
+              manager.lastUpdate = Date.now();
+            }
+            pool.hasTriggeredRefill = false;
+          }
+        } catch (e) {
+          console.warn('Auto-refill attempt failed:', e);
+          pool.hasTriggeredRefill = false;
+        }
+      }
       
     }, 3000); // Проверка каждые 3 секунды (реже для бесконечного пула)
     
@@ -1699,6 +1728,61 @@ export const useBlockchainUtils = () => {
       attempt++;
     }
     return lastBalance;
+  };
+
+  // Гарантируем готовность пула pre-signed транзакций до начала игры
+  const ensurePreSignedPoolReady = async (chainId, minimumTx = 5, maxWaitMs = 30000) => {
+    const chainKey = chainId.toString();
+    const startTime = Date.now();
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) throw new Error('No embedded wallet available for pre-sign pool init');
+
+    // Дожидаемся достаточного баланса
+    const fundedBalance = await waitForSufficientBalance(chainId, 0.00005, maxWaitMs);
+    if (parseFloat(fundedBalance) < 0.00005) {
+      throw new Error(`Insufficient balance after wait (${fundedBalance} ETH)`);
+    }
+
+    // Если пул уже готов и достаточного размера — выходим
+    let pool = preSignedPool.current[chainKey];
+    if (pool && pool.isReady && (pool.transactions.length - pool.currentIndex) >= minimumTx) {
+      return true;
+    }
+
+    // Получаем актуальный nonce
+    const { publicClient } = await createClients(chainId);
+    const initialNonce = await publicClient.getTransactionCount({
+      address: embeddedWallet.address,
+      blockTag: 'pending'
+    });
+
+    // Минимальный первичный батч
+    const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+    const batchSize = Math.max(minimumTx, Math.min(poolConfig.poolSize || 20, 25));
+
+    // Резервируем nonces
+    const manager = getNonceManager(chainId, embeddedWallet.address);
+    if (manager) {
+      manager.pendingNonce = Math.max(manager.pendingNonce || initialNonce, initialNonce + batchSize);
+    }
+
+    // Выполняем первичное предподписание
+    await preSignBatch(chainId, initialNonce, batchSize);
+
+    // Ожидаем, пока пул станет готовым
+    while (Date.now() - startTime < maxWaitMs) {
+      pool = preSignedPool.current[chainKey];
+      if (pool && pool.isReady && (pool.transactions.length - pool.currentIndex) >= minimumTx) {
+        return true;
+      }
+      await new Promise(r => setTimeout(r, 200));
+    }
+
+    pool = preSignedPool.current[chainKey];
+    if (pool && pool.transactions.length > pool.currentIndex) {
+      return true; // мягкое допущение, если хотя бы что-то есть
+    }
+    throw new Error('Pre-signed pool not ready in time');
   };
 
   // Автоматическое обновление баланса
@@ -2492,7 +2576,16 @@ export const useBlockchainUtils = () => {
       
       initializationPromises.push(balanceAndNoncePromise);
 
-      // 2. НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
+      // 2. Гарантируем готовность начального пула pre-signed перед стартом игры
+      try {
+        console.log('⏳ Ensuring pre-signed pool is ready before start...');
+        await ensurePreSignedPoolReady(chainId, 5, 25000);
+        console.log('✅ Pre-signed pool ready. Proceeding.');
+      } catch (e) {
+        console.warn('⚠️ Could not fully prepare pre-signed pool before start:', e?.message || e);
+      }
+
+      // Теперь помечаем как инициализированный
       isInitialized.current[chainKey] = true;
       console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
       
