@@ -330,7 +330,7 @@ const GameComponent = ({ selectedNetwork }) => {
       
       // Wait and refresh balance
       setTimeout(async () => {
-        await checkBalance(selectedNetwork.id);
+        await checkBalance(selectedNetwork.id, false); // Отключаем auto-faucet для ручного вызова
       }, 3000);
 
     } catch (error) {
