@@ -2469,41 +2469,6 @@ export const useBlockchainUtils = () => {
         console.log('💰 Current balance:', currentBalance);
         console.log('🎯 Starting nonce:', initialNonce);
 
-        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
-        if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
-          
-          // Получаем правильный embedded wallet для faucet
-          const faucetWallet = getEmbeddedWallet();
-          if (!faucetWallet) {
-            console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
-            return { currentBalance, initialNonce };
-          }
-          
-          console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
-          
-          // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
-          callFaucet(faucetWallet.address, chainId)
-            .then(async (result) => {
-              console.log('✅ Background faucet completed');
-              if (result.isEmbeddedWallet) {
-                console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
-              } else {
-                console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
-              }
-              
-              // НЕМЕДЛЕННО проверяем баланс после получения токенов
-              console.log('🔄 Immediately checking balance after faucet...');
-              await checkBalance(chainId);
-              
-              // Обновляем nonce после faucet
-              return getNextNonce(chainId, faucetWallet.address, true);
-            })
-            .catch(faucetError => {
-              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
-            });
-        }
-        
         return { currentBalance, initialNonce };
       });
       
