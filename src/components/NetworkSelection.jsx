@@ -43,7 +43,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
       description: 'Ethereum L2 testnet',
       tech: 'Reliable scaling solution',
       color: '#4ecdc4',
-      status: 'ONLINE',
+      status: 'SOON',
       icon: '🌐'
     },
     { 
@@ -53,7 +53,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
       description: 'Next-gen blockchain',
       tech: 'Advanced consensus',
       color: '#9b59b6',
-      status: 'BETA',
+      status: 'SOON',
       icon: '🔮'
     }
   ];
@@ -242,20 +242,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
             </div>
           </div>
           
-          <div className="mission-briefing">
-            <div className="briefing-title">MISSION BRIEFING</div>
-            <div className="briefing-content">
-              <div className="terminal-text">
-                <span className="terminal-prompt">></span> OBJECTIVE: SURVIVE 60 SECONDS ON EACH NETWORK
-              </div>
-              <div className="terminal-text">
-                <span className="terminal-prompt">></span> ANALYZE BLOCK TIME IMPACT ON USER EXPERIENCE
-              </div>
-              <div className="terminal-text">
-                <span className="terminal-prompt">></span> DISCOVER THE POWER OF REAL-TIME BLOCKCHAIN
-              </div>
-            </div>
-          </div>
+          {/* Mission briefing removed per request */}
 
           <div className="network-selection">
             <div className="selection-title">SELECT TARGET BLOCKCHAIN NETWORK:</div>
@@ -264,8 +251,8 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
               {networks.map((network) => (
                 <div
                   key={network.id}
-                  className={`network-card ${selectedNetwork?.id === network.id ? 'selected' : ''}`}
-                  onClick={() => handleNetworkSelect(network)}
+                  className={`network-card ${selectedNetwork?.id === network.id ? 'selected' : ''} ${network.status === 'SOON' ? 'disabled' : ''}`}
+                  onClick={() => network.status !== 'SOON' && handleNetworkSelect(network)}
                 >
                   <div className="network-header">
                     <div className="network-icon">{network.icon}</div>
