@@ -2407,7 +2407,7 @@ export const useBlockchainUtils = () => {
       
       // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
       callFaucet(faucetWallet.address, chainId)
-            .then((result) => {
+            .then(async (result) => {
               console.log('✅ Background faucet completed');
               if (result.isEmbeddedWallet) {
                 console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
