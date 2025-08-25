@@ -1173,7 +1173,6 @@ export const useBlockchainUtils = () => {
     console.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(gasParams.maxFeePerGas) / 10**9}, maxPriorityFeePerGasGwei: ${Number(gasParams.maxPriorityFeePerGas) / 10**9}}`);
 
     const config = NETWORK_CONFIGS[chainId];
-    const embeddedWallet = getEmbeddedWallet();
     
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
