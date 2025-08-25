@@ -62,8 +62,11 @@ export const PERFORMANCE_CONFIG = {
 export const performanceUtils = {
   // Логирование метрик производительности
   logPerformanceMetric: (chainId, metric, value, metadata = {}) => {
-    const timestamp = new Date().toISOString();
-    console.log(`[PERF-${chainId}] ${timestamp} ${metric}: ${value}`, metadata);
+    // Reduce noise: only log performance metrics in development
+    if (process.env.NODE_ENV === 'development') {
+      const timestamp = new Date().toISOString();
+      console.log(`[PERF-${chainId}] ${timestamp} ${metric}: ${value}`, metadata);
+    }
   },
 
   // Создание отчета о состоянии системы
