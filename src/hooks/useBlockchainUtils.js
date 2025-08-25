@@ -609,7 +609,7 @@ export const useBlockchainUtils = () => {
     const state = fallbackState.current[chainId];
     if (state) {
       state.degradedMode = true;
-      console.log(`Enabled fallback mode for chain ${chainId}`);
+      // Silenced non-error log: fallback mode enabled
     }
   };
 
@@ -621,20 +621,12 @@ export const useBlockchainUtils = () => {
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
     if (!authenticated || !wallets.length) {
-      console.log('🔍 getEmbeddedWallet: Not authenticated or no wallets available');
+      // Silenced non-error log: not authenticated or no wallets
       return null;
     }
     
     // Only log in development mode
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔍 getEmbeddedWallet: Available wallets:', wallets.map(w => ({
-        address: w.address,
-        walletClientType: w.walletClientType,
-        connectorType: w.connectorType,
-        type: w.type,
-        walletIndex: w.walletIndex
-      })));
-    }
+    // Silenced verbose wallet enumeration logs
     
     // Enhanced embedded wallet detection with multiple criteria
     const embeddedWallet = wallets.find(wallet => {
@@ -648,32 +640,17 @@ export const useBlockchainUtils = () => {
         wallet.walletIndex === 0; // First wallet is usually embedded
       
       // Only log in development mode
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🔍 Checking wallet ${wallet.address}:`, {
-          walletClientType: wallet.walletClientType,
-          connectorType: wallet.connectorType,
-          type: wallet.type,
-          walletIndex: wallet.walletIndex,
-          isEmbedded
-        });
-      }
+      // Silenced wallet checking debug logs
       
       return isEmbedded;
     });
     
     if (embeddedWallet) {
-      console.log('✅ Found embedded wallet:', {
-        address: embeddedWallet.address,
-        walletClientType: embeddedWallet.walletClientType,
-        connectorType: embeddedWallet.connectorType,
-        type: embeddedWallet.type,
-        walletIndex: embeddedWallet.walletIndex
-      });
+      // Silenced repeated embedded wallet discovery log
       return embeddedWallet;
     }
     
-    console.log('⚠️ No embedded wallet found, available wallets:', wallets.length);
-    console.log('⚠️ This might cause faucet to send to wrong wallet!');
+    // Silenced non-error warnings about missing embedded wallet
     
     // Do NOT fall back to first wallet; require embedded wallet
     return null;
@@ -682,7 +659,7 @@ export const useBlockchainUtils = () => {
   // Функция для принудительного создания embedded wallet
   const ensureEmbeddedWallet = async () => {
     if (!authenticated || !user) {
-      console.log('🔍 ensureEmbeddedWallet: Not authenticated or no user');
+      // Silenced non-error log: ensureEmbeddedWallet prerequisites missing
       return null;
     }
 
@@ -695,11 +672,11 @@ export const useBlockchainUtils = () => {
       existingEmbeddedWallet.walletClientType === 'embedded' ||
       existingEmbeddedWallet.walletIndex === 0
     )) {
-      console.log('✅ Embedded wallet already exists:', existingEmbeddedWallet.address);
+      // Silenced info: embedded wallet already exists
       return existingEmbeddedWallet;
     }
 
-    console.log('🔄 Attempting to create embedded wallet...');
+    // Silenced info: attempting to create embedded wallet
     
     try {
       // Wait a bit for any pending wallet creation to complete
@@ -708,15 +685,15 @@ export const useBlockchainUtils = () => {
       // Check again after waiting
       const retryEmbeddedWallet = getEmbeddedWallet();
       if (retryEmbeddedWallet) {
-        console.log('✅ Found embedded wallet after waiting:', retryEmbeddedWallet.address);
+        // Silenced info: embedded wallet found after waiting
         return retryEmbeddedWallet;
       }
       
       // Пытаемся создать embedded wallet через Privy
       if (window.privy && window.privy.createWallet) {
-        console.log('🔄 Attempting to create wallet via Privy...');
+        // Silenced info: creating wallet via Privy
         const newWallet = await window.privy.createWallet();
-        console.log('✅ Created new embedded wallet via Privy:', newWallet);
+        // Silenced info: created new embedded wallet via Privy
         
         // Wait a bit more for the wallet to be properly registered
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -724,15 +701,15 @@ export const useBlockchainUtils = () => {
         // Check if the wallet is now available in the wallets list
         const finalCheck = getEmbeddedWallet();
         if (finalCheck) {
-          console.log('✅ Embedded wallet successfully registered:', finalCheck.address);
+          // Silenced info: embedded wallet successfully registered
           return finalCheck;
         } else {
-          console.log('⚠️ Wallet created but not found in wallets list');
+          // Silenced warning: wallet created but not found in list
           return newWallet;
         }
       }
       
-      console.log('⚠️ Privy createWallet not available');
+      // Silenced warning: Privy createWallet not available
       return null;
     } catch (error) {
       console.error('❌ Failed to create embedded wallet:', error);
@@ -758,7 +735,7 @@ export const useBlockchainUtils = () => {
 
     let embeddedWallet = getEmbeddedWallet();
     if (!embeddedWallet) {
-      console.log('🔄 No embedded wallet found, attempting to ensure one exists...');
+      // Silenced info: attempting to ensure embedded wallet exists
       embeddedWallet = await ensureEmbeddedWallet();
       if (!embeddedWallet) {
         throw new Error('No embedded wallet found and could not create one');
