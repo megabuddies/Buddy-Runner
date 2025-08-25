@@ -1103,6 +1103,45 @@ export const useBlockchainUtils = () => {
   const preSignBatch = async (chainId, startNonce, count) => {
     const chainKey = chainId.toString();
     
+    // КРИТИЧЕСКАЯ ПРОВЕРКА: Убеждаемся, что у нас есть достаточный баланс перед pre-signing
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      throw new Error('No embedded wallet available for pre-signing');
+    }
+    
+    // Проверяем баланс перед началом pre-signing
+    let currentBalance = await checkBalance(chainId);
+    console.log(`💰 Pre-signing balance check: ${currentBalance} ETH`);
+    
+    // Если баланс слишком низкий, ждем обновления
+    if (parseFloat(currentBalance) < 0.00005) {
+      console.log('⏳ Balance too low for pre-signing, waiting for faucet funds...');
+      
+      // Ждем до 15 секунд для обновления баланса
+      let balanceUpdated = false;
+      for (let i = 0; i < 30; i++) { // 30 попыток по 500ms = 15 секунд
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        try {
+          currentBalance = await checkBalance(chainId);
+          console.log(`🔄 Balance check ${i + 1}/30: ${currentBalance} ETH`);
+          
+          if (parseFloat(currentBalance) >= 0.00005) {
+            console.log(`✅ Balance updated to ${currentBalance} ETH, proceeding with pre-signing`);
+            balanceUpdated = true;
+            break;
+          }
+        } catch (error) {
+          console.warn('⚠️ Balance check failed during wait:', error);
+        }
+      }
+      
+      if (!balanceUpdated) {
+        console.error('❌ Balance not updated after 15 seconds, cannot proceed with pre-signing');
+        throw new Error('Insufficient balance for pre-signing transactions');
+      }
+    }
+    
     // Получаем конфигурацию для данной сети
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
     const fallbackConfig = getFallbackConfig(chainId);
@@ -1114,7 +1153,7 @@ export const useBlockchainUtils = () => {
       console.log(`Using fallback mode for chain ${chainId}: batch size ${actualCount}`);
     }
     
-    console.log(`Pre-signing ${actualCount} transactions for chain ${chainId} starting from nonce ${startNonce}`);
+    console.log(`Pre-signing ${actualCount} transactions for chain ${chainId} starting from nonce ${startNonce} with balance ${currentBalance} ETH`);
     
     if (!preSignedPool.current[chainKey]) {
       preSignedPool.current[chainKey] = {
@@ -2147,6 +2186,25 @@ export const useBlockchainUtils = () => {
       throw new Error('No embedded wallet available');
     }
 
+    // КРИТИЧЕСКАЯ ПРОВЕРКА: Убеждаемся, что блокчейн инициализирован
+    if (!isInitialized.current[chainKey]) {
+      console.log('⏳ Blockchain not initialized yet, waiting...');
+      throw new Error('Blockchain is still initializing. Please wait for setup to complete.');
+    }
+
+    // КРИТИЧЕСКАЯ ПРОВЕРКА: Убеждаемся, что pre-signed пул готов
+    const pool = preSignedPool.current[chainKey];
+    
+    if (!pool || !pool.isReady) {
+      console.log('⏳ Pre-signed pool not ready, waiting for initialization...');
+      throw new Error('Pre-signed transaction pool not ready. Please wait for blockchain initialization to complete.');
+    }
+    
+    if (pool.transactions.length <= pool.currentIndex) {
+      console.log('📭 Pre-signed pool empty, waiting for refill...');
+      throw new Error('Pre-signed transaction pool is empty. Please wait for pool refill.');
+    }
+
     // Для MegaETH (instant transactions) менее строгая проверка pending состояния
     if (chainId === 6342) {
       // Проверяем есть ли доступные pre-signed транзакции
@@ -2438,11 +2496,7 @@ export const useBlockchainUtils = () => {
       
       initializationPromises.push(balanceAndNoncePromise);
 
-      // 2. НЕМЕДЛЕННО помечаем как инициализированный для instant gaming
-      isInitialized.current[chainKey] = true;
-      console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
-      
-      // 3. Pre-signing в ФОНОВОМ режиме (не блокируем игру)
+      // 3. Pre-signing с ожиданием готовности для instant gaming
       const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
       const fallbackConfig = getFallbackConfig(chainId);
       
@@ -2452,21 +2506,23 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      // ФОНОВОЕ предподписание с ожиданием обновления баланса
+      // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ждем завершения pre-signing перед пометкой игры как готовой
       const preSigningPromise = balanceAndNoncePromise.then(async ({ currentBalance, initialNonce }) => {
-        console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+        console.log(`🔄 Starting pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
         
         // Если баланс был низким и faucet был вызван, ждем обновления баланса
         if (parseFloat(currentBalance) < 0.00005) {
           console.log('⏳ Waiting for faucet balance update before pre-signing...');
           
-          // Ждем до 10 секунд для обновления баланса после faucet
+          // Ждем до 15 секунд для обновления баланса после faucet
           let balanceUpdated = false;
-          for (let i = 0; i < 20; i++) { // 20 попыток по 500ms = 10 секунд
+          for (let i = 0; i < 30; i++) { // 30 попыток по 500ms = 15 секунд
             await new Promise(resolve => setTimeout(resolve, 500));
             
             try {
               const updatedBalance = await checkBalance(chainId);
+              console.log(`🔄 Balance check ${i + 1}/30: ${updatedBalance} ETH`);
+              
               if (parseFloat(updatedBalance) >= 0.00005) {
                 console.log(`✅ Balance updated to ${updatedBalance} ETH, proceeding with pre-signing`);
                 balanceUpdated = true;
@@ -2478,7 +2534,8 @@ export const useBlockchainUtils = () => {
           }
           
           if (!balanceUpdated) {
-            console.warn('⚠️ Balance not updated after 10 seconds, proceeding with pre-signing anyway');
+            console.error('❌ Balance not updated after 15 seconds, cannot proceed with pre-signing');
+            throw new Error('Insufficient balance for pre-signing transactions');
           }
         }
         
@@ -2492,15 +2549,23 @@ export const useBlockchainUtils = () => {
           .then(() => {
             const pool = preSignedPool.current[chainKey];
             if (pool && pool.transactions.length > 0) {
-              console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
+              console.log(`✅ Pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
+              
+              // КРИТИЧНО: Помечаем игру как готовую только после успешного pre-signing
+              isInitialized.current[chainKey] = true;
+              console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
             } else {
-              console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
+              console.log('⚠️ Pre-signing completed with 0 transactions - enabling fallback mode');
+              enableFallbackMode(chainId);
+              isInitialized.current[chainKey] = true;
+              console.log('🔄 Fallback mode enabled - game continues with realtime signing');
             }
           })
           .catch(error => {
-            console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
+            console.warn('⚠️ Pre-signing failed, enabling fallback mode:', error);
             enableFallbackMode(chainId);
-            console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
+            isInitialized.current[chainKey] = true;
+            console.log('🔄 Fallback mode enabled - game continues with realtime signing');
           });
       });
       
@@ -2513,13 +2578,13 @@ export const useBlockchainUtils = () => {
          console.warn('Background pre-signing error (non-critical):', error);
        });
       
-      // Ждем только базовую инициализацию (баланс + nonce)
-      await balanceAndNoncePromise;
+      // Ждем завершения pre-signing перед пометкой как готовой
+      await preSigningPromise;
       
       // Запускаем автоматическое обновление баланса
       startBalanceAutoUpdate(chainId);
       
-      console.log('🎮 Blockchain ready for instant gaming on chain:', chainId);
+      console.log('🎮 Blockchain fully initialized and ready for instant gaming on chain:', chainId);
       
       if (fallbackConfig) {
         console.log('⚠️ Running in fallback mode - reduced performance expected');
