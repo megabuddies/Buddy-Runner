@@ -1,4 +1,4 @@
-# Исправление проблемы с балансом при первом входе
+# Исправление проблемы с балансом при первом входе (ВЕРСИЯ 2)
 
 ## Проблема
 
@@ -10,136 +10,120 @@
 5. Транзакции не могут быть отправлены
 6. Пользователь должен обновить страницу
 
-## Причина
+## Причина (обновленная)
 
-Задержка в 5 секунд между вызовом faucet и проверкой баланса создавала race condition:
-- Faucet отправлял токены
-- Pre-signing запускался сразу с старым балансом (0)
-- Транзакции создавались без достаточных средств
+Проблема была в том, что faucet вызывался **асинхронно** в `initData`, но `balanceAndNoncePromise` возвращал старый баланс **сразу же**, не дожидаясь завершения faucet. Это приводило к тому, что:
 
-## Решение
+- Pre-signing запускался с балансом 0
+- Баланс обновлялся только после первого неудачного прыжка
+- Транзакции оставались в состоянии "pending"
 
-### 1. Убрана задержка в проверке баланса
+## Решение (ВЕРСИЯ 2)
 
-**Файл:** `src/hooks/useBlockchainUtils.js`
-
-**До:**
-```javascript
-setTimeout(() => checkBalance(chainId), 5000);
-```
-
-**После:**
-```javascript
-await checkBalance(chainId);
-```
-
-### 2. Добавлена проверка баланса в preSignBatch
+### 1. Синхронный вызов faucet в initData
 
 **Файл:** `src/hooks/useBlockchainUtils.js`
 
-Добавлена проверка баланса перед началом pre-signing:
+**До (асинхронный):**
 ```javascript
-// КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем баланс перед началом pre-signing
-console.log('🔍 Checking balance before pre-signing...');
-const currentBalance = await checkBalance(chainId);
-const balanceEth = parseFloat(currentBalance);
+callFaucet(faucetWallet.address, chainId)
+  .then(async (result) => {
+    // ...
+  })
+  .catch(faucetError => {
+    // ...
+  });
+return { currentBalance, initialNonce }; // Возвращает старый баланс!
+```
 
-if (balanceEth < 0.00005) {
-  console.log(`⚠️ Insufficient balance (${currentBalance} ETH) for pre-signing. Waiting for faucet...`);
+**После (синхронный):**
+```javascript
+try {
+  const result = await callFaucet(faucetWallet.address, chainId);
+  console.log('✅ Synchronous faucet completed');
   
-  // Ждем до 15 секунд для обновления баланса после faucet
-  let updatedBalance = currentBalance;
-  let attempts = 0;
-  const maxAttempts = 30; // 30 попыток по 500ms = 15 секунд
+  // Обновляем баланс немедленно после получения ответа от faucet
+  const updatedBalance = await checkBalance(chainId);
+  console.log('✅ Balance updated immediately after faucet response:', updatedBalance);
   
-  while (parseFloat(updatedBalance) < 0.00005 && attempts < maxAttempts) {
-    await new Promise(resolve => setTimeout(resolve, 500));
-    try {
-      updatedBalance = await checkBalance(chainId);
-      attempts++;
-      console.log(`🔄 Balance check attempt ${attempts}/${maxAttempts}: ${updatedBalance} ETH`);
-    } catch (error) {
-      console.warn('Failed to check balance during pre-signing wait:', error);
-      attempts++;
-    }
-  }
-  
-  if (parseFloat(updatedBalance) < 0.00005) {
-    console.error(`❌ Insufficient balance after ${maxAttempts} attempts (${updatedBalance} ETH). Cannot pre-sign transactions.`);
-    throw new Error(`Insufficient balance for pre-signing: ${updatedBalance} ETH`);
-  } else {
-    console.log(`✅ Balance updated to ${updatedBalance} ETH - proceeding with pre-signing`);
-  }
+  // Возвращаем ОБНОВЛЕННЫЙ баланс
+  return { currentBalance: updatedBalance, initialNonce };
+} catch (faucetError) {
+  console.warn('⚠️ Synchronous faucet failed:', faucetError);
+  return { currentBalance, initialNonce };
 }
 ```
 
-### 3. Добавлена проверка баланса в getNextTransaction
+### 2. Упрощена логика pre-signing
 
 **Файл:** `src/hooks/useBlockchainUtils.js`
 
-Добавлена проверка баланса перед использованием pre-signed транзакций:
-```javascript
-// ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что баланс достаточен перед использованием pre-signed транзакций
-const currentBalance = await checkBalance(chainId);
-const balanceEth = parseFloat(currentBalance);
+Убрана дублирующая проверка баланса в `preSignBatch`, поскольку баланс уже проверен и обновлен в `initData`:
 
-if (balanceEth < 0.00005) {
-  console.error(`❌ Insufficient balance (${currentBalance} ETH) for using pre-signed transactions`);
-  throw new Error(`Insufficient balance for blockchain transactions: ${currentBalance} ETH. Please wait for faucet or refresh page.`);
-}
+```javascript
+// Баланс уже проверен в initData, поэтому просто логируем
+console.log('🚀 Starting pre-signing - balance already verified in initData');
 ```
 
-### 4. Улучшена обработка ошибок
+### 3. Улучшена логика pre-signing в initData
 
 **Файл:** `src/hooks/useBlockchainUtils.js`
 
-Добавлена автоматическая попытка вызова faucet при недостаточном балансе:
+Упрощена проверка баланса в pre-signing, поскольку баланс уже обновлен:
+
 ```javascript
-} else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient balance')) {
-  console.log('💰 Insufficient funds detected, consider calling faucet...');
+// ФОНОВОЕ предподписание - баланс уже обновлен в balanceAndNoncePromise
+const preSigningPromise = balanceAndNoncePromise.then(async ({ currentBalance, initialNonce }) => {
+  console.log(`💰 Pre-signing with balance: ${currentBalance} ETH`);
   
-  // Попытка автоматического вызова faucet при недостаточном балансе
-  try {
-    const embeddedWallet = getEmbeddedWallet();
-    if (embeddedWallet) {
-      console.log('🔄 Attempting automatic faucet call due to insufficient balance...');
-      await callFaucet(embeddedWallet.address, chainId);
-      console.log('✅ Automatic faucet call completed');
-    }
-  } catch (faucetError) {
-    console.warn('⚠️ Automatic faucet call failed:', faucetError);
+  // Проверяем, что баланс достаточен для pre-signing
+  if (parseFloat(currentBalance) < 0.00005) {
+    console.warn(`⚠️ Balance still insufficient (${currentBalance} ETH) for pre-signing - skipping`);
+    return;
   }
-}
+  
+  console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+  // ...
+});
 ```
 
 ## Результат
 
 Теперь при первом входе пользователя:
 
-1. ✅ Баланс проверяется немедленно после получения ответа от faucet
-2. ✅ Pre-signing ждет обновления баланса перед началом (до 15 секунд)
-3. ✅ Если баланс все еще недостаточен, выдается понятная ошибка
-4. ✅ Автоматическая попытка вызова faucet при недостаточном балансе
-5. ✅ Пользователь может начать играть без обновления страницы
-
-## Тестирование
-
-Используйте файл `test-balance-fix.js` для тестирования:
-
-1. Войдите в игру через Privy
-2. Откройте консоль браузера
-3. Запустите: `node test-balance-fix.js`
-4. Проверьте логи для подтверждения работы исправлений
+1. ✅ **Синхронный faucet** - `initData` ждет завершения faucet
+2. ✅ **Немедленное обновление баланса** - баланс проверяется сразу после faucet
+3. ✅ **Обновленный баланс передается в pre-signing** - pre-signing получает актуальный баланс
+4. ✅ **Pre-signing начинается с правильным балансом** - транзакции создаются с достаточными средствами
+5. ✅ **Пользователь может играть сразу** - без обновления страницы
 
 ## Логи для отладки
 
 При правильной работе вы должны увидеть:
 ```
-🔍 Checking balance before pre-signing...
-⚠️ Insufficient balance (0.0000 ETH) for pre-signing. Waiting for faucet...
-🔄 Balance check attempt 1/30: 0.0000 ETH
-🔄 Balance check attempt 2/30: 0.0000 ETH
-...
-✅ Balance updated to 0.0010 ETH - proceeding with pre-signing
+💰 Current balance: 0.0000 ETH
+💰 Balance is 0.0000 ETH (< 0.00005), calling faucet SYNCHRONOUSLY...
+✅ Synchronous faucet completed
+✅ Balance updated immediately after faucet response: 0.0010 ETH
+💰 Pre-signing with balance: 0.0010 ETH
+🔄 Background pre-signing 300 transactions starting from nonce 0
+🚀 Starting pre-signing - balance already verified in initData
 ✅ Pre-signed transaction pool is now ACTIVE with 1 transaction
 ```
+
+## Тестирование
+
+Используйте файл `test-balance-fix-v2.js` для тестирования:
+
+1. Войдите в игру через Privy
+2. Откройте консоль браузера
+3. Запустите: `node test-balance-fix-v2.js`
+4. Проверьте логи для подтверждения синхронной работы
+
+## Ключевые изменения
+
+- **Синхронный faucet** вместо асинхронного
+- **Немедленное обновление баланса** после faucet
+- **Передача обновленного баланса** в pre-signing
+- **Упрощенная логика** без дублирующих проверок
+- **Гарантированная готовность** к игре без refresh
