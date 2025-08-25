@@ -1116,6 +1116,26 @@ export const useBlockchainUtils = () => {
     
     console.log(`Pre-signing ${actualCount} transactions for chain ${chainId} starting from nonce ${startNonce}`);
     
+    // ПРОВЕРЯЕМ БАЛАНС ПЕРЕД НАЧАЛОМ ПОДПИСАНИЯ
+    console.log('💰 Checking balance before pre-signing...');
+    const currentBalance = await checkBalance(chainId);
+    const balanceEth = parseFloat(currentBalance);
+    
+    if (balanceEth < 0.00005) {
+      console.log('⚠️ Insufficient balance for pre-signing, waiting for faucet...');
+      // Ждем немного и проверяем снова
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const updatedBalance = await checkBalance(chainId);
+      const updatedBalanceEth = parseFloat(updatedBalance);
+      
+      if (updatedBalanceEth < 0.00005) {
+        console.log('❌ Still insufficient balance, skipping pre-signing');
+        return;
+      }
+    }
+    
+    console.log(`✅ Sufficient balance (${currentBalance} ETH) - proceeding with pre-signing`);
+    
     if (!preSignedPool.current[chainKey]) {
       preSignedPool.current[chainKey] = {
         transactions: [],
@@ -1675,6 +1695,47 @@ export const useBlockchainUtils = () => {
         console.warn('Auto balance update failed:', error);
       }
     }, 10000); // 10 секунд
+  };
+
+  // АВТОМАТИЧЕСКАЯ СИСТЕМА FAUCET для новых пользователей
+  const autoFaucetForNewUsers = async (chainId) => {
+    try {
+      const embeddedWallet = getEmbeddedWallet();
+      if (!embeddedWallet) {
+        console.log('No embedded wallet available for auto faucet');
+        return;
+      }
+
+      console.log('🔍 Checking if user needs automatic faucet...');
+      
+      // Проверяем текущий баланс
+      const currentBalance = await checkBalance(chainId);
+      const balanceEth = parseFloat(currentBalance);
+      
+      // Если баланс меньше 0.00005 ETH, автоматически вызываем faucet
+      if (balanceEth < 0.00005) {
+        console.log('💰 Low balance detected, triggering automatic faucet...');
+        
+        try {
+          const result = await callFaucet(embeddedWallet.address, chainId);
+          console.log('✅ Automatic faucet completed:', result);
+          
+          // Немедленно проверяем обновленный баланс
+          await checkBalance(chainId);
+          
+          return result;
+        } catch (error) {
+          console.warn('⚠️ Automatic faucet failed:', error);
+          return null;
+        }
+      } else {
+        console.log(`✅ Sufficient balance (${currentBalance} ETH) - no faucet needed`);
+        return null;
+      }
+    } catch (error) {
+      console.error('Error in auto faucet:', error);
+      return null;
+    }
   };
 
   // Остановка автоматического обновления баланса
@@ -2385,7 +2446,21 @@ export const useBlockchainUtils = () => {
             blockTag: 'pending'
           });
         }, 3, 1000, chainId)
-      ]).then(([currentBalance, initialNonce]) => {
+      ]).then(async ([currentBalance, initialNonce]) => {
+        // АВТОМАТИЧЕСКИЙ FAUCET для новых пользователей
+        const balanceEth = parseFloat(currentBalance);
+        if (balanceEth < 0.00005) {
+          console.log('🆕 New user detected with low balance, triggering automatic faucet...');
+          try {
+            await autoFaucetForNewUsers(chainId);
+            // Обновляем баланс после faucet
+            const updatedBalance = await checkBalance(chainId);
+            console.log(`✅ Balance updated after auto faucet: ${updatedBalance} ETH`);
+          } catch (faucetError) {
+            console.warn('⚠️ Auto faucet failed during initialization:', faucetError);
+          }
+        }
+        
         // Инициализируем nonce manager с текущим nonce
         nonceManager.currentNonce = initialNonce;
         nonceManager.pendingNonce = initialNonce;
@@ -2394,38 +2469,6 @@ export const useBlockchainUtils = () => {
         console.log('💰 Current balance:', currentBalance);
         console.log('🎯 Starting nonce:', initialNonce);
 
-        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
-        if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
-          
-                // Получаем правильный embedded wallet для faucet
-      const faucetWallet = getEmbeddedWallet();
-      if (!faucetWallet) {
-        console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
-        return { currentBalance, initialNonce };
-      }
-      
-      console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
-      
-      // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
-      callFaucet(faucetWallet.address, chainId)
-            .then((result) => {
-              console.log('✅ Background faucet completed');
-              if (result.isEmbeddedWallet) {
-                console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
-              } else {
-                console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
-              }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
-              // Обновляем nonce после faucet
-              return getNextNonce(chainId, faucetWallet.address, true);
-            })
-            .catch(faucetError => {
-              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
-            });
-        }
-        
         return { currentBalance, initialNonce };
       });
       
@@ -3028,6 +3071,7 @@ export const useBlockchainUtils = () => {
     sendUpdate,
     checkBalance,
     callFaucet,
+    autoFaucetForNewUsers,
     getContractNumber,
     
     // Утилиты

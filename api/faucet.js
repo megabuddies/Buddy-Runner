@@ -126,7 +126,14 @@ export default async function handler(req, res) {
       transactionHash: receipt.hash,
       amount: '0.0001',
       recipient: address,
-      blockNumber: receipt.blockNumber
+      blockNumber: receipt.blockNumber,
+      // Дополнительная информация для улучшенной обработки
+      isEmbeddedWallet: true, // Помечаем, что это embedded wallet
+      timestamp: Date.now(),
+      network: chainId,
+      // Информация о том, что транзакция была отправлена
+      transactionStatus: 'confirmed',
+      confirmations: receipt.confirmations || 1
     });
 
   } catch (error) {
