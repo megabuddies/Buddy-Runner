@@ -298,47 +298,9 @@ const GameComponent = ({ selectedNetwork }) => {
     }
   }, []); // Empty dependency array - function is stable now
 
-  // Manual faucet call function
+  // Manual faucet call function (deprecated - now automatic)
   const handleManualFaucet = async () => {
-    if (!selectedNetwork || selectedNetwork.isWeb2 || !isReady) {
-      return;
-    }
-
-    try {
-      setManualFaucetLoading(true);
-      
-      // Убеждаемся, что у нас есть embedded wallet
-      let embeddedWallet = getEmbeddedWallet();
-      if (!embeddedWallet) {
-        console.log('No embedded wallet found, attempting to create one...');
-        embeddedWallet = await ensureEmbeddedWallet();
-        if (!embeddedWallet) {
-          alert('Please connect your wallet first');
-          return;
-        }
-      }
-
-      console.log('Manual faucet request for:', embeddedWallet.address);
-      const result = await callFaucet(embeddedWallet.address, selectedNetwork.id);
-      
-      // Показываем информацию о том, какой адрес был использован
-      if (result.isEmbeddedWallet) {
-        alert('Faucet request successful! Funds will be sent to your game wallet.');
-      } else {
-        alert('Faucet request successful! Funds should arrive shortly.');
-      }
-      
-      // Wait and refresh balance
-      setTimeout(async () => {
-        await checkBalance(selectedNetwork.id);
-      }, 3000);
-
-    } catch (error) {
-      console.error('Manual faucet error:', error);
-      alert(`Faucet request failed: ${error.message}`);
-    } finally {
-      setManualFaucetLoading(false);
-    }
+    console.log('Manual faucet is deprecated - faucet is now automatic');
   };
 
   // Get wallet information for display
@@ -415,6 +377,51 @@ const GameComponent = ({ selectedNetwork }) => {
       }));
     }
   }, [transactionPending, selectedNetwork, getPoolStatus]);
+
+  // Automatic faucet call when balance is low (Blaze Arcade style)
+  useEffect(() => {
+    if (selectedNetwork && !selectedNetwork.isWeb2 && authenticated && isReady) {
+      const currentBalance = parseFloat(balance);
+      
+      // If balance is very low and we haven't already triggered faucet
+      if (currentBalance < 0.00005 && !manualFaucetLoading) {
+        console.log('💰 Auto-triggering faucet for low balance:', currentBalance);
+        
+        // Auto-call faucet for embedded wallet
+        const autoFaucet = async () => {
+          try {
+            setManualFaucetLoading(true);
+            
+            const embeddedWallet = getEmbeddedWallet();
+            if (!embeddedWallet) {
+              console.log('No embedded wallet available for auto-faucet');
+              return;
+            }
+            
+            console.log('🔄 Auto-faucet request for:', embeddedWallet.address);
+            const result = await callFaucet(embeddedWallet.address, selectedNetwork.id);
+            
+            if (result.isEmbeddedWallet) {
+              console.log('✅ Auto-faucet sent to embedded wallet:', embeddedWallet.address);
+            } else {
+              console.log('⚠️ Auto-faucet sent to non-embedded wallet:', embeddedWallet.address);
+            }
+            
+            // Balance will be updated automatically by the blockchain utils
+            console.log('✅ Auto-faucet completed successfully');
+            
+          } catch (error) {
+            console.warn('⚠️ Auto-faucet failed (non-blocking):', error);
+          } finally {
+            setManualFaucetLoading(false);
+          }
+        };
+        
+        // Trigger auto-faucet
+        autoFaucet();
+      }
+    }
+  }, [balance, selectedNetwork, authenticated, isReady, manualFaucetLoading, callFaucet, getEmbeddedWallet]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -887,13 +894,8 @@ const GameComponent = ({ selectedNetwork }) => {
               
               {parseFloat(balance) < 0.00005 && (
                 <div className="status-item">
-                  <button 
-                    className="faucet-button" 
-                    onClick={handleManualFaucet}
-                    disabled={manualFaucetLoading}
-                  >
-                    {manualFaucetLoading ? 'Requesting...' : 'Get Test ETH'}
-                  </button>
+                  <span className="label">Status:</span>
+                  <span className="value pending">💰 Auto-requesting funds...</span>
                 </div>
               )}
               {transactionPending && (

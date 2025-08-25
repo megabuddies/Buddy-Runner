@@ -2409,15 +2409,22 @@ export const useBlockchainUtils = () => {
       
       // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
       callFaucet(faucetWallet.address, chainId)
-            .then((result) => {
+            .then(async (result) => {
               console.log('✅ Background faucet completed');
               if (result.isEmbeddedWallet) {
                 console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
               } else {
                 console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
               }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
+              // Обновляем баланс НЕМЕДЛЕННО после получения ответа от faucet
+              try {
+                await checkBalance(chainId);
+                console.log('✅ Balance updated immediately after faucet');
+              } catch (balanceError) {
+                console.warn('⚠️ Failed to update balance immediately:', balanceError);
+                // Fallback: обновляем баланс через 3 секунды если немедленное обновление не удалось
+                setTimeout(() => checkBalance(chainId), 3000);
+              }
               // Обновляем nonce после faucet
               return getNextNonce(chainId, faucetWallet.address, true);
             })
@@ -2445,9 +2452,35 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      // ФОНОВОЕ предподписание
-      const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
+      // ФОНОВОЕ предподписание с ожиданием обновления баланса
+      const preSigningPromise = balanceAndNoncePromise.then(async ({ currentBalance, initialNonce }) => {
         console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+        
+        // Если баланс был низким и faucet был вызван, ждем обновления баланса
+        if (parseFloat(currentBalance) < 0.00005) {
+          console.log('⏳ Waiting for faucet balance update before pre-signing...');
+          
+          // Ждем до 10 секунд для обновления баланса после faucet
+          let balanceUpdated = false;
+          for (let i = 0; i < 20; i++) { // 20 попыток по 500ms = 10 секунд
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            try {
+              const updatedBalance = await checkBalance(chainId);
+              if (parseFloat(updatedBalance) >= 0.00005) {
+                console.log(`✅ Balance updated to ${updatedBalance} ETH, proceeding with pre-signing`);
+                balanceUpdated = true;
+                break;
+              }
+            } catch (error) {
+              console.warn('⚠️ Balance check failed during wait:', error);
+            }
+          }
+          
+          if (!balanceUpdated) {
+            console.warn('⚠️ Balance not updated after 10 seconds, proceeding with pre-signing anyway');
+          }
+        }
         
         // Резервируем nonces для pre-signing
         const manager = getNonceManager(chainId, embeddedWallet.address);
