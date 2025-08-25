@@ -328,10 +328,8 @@ const GameComponent = ({ selectedNetwork }) => {
         alert('Faucet request successful! Funds should arrive shortly.');
       }
       
-      // Wait and refresh balance
-      setTimeout(async () => {
-        await checkBalance(selectedNetwork.id);
-      }, 3000);
+      // Refresh balance immediately
+      await checkBalance(selectedNetwork.id);
 
     } catch (error) {
       console.error('Manual faucet error:', error);
