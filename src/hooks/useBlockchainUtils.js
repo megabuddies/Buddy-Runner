@@ -1103,6 +1103,41 @@ export const useBlockchainUtils = () => {
   const preSignBatch = async (chainId, startNonce, count) => {
     const chainKey = chainId.toString();
     
+    // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Проверяем баланс перед началом pre-signing
+    console.log('🔍 Checking balance before pre-signing...');
+    const currentBalance = await checkBalance(chainId);
+    const balanceEth = parseFloat(currentBalance);
+    
+    if (balanceEth < 0.00005) {
+      console.log(`⚠️ Insufficient balance (${currentBalance} ETH) for pre-signing. Waiting for faucet...`);
+      
+      // Ждем до 15 секунд для обновления баланса после faucet
+      let updatedBalance = currentBalance;
+      let attempts = 0;
+      const maxAttempts = 30; // 30 попыток по 500ms = 15 секунд
+      
+      while (parseFloat(updatedBalance) < 0.00005 && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+          updatedBalance = await checkBalance(chainId);
+          attempts++;
+          console.log(`🔄 Balance check attempt ${attempts}/${maxAttempts}: ${updatedBalance} ETH`);
+        } catch (error) {
+          console.warn('Failed to check balance during pre-signing wait:', error);
+          attempts++;
+        }
+      }
+      
+      if (parseFloat(updatedBalance) < 0.00005) {
+        console.error(`❌ Insufficient balance after ${maxAttempts} attempts (${updatedBalance} ETH). Cannot pre-sign transactions.`);
+        throw new Error(`Insufficient balance for pre-signing: ${updatedBalance} ETH`);
+      } else {
+        console.log(`✅ Balance updated to ${updatedBalance} ETH - proceeding with pre-signing`);
+      }
+    } else {
+      console.log(`✅ Sufficient balance (${currentBalance} ETH) for pre-signing`);
+    }
+    
     // Получаем конфигурацию для данной сети
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
     const fallbackConfig = getFallbackConfig(chainId);
@@ -1391,6 +1426,15 @@ export const useBlockchainUtils = () => {
     const chainKey = chainId.toString();
     const pool = preSignedPool.current[chainKey];
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
+
+    // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что баланс достаточен перед использованием pre-signed транзакций
+    const currentBalance = await checkBalance(chainId);
+    const balanceEth = parseFloat(currentBalance);
+    
+    if (balanceEth < 0.00005) {
+      console.error(`❌ Insufficient balance (${currentBalance} ETH) for using pre-signed transactions`);
+      throw new Error(`Insufficient balance for blockchain transactions: ${currentBalance} ETH. Please wait for faucet or refresh page.`);
+    }
 
     // Если пул готов и есть предподписанные транзакции, используем их
     if (pool && pool.isReady && pool.transactions.length > pool.currentIndex) {
@@ -2313,8 +2357,20 @@ export const useBlockchainUtils = () => {
         }
       } else if (error.message?.includes('context deadline exceeded')) {
         console.log('⏰ Network timeout detected, transaction may still be processing...');
-      } else if (error.message?.includes('insufficient funds')) {
+      } else if (error.message?.includes('insufficient funds') || error.message?.includes('Insufficient balance')) {
         console.log('💰 Insufficient funds detected, consider calling faucet...');
+        
+        // Попытка автоматического вызова faucet при недостаточном балансе
+        try {
+          const embeddedWallet = getEmbeddedWallet();
+          if (embeddedWallet) {
+            console.log('🔄 Attempting automatic faucet call due to insufficient balance...');
+            await callFaucet(embeddedWallet.address, chainId);
+            console.log('✅ Automatic faucet call completed');
+          }
+        } catch (faucetError) {
+          console.warn('⚠️ Automatic faucet call failed:', faucetError);
+        }
       }
       
       throw new Error(`Blockchain transaction error: ${error.message}`);
@@ -2493,6 +2549,12 @@ export const useBlockchainUtils = () => {
           })
           .catch(error => {
             console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
+            
+            // Если ошибка связана с недостаточным балансом, логируем это отдельно
+            if (error.message?.includes('Insufficient balance')) {
+              console.error('❌ Pre-signing failed due to insufficient balance. User needs to wait for faucet or refresh page.');
+            }
+            
             enableFallbackMode(chainId);
             console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
           });
