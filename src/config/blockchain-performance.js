@@ -1,3 +1,34 @@
+// Система логирования с уровнями важности
+const LOG_LEVELS = {
+  ERROR: 0,    // Критические ошибки
+  WARN: 1,     // Предупреждения
+  INFO: 2,     // Важная информация
+  DEBUG: 3,    // Отладочная информация
+  VERBOSE: 4   // Подробная отладочная информация
+};
+
+// Текущий уровень логирования (можно изменять)
+let currentLogLevel = process.env.NODE_ENV === 'development' ? LOG_LEVELS.INFO : LOG_LEVELS.WARN;
+
+// Функция для установки уровня логирования
+export const setLogLevel = (level) => {
+  currentLogLevel = level;
+};
+
+// Функция логирования с проверкой уровня
+export const log = (level, message, ...args) => {
+  if (level <= currentLogLevel) {
+    console.log(message, ...args);
+  }
+};
+
+// Специализированные функции логирования
+export const logError = (message, ...args) => log(LOG_LEVELS.ERROR, message, ...args);
+export const logWarn = (message, ...args) => log(LOG_LEVELS.WARN, message, ...args);
+export const logInfo = (message, ...args) => log(LOG_LEVELS.INFO, message, ...args);
+export const logDebug = (message, ...args) => log(LOG_LEVELS.DEBUG, message, ...args);
+export const logVerbose = (message, ...args) => log(LOG_LEVELS.VERBOSE, message, ...args);
+
 // Конфигурация для мониторинга производительности блокчейна
 export const PERFORMANCE_CONFIG = {
   // Мониторинг RPC эндпоинтов
@@ -63,7 +94,7 @@ export const performanceUtils = {
   // Логирование метрик производительности
   logPerformanceMetric: (chainId, metric, value, metadata = {}) => {
     const timestamp = new Date().toISOString();
-    console.log(`[PERF-${chainId}] ${timestamp} ${metric}: ${value}`, metadata);
+    logDebug(`[PERF-${chainId}] ${timestamp} ${metric}: ${value}`, metadata);
   },
 
   // Создание отчета о состоянии системы
