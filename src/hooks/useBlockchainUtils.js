@@ -1499,6 +1499,45 @@ export const useBlockchainUtils = () => {
 
       return txWrapper.signedTx;
     } else {
+      // Проверяем fallback режим
+      const fallbackConfig = getFallbackConfig(chainId);
+      
+      if (fallbackConfig) {
+        console.log('🔄 Fallback mode detected, creating realtime transaction...');
+        try {
+          // В fallback режиме создаем транзакцию в реальном времени
+          const embeddedWallet = getEmbeddedWallet();
+          if (!embeddedWallet) {
+            throw new Error('No embedded wallet available for fallback transaction');
+          }
+          
+          const { walletClient } = await createClients(chainId);
+          const gasParams = await getGasParams(chainId);
+          const config = NETWORK_CONFIGS[chainId];
+          const nextNonce = await getNextNonce(chainId, embeddedWallet.address);
+          
+          const txData = {
+            account: embeddedWallet.address,
+            to: config.contractAddress,
+            data: '0xa2e62045',
+            nonce: nextNonce,
+            maxFeePerGas: gasParams.maxFeePerGas,
+            maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+            value: 0n,
+            type: 'eip1559',
+            gas: 100000n,
+          };
+          
+          const signedTx = await walletClient.signTransaction(txData);
+          console.log('✅ Fallback transaction created successfully');
+          return signedTx;
+          
+        } catch (fallbackError) {
+          console.error('❌ Fallback transaction creation failed:', fallbackError);
+          throw new Error(`Fallback transaction failed: ${fallbackError.message}`);
+        }
+      }
+      
       // Детальное логирование для отладки
       if (!pool) {
         console.log(`❌ No transaction pool exists for chain ${chainId}`);
@@ -1545,10 +1584,40 @@ export const useBlockchainUtils = () => {
     throw new Error('CRITICAL ERROR: Pre-signed transaction pool exhausted and emergency refill failed. Only pre-signed transactions are allowed in this game.');
   };
 
-  // ОТКЛЮЧЕНО: создание и подписание транзакции в реальном времени
-  // В игре используются ТОЛЬКО pre-signed транзакции
+  // Создание и подписание транзакции в реальном времени (только для fallback режима)
   const createRealtimeTransaction = async (chainId) => {
-    throw new Error('Realtime transaction creation is disabled. Only pre-signed transactions are allowed in this game.');
+    const fallbackConfig = getFallbackConfig(chainId);
+    if (!fallbackConfig) {
+      throw new Error('Realtime transaction creation is disabled. Only pre-signed transactions are allowed in this game.');
+    }
+    
+    console.log('🔄 Creating realtime transaction in fallback mode...');
+    
+    const embeddedWallet = getEmbeddedWallet();
+    if (!embeddedWallet) {
+      throw new Error('No embedded wallet available for realtime transaction');
+    }
+    
+    const { walletClient } = await createClients(chainId);
+    const gasParams = await getGasParams(chainId);
+    const config = NETWORK_CONFIGS[chainId];
+    const nextNonce = await getNextNonce(chainId, embeddedWallet.address);
+    
+    const txData = {
+      account: embeddedWallet.address,
+      to: config.contractAddress,
+      data: '0xa2e62045',
+      nonce: nextNonce,
+      maxFeePerGas: gasParams.maxFeePerGas,
+      maxPriorityFeePerGas: gasParams.maxPriorityFeePerGas,
+      value: 0n,
+      type: 'eip1559',
+      gas: 100000n,
+    };
+    
+    const signedTx = await walletClient.signTransaction(txData);
+    console.log('✅ Realtime transaction created successfully');
+    return signedTx;
   };
 
   // МОНИТОРИНГ БЕСКОНЕЧНОГО ПУЛА pre-signed транзакций
@@ -2445,9 +2514,9 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      // ФОНОВОЕ предподписание
-      const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
-        console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+      // КРИТИЧЕСКОЕ предподписание - ждем завершения
+      const preSigningPromise = balanceAndNoncePromise.then(async ({ initialNonce }) => {
+        console.log(`🔄 CRITICAL pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
         
         // Резервируем nonces для pre-signing
         const manager = getNonceManager(chainId, embeddedWallet.address);
@@ -2455,33 +2524,41 @@ export const useBlockchainUtils = () => {
           manager.pendingNonce = Math.max(manager.pendingNonce || initialNonce, initialNonce + batchSize);
         }
         
-        return preSignBatch(chainId, initialNonce, batchSize)
-          .then(() => {
-            const pool = preSignedPool.current[chainKey];
-            if (pool && pool.transactions.length > 0) {
-              console.log(`✅ Background pre-signed ${pool.transactions.length} transactions - performance boost ready!`);
-            } else {
-              console.log('⚠️ Pre-signing completed with 0 transactions - using realtime mode');
-            }
-          })
-          .catch(error => {
-            console.warn('⚠️ Background pre-signing failed (non-blocking):', error);
+        try {
+          await preSignBatch(chainId, initialNonce, batchSize);
+          const pool = preSignedPool.current[chainKey];
+          if (pool && pool.transactions.length > 0) {
+            console.log(`✅ CRITICAL pre-signed ${pool.transactions.length} transactions - gaming ready!`);
+            return { success: true, transactionCount: pool.transactions.length };
+          } else {
+            console.log('⚠️ Pre-signing completed with 0 transactions - enabling fallback mode');
             enableFallbackMode(chainId);
-            console.log('🔄 Enabled realtime fallback mode - game continues smoothly');
-          });
+            return { success: false, fallback: true };
+          }
+        } catch (error) {
+          console.warn('⚠️ Critical pre-signing failed:', error);
+          enableFallbackMode(chainId);
+          console.log('🔄 Enabled fallback mode due to pre-signing failure');
+          return { success: false, fallback: true, error };
+        }
       });
       
-      // НЕ ДОБАВЛЯЕМ pre-signing в критический путь инициализации
-      // Это позволяет игре начаться сразу, а pre-signing работает в фоне
-      // initializationPromises.push(preSigningPromise);
+      // ДОБАВЛЯЕМ pre-signing в критический путь инициализации
+      initializationPromises.push(preSigningPromise);
       
-             // Запускаем pre-signing в фоне
-       preSigningPromise.catch(error => {
-         console.warn('Background pre-signing error (non-critical):', error);
-       });
+      // Ждем ВСЕ критические задачи инициализации включая presigning
+      console.log('⏳ Waiting for all critical initialization tasks...');
+      const initResults = await Promise.all(initializationPromises);
       
-      // Ждем только базовую инициализацию (баланс + nonce)
-      await balanceAndNoncePromise;
+      // Проверяем результат presigning
+      const preSigningResult = initResults.find(result => result && typeof result === 'object' && 'success' in result);
+      if (preSigningResult) {
+        if (preSigningResult.success) {
+          console.log(`✅ Pre-signing successful: ${preSigningResult.transactionCount} transactions ready`);
+        } else if (preSigningResult.fallback) {
+          console.log('⚠️ Pre-signing failed, fallback mode enabled');
+        }
+      }
       
       // Запускаем автоматическое обновление баланса
       startBalanceAutoUpdate(chainId);
@@ -2491,15 +2568,8 @@ export const useBlockchainUtils = () => {
       if (fallbackConfig) {
         console.log('⚠️ Running in fallback mode - reduced performance expected');
       } else {
-        console.log('🚀 Full performance mode activating in background...');
+        console.log('🚀 Full performance mode ready!');
       }
-      
-      // Остальные задачи выполняются в фоне
-      Promise.all(initializationPromises.slice(1)).then(() => {
-        console.log('✅ Full blockchain optimization complete');
-      }).catch(error => {
-        console.warn('⚠️ Some background optimizations failed (non-critical):', error);
-      });
       
     } catch (error) {
       console.error('❌ Critical initialization error:', error);
