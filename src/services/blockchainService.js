@@ -29,7 +29,7 @@ class BlockchainService {
 
       this.chainId = chainId;
 
-      console.log(`Blockchain service initialized for pre-signed transactions on chain ${this.chainId}`);
+      // Убираем избыточное логирование инициализации
       return true;
     } catch (error) {
       console.error('Failed to initialize blockchain service:', error);
@@ -44,12 +44,11 @@ class BlockchainService {
     }
 
     try {
-      console.log('Starting game with pre-signed transaction...');
-      
       // Используем pre-signed транзакцию через blockchainUtils
       const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
       
-      console.log('Game started with pre-signed transaction:', result);
+      // Логируем только важную информацию
+      console.log('🎮 Game started successfully');
       
       return { 
         success: true, 
@@ -95,7 +94,7 @@ class BlockchainService {
         try {
           // Используем pre-signed транзакцию для движения
           const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
-          console.log('Movement sent with pre-signed transaction:', result);
+          // Убираем избыточное логирование каждого движения
 
           item.resolve({ 
             success: true, 
@@ -130,12 +129,10 @@ class BlockchainService {
     }
 
     try {
-      console.log('Ending game with pre-signed transaction...');
-      
       // Используем pre-signed транзакцию для завершения игры
       const result = await this.blockchainUtils.sendAndConfirmTransaction(this.chainId);
       
-      console.log('Game ended with pre-signed transaction:', result);
+      console.log('🎮 Game ended successfully');
       
       return { 
         success: true, 

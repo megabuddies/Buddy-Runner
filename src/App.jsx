@@ -5,6 +5,7 @@ import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
 import PrivyDebugger from './components/PrivyDebugger';
+import LoggingControls from './components/LoggingControls';
 import './App.css';
 
 const App = () => {
@@ -332,6 +333,8 @@ const App = () => {
       </div>
       {/* Временный компонент для отладки Privy */}
       <PrivyDebugger />
+      {/* Компонент управления логированием */}
+      <LoggingControls />
     </PrivyProvider>
   );
 };

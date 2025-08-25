@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
 import { createWalletClient, http, custom, parseGwei, createPublicClient } from 'viem';
+import { logInfo, logWarn, logError, logWallet, isWalletLoggingEnabled } from '../config/logging';
 
 // Конфигурация сетей
 const NETWORK_CONFIGS = {
@@ -206,17 +207,17 @@ export const useBlockchainUtils = () => {
         // Проверяем и загружаем только актуальные данные
         if (parsed.gasParams && (now - parsed.gasParams.timestamp) < CACHE_EXPIRY.gasParams) {
           gasParams.current = deserializeBigInt(parsed.gasParams.data);
-          console.log('🎯 Loaded cached gas parameters from storage');
+          // Убираем избыточное логирование кэша
         }
         
         if (parsed.chainParams && (now - parsed.chainParams.timestamp) < CACHE_EXPIRY.chainParams) {
           chainParamsCache.current = parsed.chainParams.data;
-          console.log('🎯 Loaded cached chain parameters from storage');
+          // Убираем избыточное логирование кэша
         }
         
         if (parsed.rpcHealth && (now - parsed.rpcHealth.timestamp) < CACHE_EXPIRY.rpcHealth) {
           rpcHealthStatus.current = parsed.rpcHealth.data;
-          console.log('🎯 Loaded cached RPC health from storage');
+          // Убираем избыточное логирование кэша
         }
         
         if (parsed.nonceCache && (now - parsed.nonceCache.timestamp) < CACHE_EXPIRY.nonce) {
@@ -230,7 +231,7 @@ export const useBlockchainUtils = () => {
               };
             }
           });
-          console.log('🎯 Loaded cached nonce data from storage');
+          // Убираем избыточное логирование кэша
         }
       }
     } catch (error) {
@@ -255,11 +256,11 @@ export const useBlockchainUtils = () => {
         const cb = circuitBreakers.current[chainId];
         if (cb && cb.state === 'OPEN') {
           const timeSinceLastFailure = Date.now() - cb.lastFailureTime;
-          if (timeSinceLastFailure > cb.timeout) {
-            cb.state = 'HALF_OPEN';
-            cb.failures = 0;
-            console.log(`🔄 Auto-reset circuit breaker for chain ${chainId} - trying again`);
-          }
+                  if (timeSinceLastFailure > cb.timeout) {
+          cb.state = 'HALF_OPEN';
+          cb.failures = 0;
+          // Убираем избыточное логирование автоматического сброса
+        }
         }
       });
     }, 10000); // Проверяем каждые 10 секунд
@@ -621,20 +622,11 @@ export const useBlockchainUtils = () => {
   // УЛУЧШЕННОЕ получение embedded wallet с дополнительными проверками
   const getEmbeddedWallet = () => {
     if (!authenticated || !wallets.length) {
-      console.log('🔍 getEmbeddedWallet: Not authenticated or no wallets available');
+      // Убираем избыточное логирование - это нормальная ситуация
       return null;
     }
     
-    // Only log in development mode
-    if (process.env.NODE_ENV === 'development') {
-      console.log('🔍 getEmbeddedWallet: Available wallets:', wallets.map(w => ({
-        address: w.address,
-        walletClientType: w.walletClientType,
-        connectorType: w.connectorType,
-        type: w.type,
-        walletIndex: w.walletIndex
-      })));
-    }
+    // Убираем логирование доступных кошельков - это не важно для пользователя
     
     // Enhanced embedded wallet detection with multiple criteria
     const embeddedWallet = wallets.find(wallet => {
@@ -647,33 +639,22 @@ export const useBlockchainUtils = () => {
         wallet.walletClientType === 'embedded' ||
         wallet.walletIndex === 0; // First wallet is usually embedded
       
-      // Only log in development mode
-      if (process.env.NODE_ENV === 'development') {
-        console.log(`🔍 Checking wallet ${wallet.address}:`, {
-          walletClientType: wallet.walletClientType,
-          connectorType: wallet.connectorType,
-          type: wallet.type,
-          walletIndex: wallet.walletIndex,
-          isEmbedded
-        });
-      }
+      // Убираем детальное логирование проверки каждого кошелька
       
       return isEmbedded;
     });
     
     if (embeddedWallet) {
-      console.log('✅ Found embedded wallet:', {
-        address: embeddedWallet.address,
-        walletClientType: embeddedWallet.walletClientType,
-        connectorType: embeddedWallet.connectorType,
-        type: embeddedWallet.type,
-        walletIndex: embeddedWallet.walletIndex
-      });
+      // Логируем только при первом нахождении кошелька, не постоянно
+      if (!embeddedWallet._logged) {
+        logWallet('✅ Embedded wallet ready:', embeddedWallet.address);
+        embeddedWallet._logged = true;
+      }
       return embeddedWallet;
     }
     
-    console.log('⚠️ No embedded wallet found, available wallets:', wallets.length);
-    console.log('⚠️ This might cause faucet to send to wrong wallet!');
+    // Логируем только если это критическая ошибка
+    logWarn('⚠️ No embedded wallet found - faucet may send to wrong wallet');
     
     // Do NOT fall back to first wallet; require embedded wallet
     return null;
@@ -682,7 +663,7 @@ export const useBlockchainUtils = () => {
   // Функция для принудительного создания embedded wallet
   const ensureEmbeddedWallet = async () => {
     if (!authenticated || !user) {
-      console.log('🔍 ensureEmbeddedWallet: Not authenticated or no user');
+      // Убираем избыточное логирование
       return null;
     }
 
@@ -695,11 +676,11 @@ export const useBlockchainUtils = () => {
       existingEmbeddedWallet.walletClientType === 'embedded' ||
       existingEmbeddedWallet.walletIndex === 0
     )) {
-      console.log('✅ Embedded wallet already exists:', existingEmbeddedWallet.address);
+      // Убираем избыточное логирование
       return existingEmbeddedWallet;
     }
 
-    console.log('🔄 Attempting to create embedded wallet...');
+    logInfo('🔄 Creating embedded wallet...');
     
     try {
       // Wait a bit for any pending wallet creation to complete
@@ -708,15 +689,13 @@ export const useBlockchainUtils = () => {
       // Check again after waiting
       const retryEmbeddedWallet = getEmbeddedWallet();
       if (retryEmbeddedWallet) {
-        console.log('✅ Found embedded wallet after waiting:', retryEmbeddedWallet.address);
         return retryEmbeddedWallet;
       }
       
       // Пытаемся создать embedded wallet через Privy
       if (window.privy && window.privy.createWallet) {
-        console.log('🔄 Attempting to create wallet via Privy...');
         const newWallet = await window.privy.createWallet();
-        console.log('✅ Created new embedded wallet via Privy:', newWallet);
+        logInfo('✅ Embedded wallet created successfully');
         
         // Wait a bit more for the wallet to be properly registered
         await new Promise(resolve => setTimeout(resolve, 2000));
@@ -724,15 +703,14 @@ export const useBlockchainUtils = () => {
         // Check if the wallet is now available in the wallets list
         const finalCheck = getEmbeddedWallet();
         if (finalCheck) {
-          console.log('✅ Embedded wallet successfully registered:', finalCheck.address);
           return finalCheck;
         } else {
-          console.log('⚠️ Wallet created but not found in wallets list');
+          logWarn('⚠️ Wallet created but not found in wallets list');
           return newWallet;
         }
       }
       
-      console.log('⚠️ Privy createWallet not available');
+      logWarn('⚠️ Privy createWallet not available');
       return null;
     } catch (error) {
       console.error('❌ Failed to create embedded wallet:', error);
@@ -758,7 +736,6 @@ export const useBlockchainUtils = () => {
 
     let embeddedWallet = getEmbeddedWallet();
     if (!embeddedWallet) {
-      console.log('🔄 No embedded wallet found, attempting to ensure one exists...');
       embeddedWallet = await ensureEmbeddedWallet();
       if (!embeddedWallet) {
         throw new Error('No embedded wallet found and could not create one');
@@ -771,7 +748,7 @@ export const useBlockchainUtils = () => {
     try {
       // Получаем здоровый RPC endpoint
       const healthyRpcUrl = await getHealthyRpcEndpoint(chainId);
-      console.log(`Using RPC endpoint for chain ${chainId}: ${healthyRpcUrl}`);
+      // Убираем избыточное логирование RPC endpoint
 
       // Получаем соединение из пула
       const releaseConnection = getConnectionFromPool(chainId, healthyRpcUrl);
