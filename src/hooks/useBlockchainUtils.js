@@ -662,18 +662,26 @@ export const useBlockchainUtils = () => {
     });
     
     if (embeddedWallet) {
-      console.log('✅ Found embedded wallet:', {
-        address: embeddedWallet.address,
-        walletClientType: embeddedWallet.walletClientType,
-        connectorType: embeddedWallet.connectorType,
-        type: embeddedWallet.type,
-        walletIndex: embeddedWallet.walletIndex
-      });
+      // Only log once per session to reduce spam
+      if (!window._embeddedWalletLogged) {
+        console.log('✅ Found embedded wallet:', {
+          address: embeddedWallet.address,
+          walletClientType: embeddedWallet.walletClientType,
+          connectorType: embeddedWallet.connectorType,
+          type: embeddedWallet.type,
+          walletIndex: embeddedWallet.walletIndex
+        });
+        window._embeddedWalletLogged = true;
+      }
       return embeddedWallet;
     }
     
-    console.log('⚠️ No embedded wallet found, available wallets:', wallets.length);
-    console.log('⚠️ This might cause faucet to send to wrong wallet!');
+    // Only log once per session to reduce spam
+    if (!window._noEmbeddedWalletLogged) {
+      console.log('⚠️ No embedded wallet found, available wallets:', wallets.length);
+      console.log('⚠️ This might cause faucet to send to wrong wallet!');
+      window._noEmbeddedWalletLogged = true;
+    }
     
     // Do NOT fall back to first wallet; require embedded wallet
     return null;
@@ -2550,20 +2558,22 @@ export const useBlockchainUtils = () => {
       
       // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ждем завершения pre-signing перед пометкой игры как готовой
       const preSigningPromise = balanceAndNoncePromise.then(async ({ currentBalance, initialNonce }) => {
+        console.log(`🔄 Pre-signing flow started for chain ${chainId}`);
         console.log(`🔄 Starting pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
+        console.log(`🔄 Current balance: ${currentBalance} ETH`);
         
         // Если баланс был низким и faucet был вызван, ждем обновления баланса
         if (parseFloat(currentBalance) < 0.00005) {
-          console.log('⏳ Waiting for faucet balance update before pre-signing...');
+          console.log('⏳ Low balance detected, attempting to wait for faucet...');
           
-          // Ждем до 15 секунд для обновления баланса после faucet
+          // Ждем до 10 секунд для обновления баланса после faucet
           let balanceUpdated = false;
-          for (let i = 0; i < 30; i++) { // 30 попыток по 500ms = 15 секунд
+          for (let i = 0; i < 20; i++) { // 20 попыток по 500ms = 10 секунд
             await new Promise(resolve => setTimeout(resolve, 500));
             
             try {
               const updatedBalance = await checkBalance(chainId);
-              console.log(`🔄 Balance check ${i + 1}/30: ${updatedBalance} ETH`);
+              console.log(`🔄 Balance check ${i + 1}/20: ${updatedBalance} ETH`);
               
               if (parseFloat(updatedBalance) >= 0.00005) {
                 console.log(`✅ Balance updated to ${updatedBalance} ETH, proceeding with pre-signing`);
@@ -2576,8 +2586,12 @@ export const useBlockchainUtils = () => {
           }
           
           if (!balanceUpdated) {
-            console.error('❌ Balance not updated after 15 seconds, cannot proceed with pre-signing');
-            throw new Error('Insufficient balance for pre-signing transactions');
+            console.log('⚠️ Balance not updated after 10 seconds, proceeding with fallback mode');
+            // Вместо ошибки, включаем fallback режим
+            enableFallbackMode(chainId);
+            isInitialized.current[chainKey] = true;
+            console.log('🔄 Fallback mode enabled - game will work with realtime signing');
+            return; // Выходим из pre-signing
           }
         }
         

@@ -384,8 +384,11 @@ const GameComponent = ({ selectedNetwork }) => {
       const currentBalance = parseFloat(balance);
       
       // If balance is very low and we haven't already triggered faucet
-      if (currentBalance < 0.00005 && !manualFaucetLoading) {
+      if (currentBalance < 0.00005 && !manualFaucetLoading && !window._autoFaucetTriggered) {
         console.log('💰 Auto-triggering faucet for low balance:', currentBalance);
+        
+        // Prevent multiple auto-faucet calls
+        window._autoFaucetTriggered = true;
         
         // Auto-call faucet for embedded wallet
         const autoFaucet = async () => {
@@ -414,6 +417,12 @@ const GameComponent = ({ selectedNetwork }) => {
             console.warn('⚠️ Auto-faucet failed (non-blocking):', error);
           } finally {
             setManualFaucetLoading(false);
+            
+            // Reset auto-faucet flag after 5 minutes to allow retry
+            setTimeout(() => {
+              window._autoFaucetTriggered = false;
+              console.log('🔄 Auto-faucet flag reset, can trigger again if needed');
+            }, 5 * 60 * 1000); // 5 minutes
           }
         };
         
