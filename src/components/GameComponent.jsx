@@ -321,17 +321,19 @@ const GameComponent = ({ selectedNetwork }) => {
       console.log('Manual faucet request for:', embeddedWallet.address);
       const result = await callFaucet(embeddedWallet.address, selectedNetwork.id);
       
-      // Показываем информацию о том, какой адрес был использован
-      if (result.isEmbeddedWallet) {
-        alert('Faucet request successful! Funds will be sent to your game wallet.');
+      // Показываем информацию о том, какой адрес был использован и статус подтверждения
+      if (result.confirmed) {
+        alert('Faucet transaction confirmed! Your balance has been updated.');
+      } else if (result.isEmbeddedWallet) {
+        alert('Faucet request successful! Transaction is being processed. Your balance will update shortly.');
       } else {
         alert('Faucet request successful! Funds should arrive shortly.');
       }
       
-      // Wait and refresh balance
-      setTimeout(async () => {
+      // Баланс уже обновлен в callFaucet после подтверждения, но обновляем еще раз для уверенности
+      if (result.confirmed) {
         await checkBalance(selectedNetwork.id);
-      }, 3000);
+      }
 
     } catch (error) {
       console.error('Manual faucet error:', error);

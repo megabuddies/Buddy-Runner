@@ -126,7 +126,12 @@ export default async function handler(req, res) {
       transactionHash: receipt.hash,
       amount: '0.0001',
       recipient: address,
-      blockNumber: receipt.blockNumber
+      blockNumber: receipt.blockNumber,
+      // Дополнительная информация для клиента
+      gasUsed: receipt.gasUsed?.toString(),
+      effectiveGasPrice: receipt.effectiveGasPrice?.toString(),
+      status: receipt.status,
+      confirmed: true
     });
 
   } catch (error) {
