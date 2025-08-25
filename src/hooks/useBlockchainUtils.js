@@ -1801,19 +1801,14 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Faucet success:', result);
       
-      // Если faucet возвращает txHash, ждем немного и обновляем баланс
+      // Если faucet возвращает txHash, сразу обновляем баланс
       if (result.txHash) {
-        console.log('⏳ Waiting for faucet transaction to be processed...');
-        
-        // Асинхронно обновляем баланс через 3 секунды
-        setTimeout(async () => {
-          try {
-            await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
-          } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
-          }
-        }, 3000);
+        try {
+          await checkBalance(chainId);
+          console.log('✅ Balance updated immediately after faucet transaction');
+        } catch (error) {
+          console.warn('Failed to update balance immediately after faucet:', error);
+        }
       }
       
       return {
@@ -2409,15 +2404,19 @@ export const useBlockchainUtils = () => {
       
       // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
       callFaucet(faucetWallet.address, chainId)
-            .then((result) => {
+            .then(async (result) => {
               console.log('✅ Background faucet completed');
               if (result.isEmbeddedWallet) {
                 console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
               } else {
                 console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
               }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
+              // Немедленно обновляем баланс и дожидаемся результата
+              try {
+                await checkBalance(chainId);
+              } catch (e) {
+                console.warn('Failed to immediately refresh balance after faucet:', e);
+              }
               // Обновляем nonce после faucet
               return getNextNonce(chainId, faucetWallet.address, true);
             })
