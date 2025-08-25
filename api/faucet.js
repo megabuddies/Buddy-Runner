@@ -90,7 +90,7 @@ export default async function handler(req, res) {
     // }
     
     // Логируем текущий баланс faucet для мониторинга
-    console.log(`Faucet balance: ${ethers.formatEther(faucetBalance)} ETH`);
+    console.log(`💰 Faucet balance: ${ethers.formatEther(faucetBalance)} ETH`);
 
     // Проверяем, что у пользователя мало средств (< 0.00005 ETH)
     const userBalance = await provider.getBalance(address);

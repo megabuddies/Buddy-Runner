@@ -1,3 +1,5 @@
+import { logger } from '../config/logging';
+
 export default class Ground {
   constructor(ctx, width, height, speed, scaleRatio) {
     this.ctx = ctx;
@@ -12,7 +14,7 @@ export default class Ground {
 
     this.groundImage = new Image();
     this.groundImage.src = "assets/ground.png";
-    this.groundImage.onerror = () => console.error('Failed to load ground.png');
+    this.groundImage.onerror = () => logger.error('Failed to load ground.png');
   }
 
   update(gameSpeed, frameTimeDelta) {

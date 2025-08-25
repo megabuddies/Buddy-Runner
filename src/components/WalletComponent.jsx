@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLogin, useLogout, usePrivy, useWallets } from '@privy-io/react-auth';
+import { logger } from '../config/logging';
 
 const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls = false }) => {
   const { user, authenticated, ready } = usePrivy();
@@ -25,8 +26,8 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
           // Для Privy embedded wallets пропускаем переключение сети
           const isEmbeddedWallet = wallet.walletClientType === 'privy';
           if (isEmbeddedWallet) {
-            console.log(`Auto-switching to ${selectedNetwork.name}...`);
-            console.log('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
+            logger.wallet(`Auto-switching to ${selectedNetwork.name}...`);
+            logger.success('⚡ INSTANT GAMING MODE ENABLED - игра готова!');
             return;
           }
           
@@ -46,22 +47,22 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
                 const chainIdHex = await provider.request({ method: 'eth_chainId' });
                 currentChainId = parseInt(chainIdHex, 16);
               } else {
-                console.warn('Cannot determine current chain ID, skipping auto-switch');
+                logger.warn('Cannot determine current chain ID, skipping auto-switch');
                 return;
               }
             }
           } catch (chainIdError) {
-            console.warn('Failed to get current chain ID:', chainIdError);
+            logger.warn('Failed to get current chain ID:', chainIdError);
             return;
           }
           
           if (currentChainId !== selectedNetwork.id) {
-            console.log(`Auto-switching to ${selectedNetwork.name}...`);
+            logger.wallet(`Auto-switching to ${selectedNetwork.name}...`);
             setIsNetworkSwitching(true);
             await switchNetwork(selectedNetwork.id);
           }
         } catch (error) {
-          console.warn('Auto network switch failed:', error);
+          logger.warn('Auto network switch failed:', error);
         } finally {
           setIsNetworkSwitching(false);
         }
@@ -98,7 +99,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       if (isEmbeddedWallet) {
         // Для Privy embedded wallets - просто логируем переключение
         // Фактическое переключение происходит в useBlockchainUtils
-        console.log(`⚡ INSTANT GAMING MODE ENABLED - игра готова!`);
+        logger.success(`⚡ INSTANT GAMING MODE ENABLED - игра готова!`);
 
         setShowNetworks(false);
         return;
@@ -106,7 +107,7 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       
       // Safely check if wallet supports switchChain method
       if (typeof wallet.switchChain !== 'function') {
-        console.warn('Wallet does not support network switching');
+        logger.warn('Wallet does not support network switching');
         alert('This wallet does not support automatic network switching. Please switch manually.');
         return;
       }
@@ -115,11 +116,11 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
       try {
         await wallet.switchChain(chainId);
         setShowNetworks(false);
-        console.log(`Successfully switched to ${networkName}`);
+        logger.success(`Successfully switched to ${networkName}`);
         return;
       } catch (switchError) {
         // If switching fails, try to add the network first
-        console.log(`Network ${networkName} not found, attempting to add it...`, switchError);
+        logger.info(`Network ${networkName} not found, attempting to add it...`, switchError);
         
         const networkConfig = getNetworkConfig(chainId);
         if (networkConfig) {
@@ -130,16 +131,16 @@ const WalletComponent = ({ selectedNetwork, onDisconnect, disableNetworkControls
           await new Promise(resolve => setTimeout(resolve, 1000));
           
           // Then try to switch again
-          console.log(`Switching to ${networkName}...`);
+          logger.info(`Switching to ${networkName}...`);
           await wallet.switchChain(chainId);
           setShowNetworks(false);
-          console.log(`Successfully added and switched to ${networkName}`);
+          logger.success(`Successfully added and switched to ${networkName}`);
         } else {
           throw new Error(`Network configuration not found for chain ID ${chainId}`);
         }
       }
     } catch (error) {
-      console.error('Failed to switch network:', error);
+      logger.error('Failed to switch network:', error);
       
       // Для Privy embedded wallets игнорируем ошибки переключения
       const isEmbeddedWallet = wallets[0]?.walletClientType === 'privy';
