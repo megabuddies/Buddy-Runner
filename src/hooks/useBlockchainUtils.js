@@ -1101,13 +1101,18 @@ export const useBlockchainUtils = () => {
 
   // ЗНАЧИТЕЛЬНО УЛУЧШЕННОЕ предварительное подписание пакета транзакций
   const preSignBatch = async (chainId, startNonce, count) => {
-    const chainKey = chainId.toString();
+    try {
+      const chainKey = chainId.toString();
+      console.log(`🚀 Starting preSignBatch for chain ${chainId}, nonce ${startNonce}, count ${count}`);
     
     // КРИТИЧЕСКАЯ ПРОВЕРКА: Убеждаемся, что у нас есть достаточный баланс перед pre-signing
     const embeddedWallet = getEmbeddedWallet();
     if (!embeddedWallet) {
+      console.error('❌ No embedded wallet available for pre-signing');
       throw new Error('No embedded wallet available for pre-signing');
     }
+    
+    console.log(`✅ Embedded wallet found: ${embeddedWallet.address}`);
     
     // Проверяем баланс перед началом pre-signing
     let currentBalance = await checkBalance(chainId);
@@ -1167,12 +1172,18 @@ export const useBlockchainUtils = () => {
     }
 
     const pool = preSignedPool.current[chainKey];
+    console.log(`✅ Pool initialized for chain ${chainId}`);
+    
+    console.log(`🔧 Creating clients for chain ${chainId}...`);
     const { walletClient } = await createClients(chainId);
+    console.log(`✅ Wallet client created for chain ${chainId}`);
+    
+    console.log(`⛽ Getting gas parameters for chain ${chainId}...`);
     const gasParams = await getGasParams(chainId);
-
-    console.log(`Using gas parameters: {maxFeePerGasGwei: ${Number(gasParams.maxFeePerGas) / 10**9}, maxPriorityFeePerGasGwei: ${Number(gasParams.maxPriorityFeePerGas) / 10**9}}`);
+    console.log(`✅ Gas parameters obtained: {maxFeePerGasGwei: ${Number(gasParams.maxFeePerGas) / 10**9}, maxPriorityFeePerGasGwei: ${Number(gasParams.maxPriorityFeePerGas) / 10**9}}`);
 
     const config = NETWORK_CONFIGS[chainId];
+    console.log(`✅ Network config loaded for chain ${chainId}`);
     
     let consecutiveErrors = 0;
     const maxConsecutiveErrors = 3;
@@ -1183,6 +1194,7 @@ export const useBlockchainUtils = () => {
     
     // Сначала подписываем первую транзакцию отдельно для быстрого старта
     try {
+      console.log(`🎯 Signing first transaction with nonce ${startNonce}...`);
       const firstNonce = startNonce;
       const firstTxData = {
         account: embeddedWallet.address,
@@ -1196,7 +1208,15 @@ export const useBlockchainUtils = () => {
         gas: 100000n,
       };
       
+      console.log(`📝 First transaction data prepared:`, {
+        account: firstTxData.account,
+        to: firstTxData.to,
+        nonce: firstTxData.nonce,
+        gas: firstTxData.gas.toString()
+      });
+      
       const firstSignedTx = await walletClient.signTransaction(firstTxData);
+      console.log(`✅ First transaction signed successfully`);
       
       pool.transactions.push({
         signedTx: firstSignedTx,
@@ -1212,7 +1232,14 @@ export const useBlockchainUtils = () => {
       // Запускаем проактивный мониторинг пула
       startPoolMonitoring(chainId);
     } catch (error) {
-      console.error('Failed to sign first transaction:', error);
+      console.error('❌ Failed to sign first transaction:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        chainId,
+        startNonce,
+        embeddedWalletAddress: embeddedWallet.address
+      });
       throw error;
     }
     
@@ -1301,17 +1328,34 @@ export const useBlockchainUtils = () => {
       }
     }
 
-    console.log(`Successfully pre-signed ${pool.transactions.length} transactions`);
+    console.log(`✅ Successfully pre-signed ${pool.transactions.length} transactions`);
     
     // Если мы в fallback режиме и у нас есть хотя бы одна транзакция, это успех
     if (fallbackConfig && pool.transactions.length > 0) {
-      console.log('Fallback mode: minimum transactions ready for gaming');
+      console.log('✅ Fallback mode: minimum transactions ready for gaming');
     }
     
     // Обновляем nonce manager чтобы учесть использованные nonces
     const manager = getNonceManager(chainId, embeddedWallet.address);
     if (manager) {
       manager.pendingNonce = Math.max(manager.pendingNonce || 0, startNonce + pool.transactions.length);
+    }
+    
+    // КРИТИЧНО: Помечаем пул как полностью готовый
+    pool.isReady = true;
+    console.log(`🎮 Pre-signed pool is now FULLY READY with ${pool.transactions.length} transactions`);
+    
+    return pool.transactions.length; // Возвращаем количество подписанных транзакций
+    } catch (error) {
+      console.error('❌ Critical error in preSignBatch:', error);
+      console.error('❌ Error details:', {
+        message: error.message,
+        stack: error.stack,
+        chainId,
+        startNonce,
+        count
+      });
+      throw error;
     }
   };
 
@@ -2180,6 +2224,7 @@ export const useBlockchainUtils = () => {
 
   // РЕВОЛЮЦИОННЫЙ основной метод отправки обновления с Real-Time Gaming архитектурой
   const sendUpdate = async (chainId) => {
+    const chainKey = chainId.toString();
     const embeddedWallet = getEmbeddedWallet();
     if (!embeddedWallet) {
       throw new Error('No embedded wallet available');
@@ -2207,8 +2252,6 @@ export const useBlockchainUtils = () => {
     // Для MegaETH (instant transactions) менее строгая проверка pending состояния
     if (chainId === 6342) {
       // Проверяем есть ли доступные pre-signed транзакции
-      const chainKey = chainId.toString();
-      const pool = preSignedPool.current[chainKey];
       const hasPreSignedTx = pool && pool.isReady && pool.transactions.length > pool.currentIndex;
       
       if (hasPreSignedTx) {
