@@ -1396,12 +1396,26 @@ export const useBlockchainUtils = () => {
     const poolConfig = ENHANCED_POOL_CONFIG[chainId] || ENHANCED_POOL_CONFIG.default;
 
     // ДОПОЛНИТЕЛЬНАЯ ПРОВЕРКА: Убеждаемся, что баланс достаточен перед использованием pre-signed транзакций
-    const currentBalance = await checkBalance(chainId);
-    const balanceEth = parseFloat(currentBalance);
+    let currentBalance = await checkBalance(chainId);
+    let balanceEth = parseFloat(currentBalance);
     
     if (balanceEth < 0.00005) {
-      console.error(`❌ Insufficient balance (${currentBalance} ETH) for using pre-signed transactions`);
-      throw new Error(`Insufficient balance for blockchain transactions: ${currentBalance} ETH. Please wait for faucet or refresh page.`);
+      console.warn(`⚠️ Balance low (${currentBalance} ETH). Initiating faucet + wait sequence before using pre-signed transactions...`);
+      const embeddedWallet = getEmbeddedWallet();
+      if (embeddedWallet) {
+        try {
+          // Инициируем faucet и ждём подтверждения баланса без фиксированного большого таймаута
+          await callFaucet(embeddedWallet.address, chainId).catch(() => {});
+          currentBalance = await waitForSufficientBalance(chainId, 0.00005, 30000);
+          balanceEth = parseFloat(currentBalance);
+        } catch (e) {
+          console.warn('⚠️ Faucet/wait sequence failed:', e);
+        }
+      }
+      if (balanceEth < 0.00005) {
+        console.error(`❌ Insufficient balance after wait (${currentBalance} ETH) for using pre-signed transactions`);
+        throw new Error(`Insufficient balance for blockchain transactions: ${currentBalance} ETH. Please wait a few seconds for faucet or refresh.`);
+      }
     }
 
     // Если пул готов и есть предподписанные транзакции, используем их
@@ -1666,6 +1680,25 @@ export const useBlockchainUtils = () => {
       setBalance('0');
       return '0';
     }
+  };
+
+  // Ожидание достаточного баланса с активной проверкой без фиксированных задержек
+  const waitForSufficientBalance = async (chainId, minimumEth = 0.00005, maxWaitMs = 30000) => {
+    const startTime = Date.now();
+    let lastBalance = '0';
+    // Первый немедленный чек
+    lastBalance = await checkBalance(chainId);
+    if (parseFloat(lastBalance) >= minimumEth) return lastBalance;
+    // Активный короткий поллинг: быстро в начале, реже далее
+    let attempt = 0;
+    while (Date.now() - startTime < maxWaitMs) {
+      const delay = attempt < 5 ? 300 : 800; // быстрые первые 5 попыток
+      await new Promise(r => setTimeout(r, delay));
+      lastBalance = await checkBalance(chainId);
+      if (parseFloat(lastBalance) >= minimumEth) return lastBalance;
+      attempt++;
+    }
+    return lastBalance;
   };
 
   // Автоматическое обновление баланса
@@ -2477,9 +2510,14 @@ export const useBlockchainUtils = () => {
       const preSigningPromise = balanceAndNoncePromise.then(async ({ currentBalance, initialNonce }) => {
         console.log(`💰 Pre-signing with balance: ${currentBalance} ETH`);
         
-        // Проверяем, что баланс достаточен для pre-signing
-        if (parseFloat(currentBalance) < 0.00005) {
-          console.warn(`⚠️ Balance still insufficient (${currentBalance} ETH) for pre-signing - skipping`);
+        // Проверяем, что баланс достаточен для pre-signing. Если нет — активно ждём коротко
+        let effectiveBalance = currentBalance;
+        if (parseFloat(effectiveBalance) < 0.00005) {
+          console.warn(`⚠️ Balance still insufficient (${effectiveBalance} ETH) for pre-signing - waiting briefly for funding...`);
+          effectiveBalance = await waitForSufficientBalance(chainId, 0.00005, 15000);
+        }
+        if (parseFloat(effectiveBalance) < 0.00005) {
+          console.warn(`⚠️ Balance not funded after wait (${effectiveBalance} ETH). Skipping pre-signing for now.`);
           return;
         }
         
