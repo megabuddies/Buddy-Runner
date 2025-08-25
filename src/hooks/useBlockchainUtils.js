@@ -1801,19 +1801,64 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Faucet success:', result);
       
-      // Если faucet возвращает txHash, ждем немного и обновляем баланс
+      // 🚀 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Ждем подтверждения транзакции перед обновлением баланса
       if (result.txHash) {
-        console.log('⏳ Waiting for faucet transaction to be processed...');
+        console.log('⏳ Waiting for faucet transaction to be mined...');
         
-        // Асинхронно обновляем баланс через 3 секунды
-        setTimeout(async () => {
-          try {
-            await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
-          } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
-          }
-        }, 3000);
+        try {
+          // Получаем клиент для ожидания подтверждения
+          const { publicClient } = await createClients(chainId);
+          
+          // Ждем подтверждения транзакции с таймаутом
+          const receipt = await Promise.race([
+            publicClient.waitForTransactionReceipt({ 
+              hash: result.txHash,
+              timeout: 60000 // 60 секунд таймаут для faucet транзакций
+            }),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Faucet transaction confirmation timeout')), 65000)
+            )
+          ]);
+          
+          console.log('✅ Faucet transaction confirmed:', receipt);
+          
+          // Немедленно обновляем баланс после подтверждения
+          console.log('🔄 Refreshing balance after faucet confirmation...');
+          await checkBalance(chainId);
+          console.log('✅ Balance updated after faucet transaction confirmation');
+          
+          // Возвращаем результат с информацией о подтверждении
+          return {
+            success: true,
+            ...result,
+            receipt,
+            confirmed: true,
+            timestamp: Date.now(),
+            isEmbeddedWallet
+          };
+          
+        } catch (confirmError) {
+          console.warn('⚠️ Faucet transaction confirmation failed, but transaction may still be valid:', confirmError);
+          
+          // Даже если подтверждение не получили, обновляем баланс через некоторое время
+          setTimeout(async () => {
+            try {
+              await checkBalance(chainId);
+              console.log('✅ Balance updated after faucet transaction (delayed)');
+            } catch (error) {
+              console.warn('Failed to update balance after faucet:', error);
+            }
+          }, 5000);
+          
+          // Возвращаем результат без подтверждения
+          return {
+            success: true,
+            ...result,
+            confirmed: false,
+            timestamp: Date.now(),
+            isEmbeddedWallet
+          };
+        }
       }
       
       return {
@@ -2394,36 +2439,39 @@ export const useBlockchainUtils = () => {
         console.log('💰 Current balance:', currentBalance);
         console.log('🎯 Starting nonce:', initialNonce);
 
-        // Если баланс меньше 0.00005 ETH, вызываем faucet АСИНХРОННО
+        // 🚀 КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Если баланс меньше 0.00005 ETH, вызываем faucet и ждем подтверждения
         if (parseFloat(currentBalance) < 0.00005) {
-          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet in background...`);
+          console.log(`💰 Balance is ${currentBalance} ETH (< 0.00005), calling faucet and waiting for confirmation...`);
           
-                // Получаем правильный embedded wallet для faucet
-      const faucetWallet = getEmbeddedWallet();
-      if (!faucetWallet) {
-        console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
-        return { currentBalance, initialNonce };
-      }
-      
-      console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
-      
-      // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
-      callFaucet(faucetWallet.address, chainId)
-            .then((result) => {
-              console.log('✅ Background faucet completed');
-              if (result.isEmbeddedWallet) {
-                console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
-              } else {
-                console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
-              }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
-              // Обновляем nonce после faucet
-              return getNextNonce(chainId, faucetWallet.address, true);
-            })
-            .catch(faucetError => {
-              console.warn('⚠️ Background faucet failed (non-blocking):', faucetError);
-            });
+          // Получаем правильный embedded wallet для faucet
+          const faucetWallet = getEmbeddedWallet();
+          if (!faucetWallet) {
+            console.warn('⚠️ No embedded wallet available for faucet, deferring until available');
+            return { currentBalance, initialNonce };
+          }
+          
+          console.log('🎯 Using embedded wallet for faucet:', faucetWallet.address);
+          
+          // БЛОКИРУЮЩИЙ faucet вызов с ожиданием подтверждения транзакции
+          try {
+            const faucetResult = await callFaucet(faucetWallet.address, chainId);
+            console.log('✅ Faucet completed with result:', faucetResult);
+            
+            if (faucetResult.confirmed) {
+              console.log('✅ Faucet transaction confirmed, balance should be updated');
+              // Баланс уже обновлен в callFaucet после подтверждения
+            } else {
+              console.log('⚠️ Faucet transaction not confirmed, but balance will be updated shortly');
+              // Баланс будет обновлен через 5 секунд в callFaucet
+            }
+            
+            // Обновляем nonce после faucet
+            await getNextNonce(chainId, faucetWallet.address, true);
+            
+          } catch (faucetError) {
+            console.warn('⚠️ Faucet failed (non-blocking):', faucetError);
+            // Продолжаем инициализацию даже если faucet не удался
+          }
         }
         
         return { currentBalance, initialNonce };
@@ -2967,10 +3015,14 @@ export const useBlockchainUtils = () => {
         window.gameCallFaucet = callFaucet;
         window.gameGetEmbeddedWallet = getEmbeddedWallet;
         window.gameEnsureEmbeddedWallet = ensureEmbeddedWallet;
+        window.gameCheckBalance = checkBalance;
+        window.gameInitData = initData;
         console.log('🔧 Отладочные функции добавлены в window:');
         console.log('  • window.gameCallFaucet(address, chainId)');
         console.log('  • window.gameGetEmbeddedWallet()');
         console.log('  • window.gameEnsureEmbeddedWallet()');
+        console.log('  • window.gameCheckBalance(chainId)');
+        console.log('  • window.gameInitData(chainId)');
       }
     }
     
