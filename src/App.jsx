@@ -5,13 +5,15 @@ import WalletComponent from './components/WalletComponent';
 import NetworkSelection from './components/NetworkSelection';
 import WalletConnection from './components/WalletConnection';
 import PrivyDebugger from './components/PrivyDebugger';
+import LogLevelControl from './components/LogLevelControl';
+import { logger } from './config/logging';
 import './App.css';
 
 const App = () => {
   // ВРЕМЕННО: Используем только рабочий App ID, пока не исправлена переменная в Vercel
   // const appId = import.meta.env.VITE_PRIVY_APP_ID || 'cme84q0og02aalc0bh9blzwa9';
   const appId = 'cme84q0og02aalc0bh9blzwa9'; // Hardcoded временно из-за неверной env переменной
-  console.log('Privy App ID:', appId);
+  logger.debug('Privy App ID:', appId);
   
   const [gameState, setGameState] = useState('network-selection'); // 'network-selection' | 'wallet-connection' | 'game'
   const [selectedNetwork, setSelectedNetwork] = useState(null);
@@ -237,14 +239,14 @@ const App = () => {
   };
 
   const handleStartGame = (network) => {
-    console.log('App handleStartGame called with network:', network);
+    logger.info('App handleStartGame called with network:', network.name || network.id);
     setSelectedNetwork(network);
     // For blockchain networks, require authentication first
     if (!network.isWeb2) {
-      console.log('Setting game state to wallet-connection');
+      logger.wallet('Переход к подключению кошелька для сети:', network.name);
       setGameState('wallet-connection');
     } else {
-      console.log('Setting game state to game');
+      logger.success('Запуск игры в Web2 режиме');
       setGameState('game');
     }
   };
@@ -332,6 +334,8 @@ const App = () => {
       </div>
       {/* Временный компонент для отладки Privy */}
       <PrivyDebugger />
+      {/* Компонент управления уровнем логирования */}
+      <LogLevelControl />
     </PrivyProvider>
   );
 };
