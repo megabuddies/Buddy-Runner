@@ -1801,19 +1801,17 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Faucet success:', result);
       
-      // Если faucet возвращает txHash, ждем немного и обновляем баланс
+      // Если faucet возвращает txHash, обновляем баланс немедленно
       if (result.txHash) {
-        console.log('⏳ Waiting for faucet transaction to be processed...');
+        console.log('⏳ Faucet transaction sent, updating balance immediately...');
         
-        // Асинхронно обновляем баланс через 3 секунды
-        setTimeout(async () => {
-          try {
-            await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
-          } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
-          }
-        }, 3000);
+        // Обновляем баланс немедленно после получения txHash
+        try {
+          await checkBalance(chainId);
+          console.log('✅ Balance updated immediately after faucet transaction');
+        } catch (error) {
+          console.warn('Failed to update balance after faucet:', error);
+        }
       }
       
       return {
@@ -2416,8 +2414,9 @@ export const useBlockchainUtils = () => {
               } else {
                 console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
               }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
+              // Обновляем баланс немедленно после получения ответа от faucet
+              await checkBalance(chainId);
+              console.log('✅ Balance updated immediately after faucet response');
               // Обновляем nonce после faucet
               return getNextNonce(chainId, faucetWallet.address, true);
             })
@@ -2445,8 +2444,36 @@ export const useBlockchainUtils = () => {
         console.log(`Using fallback batch size: ${batchSize}`);
       }
       
-      // ФОНОВОЕ предподписание
-      const preSigningPromise = balanceAndNoncePromise.then(({ initialNonce }) => {
+      // ФОНОВОЕ предподписание с ожиданием обновления баланса после faucet
+      const preSigningPromise = balanceAndNoncePromise.then(async ({ currentBalance, initialNonce }) => {
+        // Если баланс был низким и faucet был вызван, ждем обновления баланса
+        if (parseFloat(currentBalance) < 0.00005) {
+          console.log('⏳ Waiting for faucet to complete and balance to update before pre-signing...');
+          
+          // Ждем до 10 секунд для обновления баланса после faucet
+          let updatedBalance = currentBalance;
+          let attempts = 0;
+          const maxAttempts = 20; // 20 попыток по 500ms = 10 секунд
+          
+          while (parseFloat(updatedBalance) < 0.00005 && attempts < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+            try {
+              updatedBalance = await checkBalance(chainId);
+              attempts++;
+              console.log(`🔄 Balance check attempt ${attempts}/${maxAttempts}: ${updatedBalance} ETH`);
+            } catch (error) {
+              console.warn('Failed to check balance during faucet wait:', error);
+              attempts++;
+            }
+          }
+          
+          if (parseFloat(updatedBalance) >= 0.00005) {
+            console.log(`✅ Balance updated to ${updatedBalance} ETH - proceeding with pre-signing`);
+          } else {
+            console.warn(`⚠️ Balance still low after ${maxAttempts} attempts (${updatedBalance} ETH) - proceeding anyway`);
+          }
+        }
+        
         console.log(`🔄 Background pre-signing ${batchSize} transactions starting from nonce ${initialNonce}`);
         
         // Резервируем nonces для pre-signing
