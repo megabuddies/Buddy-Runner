@@ -1801,19 +1801,17 @@ export const useBlockchainUtils = () => {
       
       console.log('💰 Faucet success:', result);
       
-      // Если faucet возвращает txHash, ждем немного и обновляем баланс
+            // Если faucet возвращает txHash, немедленно обновляем баланс
       if (result.txHash) {
-        console.log('⏳ Waiting for faucet transaction to be processed...');
+        console.log('⏳ Faucet transaction sent, updating balance immediately...');
         
-        // Асинхронно обновляем баланс через 3 секунды
-        setTimeout(async () => {
-          try {
-            await checkBalance(chainId);
-            console.log('✅ Balance updated after faucet transaction');
-          } catch (error) {
-            console.warn('Failed to update balance after faucet:', error);
-          }
-        }, 3000);
+        // НЕМЕДЛЕННО обновляем баланс
+        try {
+          await checkBalance(chainId);
+          console.log('✅ Balance updated immediately after faucet transaction');
+        } catch (error) {
+          console.warn('Failed to update balance after faucet:', error);
+        }
       }
       
       return {
@@ -2416,8 +2414,8 @@ export const useBlockchainUtils = () => {
               } else {
                 console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
               }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
+              // НЕМЕДЛЕННО обновляем баланс после faucet
+              await checkBalance(chainId);
               // Обновляем nonce после faucet
               return getNextNonce(chainId, faucetWallet.address, true);
             })
