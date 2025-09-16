@@ -323,7 +323,7 @@ const App = () => {
             </div>
             <GameComponent selectedNetwork={selectedNetwork} />
             <div className="instructions">
-              <p className="main-instruction">📱 Press SPACE or tap to make Buddy jump!</p>
+              <p className="main-instruction">Press SPACE or tap to make Buddy jump!</p>
               <p className="help-text">Help our brave bunny Buddy hop over the giant carrots and achieve the highest score!</p>
               <p className="warning-text">Watch out for those sneaky garden carrots!</p>
             </div>
