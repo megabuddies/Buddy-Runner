@@ -18,43 +18,43 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
     { 
       id: 'web2', 
       name: 'CLASSIC BROWSER', 
-      emoji: '🌐',
+      emoji: '',',
       description: 'Pure web2 experience',
       tech: 'No wallet required',
       color: '#2ecc71',
       status: 'ONLINE',
-      icon: '🦕',
+      icon: '',',
       isWeb2: true
     },
     { 
       id: 6342, 
       name: 'MEGAETH TESTNET', 
-      emoji: '⚡',
+      emoji: '',',
       description: 'Ultra-fast execution layer',
       tech: 'Lightning-fast transactions',
       color: '#ff6b6b',
       status: 'ONLINE',
-      icon: '🚀'
+      icon: ''
     },
     { 
       id: 84532, 
       name: 'BASE SEPOLIA', 
-      emoji: '🔵',
+      emoji: '',',
       description: 'Ethereum L2 testnet',
       tech: 'Reliable scaling solution',
       color: '#4ecdc4',
       status: 'ONLINE',
-      icon: '🌐'
+      icon: ''
     },
     { 
       id: 10143, 
       name: 'MONAD TESTNET', 
-      emoji: '🟣',
+      emoji: '',',
       description: 'Next-gen blockchain',
       tech: 'Advanced consensus',
       color: '#9b59b6',
       status: 'BETA',
-      icon: '🔮'
+      icon: ''
     }
   ];
 
@@ -311,7 +311,7 @@ const NetworkSelection = ({ onNetworkSelect, onStartGame }) => {
                   </div>
                 </div>
                 <button className="launch-button" onClick={handleStartGame}>
-                  <span className="button-icon">🚀</span>
+                  <span className="button-icon"></span>
                   LAUNCH MISSION ON {selectedNetwork.name}
                   <div className="button-glow"></div>
                 </button>
