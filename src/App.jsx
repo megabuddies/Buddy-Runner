@@ -217,7 +217,7 @@ const App = () => {
       ],
       
       // Оптимизация для Real-Time Gaming
-      walletConnectCloudProjectId: process.env.REACT_APP_WALLETCONNECT_PROJECT_ID || "default",
+      walletConnectCloudProjectId: import.meta.env.VITE_WALLETCONNECT_PROJECT_ID || "default",
       
       // УЛУЧШЕННЫЕ настройки для минимального трения
       legal: {
