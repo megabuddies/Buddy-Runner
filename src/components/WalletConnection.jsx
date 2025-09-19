@@ -69,7 +69,7 @@ const WalletConnection = ({ onWalletConnected }) => {
             </div>
 
             <div className="terminal-text">
-              <span className="terminal-prompt">></span> System initialization in progress...
+              <span className="terminal-prompt">&gt;</span> System initialization in progress...
             </div>
           </div>
         </div>
@@ -105,13 +105,13 @@ const WalletConnection = ({ onWalletConnected }) => {
             <h2 className="connection-title">AUTHENTICATION REQUIRED</h2>
             <div className="terminal-content">
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> CONNECT YOUR WALLET TO ACCESS THE GAME
+                <span className="terminal-prompt"></span> CONNECT YOUR WALLET TO ACCESS THE GAME
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> ALL SCORES WILL BE STORED ON-CHAIN
+                <span className="terminal-prompt"></span> ALL SCORES WILL BE STORED ON-CHAIN
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> SECURE BLOCKCHAIN AUTHENTICATION
+                <span className="terminal-prompt"></span> SECURE BLOCKCHAIN AUTHENTICATION
               </div>
             </div>
             
@@ -145,10 +145,10 @@ const WalletConnection = ({ onWalletConnected }) => {
 
             <div className="security-info">
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> SECURITY: 256-BIT ENCRYPTION
+                <span className="terminal-prompt"></span> SECURITY: 256-BIT ENCRYPTION
               </div>
               <div className="terminal-text">
-                <span className="terminal-prompt">></span> NETWORK: MEGAETH COMPATIBLE
+                <span className="terminal-prompt"></span> NETWORK: MEGAETH COMPATIBLE
               </div>
             </div>
           </div>

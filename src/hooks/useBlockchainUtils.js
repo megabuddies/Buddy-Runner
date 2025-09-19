@@ -2409,15 +2409,21 @@ export const useBlockchainUtils = () => {
       
       // НЕБЛОКИРУЮЩИЙ faucet вызов (строго на embedded wallet)
       callFaucet(faucetWallet.address, chainId)
-            .then((result) => {
-              console.log('✅ Background faucet completed');
-              if (result.isEmbeddedWallet) {
-                console.log('✅ Faucet sent to embedded wallet:', faucetWallet.address);
+            .then(async (result) => {
+              console.log('✅ Background faucet completed:', result);
+
+              // Wait for transaction to be confirmed before updating balance
+              if (result.txHash || result.transactionHash) {
+                console.log('🎯 Automatic faucet transaction confirmed, updating balance...');
+
+                // Wait just 1 second since chains are fast
+                setTimeout(async () => {
+                  await checkBalance(chainId);
+                }, 1000);
               } else {
-                console.log('⚠️ Faucet sent to non-embedded wallet:', faucetWallet.address);
+                console.warn('⚠️ No transaction hash from automatic faucet, balance may not update');
               }
-              // Обновляем баланс через 5 секунд
-              setTimeout(() => checkBalance(chainId), 5000);
+
               // Обновляем nonce после faucet
               return getNextNonce(chainId, faucetWallet.address, true);
             })
